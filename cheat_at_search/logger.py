@@ -1,0 +1,47 @@
+import logging
+import sys
+from typing import Optional, Union, Literal
+
+LogLevelType = Union[int, Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]]
+
+def log_to_stdout(
+    logger_name: Optional[str] = None,
+    level: LogLevelType = "INFO",
+    format_string: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+) -> logging.Logger:
+    """
+    Configure a logger to output to stdout with the specified log level.
+
+    Args:
+        logger_name: The name of the logger to configure. If None, the root logger is configured.
+        level: The logging level. Can be a string ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+               or the corresponding integer values from the logging module.
+        format_string: The format string for the log messages.
+
+    Returns:
+        The configured logger instance.
+    """
+    # Convert string level to int if needed
+    if isinstance(level, str):
+        level = getattr(logging, level.upper())
+
+    # Get the logger (root logger if name is None)
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level)
+
+    # Remove existing handlers to avoid duplicate logs
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Create stdout handler
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+
+    # Create formatter
+    formatter = logging.Formatter(format_string)
+    handler.setFormatter(formatter)
+
+    # Add handler to logger
+    logger.addHandler(handler)
+
+    return logger

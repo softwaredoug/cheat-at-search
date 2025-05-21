@@ -1,0 +1,30 @@
+[project]
+name = "cheat-with-llms"
+version = "0.1.0"
+description = "Cheat with LLMs example code"
+authors = [
+    {name = "Doug Turnbull",email = "softwaredoug@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<4.0.0"
+dependencies = [
+    "ollama (>=0.4.8,<0.5.0)",
+    "pydantic (>=2.11.4,<3.0.0)",
+    "pandas (>=2.2.3,<3.0.0)",
+    "searcharray (>=0.0.72,<0.0.73)",
+    "pystemmer (>=3.0.0,<4.0.0)"
+]
+
+[tool.pylsp.plugins]
+mypy.enabled = true
+flake8.enabled = true
+autopep8.enabled = false
+yapf.enabled = false
+black.enabled = false
+
+[pycodestyle]
+max-line-length = 120
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
