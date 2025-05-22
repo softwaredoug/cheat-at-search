@@ -1,11 +1,8 @@
-import os
 import subprocess
 import logging
 from pathlib import Path
-from numpy import asin
 import pandas as pd
 from cheat_at_search.logger import log_to_stdout
-from test.pyclbr_input import a
 
 
 logger = logging.getLogger(__name__)
@@ -52,7 +49,7 @@ def fetch_wands(data_dir="data/wands", repo_url="https://github.com/wayfair/WAND
 
     return data_path
 
-def products(data_dir="data/wands"):
+def _products(data_dir="data/wands"):
     """
     Load WANDS products into a pandas DataFrame.
 
@@ -86,7 +83,7 @@ def products(data_dir="data/wands"):
     return df
 
 
-def queries(data_dir="data/wands"):
+def _queries(data_dir="data/wands"):
     """
     Load WANDS queries into a pandas DataFrame.
 
@@ -117,7 +114,7 @@ def queries(data_dir="data/wands"):
     return df
 
 
-def labels(data_dir="data/wands"):
+def _labels(data_dir="data/wands"):
     """
     Load WANDS relevance labels into a pandas DataFrame.
 
@@ -144,9 +141,19 @@ def labels(data_dir="data/wands"):
 
     # Load the tab-delimited CSV file
     df = pd.read_csv(labels_file, sep='\t')
-
+    df.loc[df['label'] == 'Exact', 'grade'] = 2
+    df.loc[df['label'] == 'Partial', 'grade'] = 1
+    df.loc[df['label'] == 'Irrelevant', 'grade'] = 0
     logger.info(f"Loaded {len(df)} relevance labels")
     return df
+
+
+labels = _labels()
+queries = _queries()
+products = _products()
+
+labeled_queries = queries.merge(labels, how='left', on='query_id')
+
 
 if __name__ == "__main__":
     # Configure root logger

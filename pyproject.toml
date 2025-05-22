@@ -21,6 +21,7 @@ flake8.enabled = true
 autopep8.enabled = false
 yapf.enabled = false
 black.enabled = false
+pyright.enabled = false
 
 [pycodestyle]
 max-line-length = 120
