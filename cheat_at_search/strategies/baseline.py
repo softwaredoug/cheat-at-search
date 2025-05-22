@@ -42,4 +42,7 @@ if __name__ == '__main__':
     search = WandsSearch(products)
     all_results = search.search(queries)
     graded = grade_results(all_results)
+    dcgs = graded.groupby(['query', 'query_id'])['discounted_gain'].sum().sort_values(ascending=False)
+    print(dcgs)
+
     import pdb; pdb.set_trace()

@@ -144,6 +144,7 @@ def _labels(data_dir="data/wands"):
     df.loc[df['label'] == 'Exact', 'grade'] = 2
     df.loc[df['label'] == 'Partial', 'grade'] = 1
     df.loc[df['label'] == 'Irrelevant', 'grade'] = 0
+    df = df.groupby(['query_id', 'product_id']).first().reset_index()
     logger.info(f"Loaded {len(df)} relevance labels")
     return df
 
