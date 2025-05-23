@@ -1,6 +1,5 @@
 import torch
 from sentence_transformers import SentenceTransformer
-from cheat_at_search.embedder import TextEmbedder
 import logging
 import numpy as np
 
@@ -9,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class TextEmbedder:
-
     def __init__(self, model_name: str, device=None):
         self.device = device
         if self.device is None:

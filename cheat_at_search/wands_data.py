@@ -49,6 +49,7 @@ def fetch_wands(data_dir="data/wands", repo_url="https://github.com/wayfair/WAND
 
     return data_path
 
+
 def _products(data_dir="data/wands"):
     """
     Load WANDS products into a pandas DataFrame.
@@ -79,6 +80,8 @@ def _products(data_dir="data/wands"):
 
     split_features = df['product_features'].str.split('|')
     df['features'] = split_features
+    df['product_description'].fillna('', inplace=True)
+    df['product_name'].fillna('', inplace=True)
 
     return df
 
