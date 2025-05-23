@@ -1,6 +1,6 @@
 import numpy as np
 from cheat_at_search.embedder import TextEmbedder
-from cheat_at_search.strategies.strategy import SearchStrategy
+from cheat_at_search.strategy.strategy import SearchStrategy
 
 
 class MiniLMSearch(SearchStrategy):

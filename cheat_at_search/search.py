@@ -1,4 +1,4 @@
-from cheat_at_search.strategies import (
+from cheat_at_search.strategy import (
     BM25Search,
     MiniLMSearch,
 )

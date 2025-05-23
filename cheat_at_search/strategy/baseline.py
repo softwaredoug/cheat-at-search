@@ -1,6 +1,6 @@
 from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
-from cheat_at_search.strategies.strategy import SearchStrategy
+from cheat_at_search.strategy.strategy import SearchStrategy
 import numpy as np
 
 

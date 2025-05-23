@@ -1,17 +1,10 @@
 from ollama import chat
 from cheat_at_search.wands_data import queries
 from cheat_at_search.logger import log_to_stdout
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
+from model.query import UnderstoodQuery
 
 
-class UnderstoodQuery(BaseModel):
-    material: str = Field(default="", description="Material extracted from the query, or empty string if none found")
-    original_query: str = Field(description="Original search query text")
-    color: str = Field(default="", description="Color mentioned in the query, or empty string if none found")
-    furniture_type: str = Field(default="", description="Type of furniture mentioned in the query")
-    room: str = Field(default="", description="Room where the furniture would be placed, if mentioned")
-    dimensions: List[str] = Field(default_factory=list, description="Any dimensions mentioned in the query")
 
 
 def parse_query(query: str, model: str = "llama3.2") -> Optional[UnderstoodQuery]:
@@ -23,7 +16,7 @@ def parse_query(query: str, model: str = "llama3.2") -> Optional[UnderstoodQuery
         model: The Ollama model to use (default: llama3)
 
     Returns:
-        UnderstoodQuery object containing the extracted information and original query
+        UnderstoodQuery object containing the extracted information and keywords
     """
     logger = log_to_stdout(logger_name="query_parser")
     logger.info(f"Parsing query: {query}")
@@ -60,8 +53,8 @@ def parse_query(query: str, model: str = "llama3.2") -> Optional[UnderstoodQuery
 
     except Exception as e:
         logger.error(f"Error parsing query '{query}': {str(e)}")
-        # Return a default object in case of errors
-        return UnderstoodQuery(original_query=query)
+        # Return a default object with keywords in case of errors
+        return UnderstoodQuery(keywords=query.split())
 
 # 0. Discovering the query space (how do users think about queries? How do they structure the attributes?)
 # 1. Mapping the product space to the query space
