@@ -1,7 +1,7 @@
 from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.enrich import enrich_query, enrich_product
+from cheat_at_search.agent.enrich import OllamaEnricher, OpenAIEnricher, CachedEnricher
 from cheat_at_search.model import EnrichedProduct, UnderstoodQuery, ProductRoom
 import numpy as np
 from tqdm import tqdm
@@ -38,6 +38,10 @@ room_prompt = """
 
     "{product_description}"
 
+    product category:
+
+    "{product_category}"
+
     Notes:
     * Use outdoor for any outdoor spaces
     * Certain items that might be used in multiple rooms (e.g., a chair) should be classified as "any" or "unknown", but
@@ -49,22 +53,33 @@ room_prompt = """
 class EnrichedJustRoomBM25Search(SearchStrategy):
     def __init__(self, products):
         enriched_products = []
-        for idx, product in tqdm(products.iterrows(), desc="Enriching products", total=len(products)):
+        num_unkwnown = 0
+        count = 0
+        coverage = 0
+        enricher = CachedEnricher(OllamaEnricher(
+            model="llama3.2",
+            system_prompt="You are a helpful AI assistant enriching product data responding in JSON. ",
+            cls=ProductRoom
+        ))
+
+        progress = tqdm(products.iterrows(),
+                        desc="Enriching products", total=len(products))
+        for idx, product in progress:
             name = product['product_name']
             description = product['product_description']
             category = product['category hierarchy']
             prompt = room_prompt.format(
-                product_name=name, product_description=description
+                product_name=name, product_description=description,
+                product_category=category
             )
-            product_room = enrich_product(
-                ProductRoom, prompt)
+            product_room = enricher.enrich(prompt)
+            count += 1
             if product_room:
-                print()
-                print("NAME -- ", name)
-                print("DESCRIPTION -- ", description)
-                print("CATEGORY -- ", category)
-                print("ROOM -- ", product_room.room)
-        import pdb; pdb.set_trace()
+                if product_room.room == "unknown":
+                    num_unkwnown += 1
+            coverage = (count - num_unkwnown) / count * 100
+            progress.set_postfix(
+                {"coverage": f"{coverage:.2f}%"})
 
         super().__init__(enriched_products)
         self.index = enriched_products

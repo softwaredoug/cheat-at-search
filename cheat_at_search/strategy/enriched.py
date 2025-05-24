@@ -1,7 +1,7 @@
 from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.enrich import enrich_query, enrich_product
+from cheat_at_search.agent.enrich import OllamaEnricher, OpenAIEnricher, CachedEnricher
 from cheat_at_search.model import EnrichedProduct, UnderstoodQuery
 import numpy as np
 from tqdm import tqdm
@@ -53,6 +53,11 @@ product_prompt = """
 class EnrichedBM25Search(SearchStrategy):
     def __init__(self, products):
         enriched_products = []
+        enricher = CachedEnricher(OllamaEnricher(
+            model="llama3.2",
+            system_prompt="You are a helpful AI assistant enriching product data responding in JSON. ",
+            cls=EnrichedProduct
+        ))
         for idx, product in tqdm(products.iterrows(), desc="Enriching products", total=len(products)):
             name = product['product_name']
             description = product['product_description']
@@ -61,8 +66,7 @@ class EnrichedBM25Search(SearchStrategy):
                 product_name=name, product_description=description,
                 product_category=category
             )
-            enriched_product = enrich_product(
-                EnrichedProduct, prompt)
+            enriched_product = enricher.enrich(prompt)
             if enriched_product:
                 enriched_products.append(
                     enriched_product.dict(exclude_unset=False)
