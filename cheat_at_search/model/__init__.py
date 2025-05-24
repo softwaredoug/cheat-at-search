@@ -1,4 +1,4 @@
-from .product import Product, EnrichedProduct
+from .product import Product, EnrichedProduct, ProductRoom
 from .query import Query, UnderstoodQuery
 
-__all__ = ["Product", "Query", "UnderstoodQuery", "EnrichedProduct"]
+__all__ = ["Product", "Query", "UnderstoodQuery", "EnrichedProduct", "ProductRoom"]

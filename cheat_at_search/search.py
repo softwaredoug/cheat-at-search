@@ -2,6 +2,7 @@ from cheat_at_search.strategy import (
     BM25Search,
     MiniLMSearch,
     EnrichedBM25Search,
+    EnrichedJustRoomBM25Search,
 )
 from cheat_at_search.wands_data import products, queries
 from cheat_at_search.eval import grade_results
@@ -12,6 +13,7 @@ strategies = {
     "bm25": BM25Search,
     "minilm": MiniLMSearch,
     "bm25+enriched": EnrichedBM25Search,
+    "bm25+enriched_room": EnrichedJustRoomBM25Search,
 }
 
 
@@ -20,7 +22,7 @@ def parse_args():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["bm25", "minilm", "bm25+enriched"],
+        choices=strategies.keys(),
         default="bm25",
         help="Search strategy to use (default: bm25)",
     )

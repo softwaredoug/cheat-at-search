@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
-import pandas as pd
+from typing import List, Optional, Literal
 
 
 class Product(BaseModel):
@@ -54,4 +53,18 @@ class EnrichedProduct(Product):
     dimensions: Optional[List[str]] = Field(
         None,
         description="Dimensions of the product, if available"
+    )
+
+
+RoomType = Literal["living room", "bedroom", "kitchen", "dining room", "office", "bathroom", "unknown",
+                   "outdoor", "hallway", "entryway", "garage", "basement"]
+
+
+class ProductRoom(BaseModel):
+    """
+    Classification of product to a room
+    """
+    room: RoomType = Field(
+        default="unknown",
+        description="Room for this furniture product (use unknown if applies to any room or unknown room type)"
     )
