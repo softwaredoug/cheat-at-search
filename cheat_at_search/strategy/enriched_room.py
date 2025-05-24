@@ -1,7 +1,7 @@
 from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.enrich import OllamaEnricher, OpenAIEnricher, CachedEnricher
+from cheat_at_search.agent.enrich import OllamaEnricher, OpenAIEnricher, CachedEnricher, BatchOpenAIEnricher
 from cheat_at_search.model import EnrichedProduct, UnderstoodQuery, ProductRoom
 import numpy as np
 from tqdm import tqdm
@@ -53,18 +53,24 @@ room_prompt = """
 class EnrichedJustRoomBM25Search(SearchStrategy):
     def __init__(self, products):
         enriched_products = []
-        num_unkwnown = 0
-        count = 0
-        coverage = 0
         enricher = CachedEnricher(OllamaEnricher(
             model="llama3.2",
             system_prompt="You are a helpful AI assistant enriching product data responding in JSON. ",
             cls=ProductRoom
         ))
+        openai_enricher = OpenAIEnricher(
+            system_prompt="You are a helpful AI assistant enriching product data responding in JSON. ",
+            cls=ProductRoom
+        )
+        batch_enricher = BatchOpenAIEnricher(
+            enricher=openai_enricher,
+        )
 
         progress = tqdm(products.iterrows(),
                         desc="Enriching products", total=len(products))
+        count = 0
         for idx, product in progress:
+            product_id = product['product_id']
             name = product['product_name']
             description = product['product_description']
             category = product['category hierarchy']
@@ -72,14 +78,14 @@ class EnrichedJustRoomBM25Search(SearchStrategy):
                 product_name=name, product_description=description,
                 product_category=category
             )
-            product_room = enricher.enrich(prompt)
+            enriched = batch_enricher.enrich(
+                prompt,
+                task_id=f"room_enrich_{product_id}"
+            )
+            if count > 10:
+                break
             count += 1
-            if product_room:
-                if product_room.room == "unknown":
-                    num_unkwnown += 1
-            coverage = (count - num_unkwnown) / count * 100
-            progress.set_postfix(
-                {"coverage": f"{coverage:.2f}%"})
+        batch_enricher.submit()
 
         super().__init__(enriched_products)
         self.index = enriched_products
