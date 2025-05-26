@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Dict
 
 
 class Query(BaseModel):
@@ -9,6 +9,17 @@ class Query(BaseModel):
     keywords: List[str] = Field(
         default_factory=list,
         description="List of keywords extracted from the query"
+    )
+
+
+class QueryWithSynonyms(Query):
+    """
+    Extended model for search queries that includes synonyms for keywords.
+    Inherits from the base Query model.
+    """
+    synonyms: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Mapping of phrases in the query to equivalent phrases or synonyms"
     )
 
 

@@ -3,6 +3,7 @@ from cheat_at_search.strategy import (
     MiniLMSearch,
     EnrichedBM25Search,
     EnrichedJustRoomBM25Search,
+    SynonymSearch,
 )
 from cheat_at_search.wands_data import products, queries
 from cheat_at_search.eval import grade_results
@@ -10,6 +11,7 @@ import argparse
 
 
 strategies = {
+    "synonyms": SynonymSearch,
     "bm25": BM25Search,
     "minilm": MiniLMSearch,
     "bm25+enriched": EnrichedBM25Search,
@@ -45,6 +47,7 @@ def main():
     ndcgs = dcgs / idcg
     for query, ndcg in zip(ndcgs.index, ndcgs):
         print(f"{query}: {ndcg:.4f}")
+    print(f"Average NDCG: {ndcgs.mean():.4f}")
 
 
 if __name__ == "__main__":
