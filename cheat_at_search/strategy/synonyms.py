@@ -3,7 +3,7 @@ from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
 import numpy as np
 
-from cheat_at_search.agent.enrich import CachedEnricher, OllamaEnricher
+from cheat_at_search.agent.enrich import CachedEnricher, OllamaEnricher, OpenAIEnricher
 from cheat_at_search.model import QueryWithSynonyms
 
 
@@ -16,7 +16,6 @@ class SynonymSearch(SearchStrategy):
         self.index['product_description_snowball'] = SearchArray.index(
             products['product_description'], snowball_tokenizer)
         self.enricher = CachedEnricher(OllamaEnricher(
-            model="llama3.2",
             system_prompt="You are a helpful AI assistant extracting synonyms from queries.",
             cls=QueryWithSynonyms
         ))
@@ -24,7 +23,7 @@ class SynonymSearch(SearchStrategy):
     def _synonyms(self, query: str) -> QueryWithSynonyms:
         """Extract synonyms from the query using an enricher"""
         prompt = f"""
-            Extract synonyms from the following query:
+            Extract synonyms from the following query that will help us find relevant products for the query.
 
             {query}
         """
@@ -41,8 +40,8 @@ class SynonymSearch(SearchStrategy):
                 token)
         # Boost by each synonym phrase
         synonyms = self._synonyms(query)
-        for _, phrases in synonyms.synonyms.items():
-            for phrase in phrases:
+        for mapping in synonyms.synonyms:
+            for phrase in mapping.synonyms:
                 tokenized = snowball_tokenizer(phrase)
                 bm25_scores += self.index['product_name_snowball'].array.score(tokenized)
                 bm25_scores += self.index['product_description_snowball'].array.score(tokenized)

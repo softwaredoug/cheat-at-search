@@ -1,14 +1,28 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict
+from typing import List, Dict, Literal
 
 
 class Query(BaseModel):
     """
     Base model for search queries, containing common query attributes.
     """
-    keywords: List[str] = Field(
-        default_factory=list,
-        description="List of keywords extracted from the query"
+    keywords: str = Field(
+        ...,
+        description="The original search query keywords sent in as input"
+    )
+
+
+class SynonymMapping(BaseModel):
+    """
+    Model for mapping phrases in the query to equivalent phrases or synonyms.
+    """
+    phrase: str = Field(
+        ...,
+        description="The original phrase from the query"
+    )
+    synonyms: List[str] = Field(
+        ...,
+        description="List of synonyms or equivalent phrases for the original phrase"
     )
 
 
@@ -17,9 +31,20 @@ class QueryWithSynonyms(Query):
     Extended model for search queries that includes synonyms for keywords.
     Inherits from the base Query model.
     """
-    synonyms: Dict[str, List[str]] = Field(
-        default_factory=dict,
+    synonyms: List[SynonymMapping] = Field(
+        ...,
         description="Mapping of phrases in the query to equivalent phrases or synonyms"
+    )
+
+
+class BucketedQuery(Query):
+    """
+    Extended model for search queries that includes synonyms for keywords.
+    Inherits from the base Query model.
+    """
+    information_need: Literal["navigation", "exploration"] = Field(
+        default_factory=str,
+        description="Information need of the query, either 'navigation' (go to specific product) or 'exploration' (browse products)"
     )
 
 
