@@ -129,10 +129,10 @@ class SpellingCorrectedSearch3(SearchStrategy):
         Your job is to:
         - Correct **only clear and obvious typos** not in the exception list
         - Avoid changing the number of words or their structure
-        - Preserve known stylized brand or product names (e.g., "merlyn", "oller", "kohen" in the exception list)
+        - Preserve known stylized brand or product names (e.g., "merlyn", "oller", "kohen", "brendon" and others in the exception list)
         - Do not change proper names
         - Do not add or remove hyphens, even when grammatically correct (e.g., use "anti scratch", not "anti-scratch")
-        - Do not merge or split known product compound words (e.g., "loveseat" should remain "loveseat")
+        - Do not merge or split known product compound words (e.g., "loveseat" should remain "loveseat", "bed frame" should remain "bed frame" not "bedframe", "bed side table" should remain "bed side table", not "bedside table", etc)
 
         Only make a correction if it clearly improves readability without altering the intended meaning or structure.
 
@@ -153,6 +153,11 @@ class SpellingCorrectedSearch3(SearchStrategy):
         asterisk = "*" if different else ""
         if different:
             print(f"Query: {query} -> Corrected: {corrected.corrected_keywords}{asterisk}")
+        tokenized_orig = snowball_tokenizer(query)
+        for token in tokenized_orig:
+            bm25_scores += self.index['product_name_snowball'].array.score(token)
+            bm25_scores += self.index['product_description_snowball'].array.score(
+                token)
         tokenized = snowball_tokenizer(corrected.corrected_keywords)
         for token in tokenized:
             bm25_scores += self.index['product_name_snowball'].array.score(token)

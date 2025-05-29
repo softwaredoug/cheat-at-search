@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Literal
+from typing import List, Dict, Literal, Optional
+from cheat_at_search.model.category_list import Categories, SubCategories
 
 
 class Query(BaseModel):
@@ -59,11 +60,15 @@ class BucketedQuery(Query):
     )
 
 
-class UnderstoodQuery(Query):
+class StructuredQuery(BaseModel):
     """
     Structured representation of a search query for furniture e-commerce.
     Inherits keywords from the base Query model.
     """
+    search_terms: str = Field(
+        default="",
+        description="A rebuilt / better search query to use to search the product catalog"
+    )
     material: str = Field(
         default="",
         description="Material extracted from the query, or empty string if none found"
@@ -83,4 +88,12 @@ class UnderstoodQuery(Query):
     dimensions: List[str] = Field(
         default_factory=list,
         description="Any dimensions mentioned in the query"
+    )
+    category: Categories = Field(
+        default="",
+        description="Category of the product, if identified"
+    )
+    sub_category: SubCategories = Field(
+        default="",
+        description="Sub-category of the product, if identified"
     )

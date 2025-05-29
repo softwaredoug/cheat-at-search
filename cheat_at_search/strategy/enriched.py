@@ -2,7 +2,7 @@ from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.enrich import OllamaEnricher, OpenAIEnricher, CachedEnricher
-from cheat_at_search.model import EnrichedProduct, UnderstoodQuery
+from cheat_at_search.model import EnrichedProduct, StructuredQuery
 import numpy as np
 from tqdm import tqdm
 
