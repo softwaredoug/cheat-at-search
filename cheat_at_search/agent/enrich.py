@@ -56,10 +56,10 @@ class OpenAIEnricher(Enricher):
         self.model = model
         self.cls = cls
         self.system_prompt = system_prompt
-        if not os.getenv("OPENAI_API_KEY"):
-            raise ValueError("OPENAI_API_KEY environment variable is not set.")
+        if not openai_key:
+            raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
         self.client = OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY")
+            api_key=openai_key,
         )
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
