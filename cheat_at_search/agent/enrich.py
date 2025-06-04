@@ -25,7 +25,9 @@ else:
         logger.info(f"Reading OpenAI API key from {key_path}")
         with open(key_path, "r") as f:
             openai_key = f.read().strip()
+            print("OpenAI API key loaded from file.")
     except FileNotFoundError:
+        print("No OpenAI API key found in environment variable or key file.")
         logger.warning(f"Either set OPENAI_API_KEY environment variable or create a key file at {key_path} holding the key.")
 
 
