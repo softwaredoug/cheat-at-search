@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 
 wands_path = Path(DATA_PATH) / "wands"
-print(f"WANDS data path: {wands_path}")
 
 
 def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.git"):

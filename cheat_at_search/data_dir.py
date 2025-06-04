@@ -25,7 +25,7 @@ def ensure_data_subdir(subdir: str):
     Args:
         subdir: Name of the subdirectory to ensure exists
     """
-    subdir_path = DATA_PATH / subdir
+    subdir_path = pathlib.Path(DATA_PATH) / subdir
     if not subdir_path.exists():
         logger.info(f"Creating data subdirectory: {subdir_path}")
         subdir_path.mkdir(parents=True, exist_ok=True)
