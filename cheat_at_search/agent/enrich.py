@@ -1,6 +1,6 @@
 from openai import OpenAI
 from cheat_at_search.logger import log_to_stdout
-from cheat_at_search.data_dir import ensure_data_subdir
+from cheat_at_search.data_dir import ensure_data_subdir, DATA_PATH
 from typing import Optional
 from pydantic import BaseModel
 import pickle
@@ -21,12 +21,12 @@ if os.getenv("OPENAI_API_KEY"):
     openai_key = os.getenv("OPENAI_API_KEY")
 else:
     try:
-        key_path = f"{CACHE_PATH}/openai_key.txt"
+        key_path = f"{DATA_PATH}/openai_key.txt"
         logger.info(f"Reading OpenAI API key from {key_path}")
         with open(key_path, "r") as f:
             openai_key = f.read().strip()
     except FileNotFoundError:
-        logger.warning("OPENAI_API_KEY not found in environment or file. Please set it before using OpenAIEnricher.")
+        logger.warning(f"Either set OPENAI_API_KEY environment variable or create a key file at {key_path} holding the key.")
 
 
 class Enricher:
