@@ -21,7 +21,9 @@ if os.getenv("OPENAI_API_KEY"):
     openai_key = os.getenv("OPENAI_API_KEY")
 else:
     try:
-        with open(f"{CACHE_PATH}/openai_key.txt", "r") as f:
+        key_path = f"{CACHE_PATH}/openai_key.txt"
+        logger.info(f"Reading OpenAI API key from {key_path}")
+        with open(key_path, "r") as f:
             openai_key = f.read().strip()
     except FileNotFoundError:
         logger.warning("OPENAI_API_KEY not found in environment or file. Please set it before using OpenAIEnricher.")
