@@ -2,17 +2,15 @@ import subprocess
 import logging
 from pathlib import Path
 import pandas as pd
-import os
 from cheat_at_search.logger import log_to_stdout
+from cheat_at_search.data_dir import DATA_PATH, ensure_data_subdir
 
 
 logger = logging.getLogger(__name__)
 
 
-wands_path = "data/wands"
-if os.environ.get("CHEAT_AT_SEARCH_WANDS_DATA_PATH"):
-    wands_path = os.environ["CHEAT_AT_SEARCH_WANDS_DATA_PATH"]
-    logger.info(f"Using WANDS data path from environment variable: {wands_path}")
+ensure_data_subdir("wands")
+wands_path = Path(DATA_PATH) / "wands"
 
 
 def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.git"):
@@ -57,7 +55,7 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.
     return data_path
 
 
-def _products(data_dir="data/wands"):
+def _products():
     """
     Load WANDS products into a pandas DataFrame.
 
@@ -69,7 +67,7 @@ def _products(data_dir="data/wands"):
         pandas.DataFrame containing product data
     """
     # Ensure we have the data
-    data_path = fetch_wands(data_dir)
+    data_path = fetch_wands()
 
     # Path to the products CSV file
     products_file = data_path / "dataset" / "product.csv"
@@ -99,7 +97,7 @@ def _products(data_dir="data/wands"):
     return df
 
 
-def _queries(data_dir="data/wands"):
+def _queries():
     """
     Load WANDS queries into a pandas DataFrame.
 
@@ -111,7 +109,7 @@ def _queries(data_dir="data/wands"):
         pandas.DataFrame containing query data
     """
     # Ensure we have the data
-    data_path = fetch_wands(data_dir)
+    data_path = fetch_wands()
 
     # Path to the queries CSV file
     queries_file = data_path / "dataset" / "query.csv"
@@ -130,7 +128,7 @@ def _queries(data_dir="data/wands"):
     return df
 
 
-def _labels(data_dir="data/wands"):
+def _labels():
     """
     Load WANDS relevance labels into a pandas DataFrame.
 
@@ -144,7 +142,7 @@ def _labels(data_dir="data/wands"):
     logger = log_to_stdout(logger_name=__name__)
 
     # Ensure we have the data
-    data_path = fetch_wands(data_dir)
+    data_path = fetch_wands()
 
     # Path to the labels CSV file
     labels_file = data_path / "dataset" / "label.csv"
@@ -177,8 +175,6 @@ def rel_attribute(query_products=labeled_query_products, grade=2, column='catego
     """Relevant categories in the labeled data useful for ground truth of different attributes."""
     return query_products[query_products['grade'] == 2].groupby(['query', column])[column].count().sort_values(ascending=False)
 
-# In [13]: ndcgs(graded_category).mean()
-# Out[13]: np.float64(0.5561577962937873)
 
 if __name__ == "__main__":
     # Configure root logger
