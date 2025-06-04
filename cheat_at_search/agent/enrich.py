@@ -1,6 +1,6 @@
 from openai import OpenAI
 from cheat_at_search.logger import log_to_stdout
-from cheat_at_search.data_dir import DATA_PATH, ensure_data_subdir
+from cheat_at_search.data_dir import ensure_data_subdir
 from typing import Optional
 from pydantic import BaseModel
 import pickle
@@ -15,7 +15,16 @@ from openai.lib._parsing._completions import type_to_response_format_param
 logger = log_to_stdout(logger_name="query_parser")
 
 
-ensure_data_subdir("enrich_cache")
+CACHE_PATH = ensure_data_subdir("enrich_cache")
+openai_key = None
+if os.getenv("OPENAI_API_KEY"):
+    openai_key = os.getenv("OPENAI_API_KEY")
+else:
+    try:
+        with open(f"{CACHE_PATH}/openai_key.txt", "r") as f:
+            openai_key = f.read().strip()
+    except FileNotFoundError:
+        logger.warning("OPENAI_API_KEY not found in environment or file. Please set it before using OpenAIEnricher.")
 
 
 class Enricher:
@@ -79,7 +88,7 @@ class BatchOpenAIEnricher(Enricher):
         self.batch_lines = []
         self.task_cache = {}
         try:
-            with open(f"{DATA_PATH}/enrich_cache/batch_enrich.pkl", 'rb') as f:
+            with open(f"{CACHE_PATH}/batch_enrich.pkl", 'rb') as f:
                 self.task_cache = pickle.load(f)
         except FileNotFoundError:
             logger.warning("Batch enrichment cache file not found, starting with empty cache.")
@@ -122,11 +131,11 @@ class BatchOpenAIEnricher(Enricher):
         batches = []
         for i in range(0, len(self.batch_lines), entries_per_batch):
 
-            with open(f"{DATA_PATH}/enrich_cache/batch.jsonl", 'w') as f:
+            with open(f"{CACHE_PATH}/batch.jsonl", 'w') as f:
                 for line in self.batch_lines[i:i + entries_per_batch]:
                     f.write(json.dumps(line) + "\n")
             batch_input_file = self.enricher.client.files.create(
-                file=open(f"{DATA_PATH}/enrich_cache/batch.jsonl", "rb"),
+                file=open(f"{CACHE_PATH}/batch.jsonl", "rb"),
                 purpose="batch"
             )
 
@@ -184,7 +193,7 @@ class BatchOpenAIEnricher(Enricher):
                     logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
                     continue
             # Save to cache
-            with open(f"{DATA_PATH}/enrich_cache/batch_enrich.pkl", 'wb') as f:
+            with open(f"{CACHE_PATH}/batch_enrich.pkl", 'wb') as f:
                 pickle.dump(self.task_cache, f)
 
 
@@ -193,7 +202,7 @@ class CachedEnricher(Enricher):
         if cache_file is None:
             enricher_class = enricher.__class__.__name__
             # Get hash of system prompt
-            cache_file = f"{DATA_PATH}/enrich_cache/{enricher_class.lower()}"
+            cache_file = f"{CACHE_PATH}/{enricher_class.lower()}"
             if hasattr(enricher, 'system_prompt'):
                 system_prompt_hash = md5(enricher.system_prompt.encode()).hexdigest()
                 cache_file += f"_{system_prompt_hash}"
