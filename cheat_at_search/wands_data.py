@@ -2,13 +2,20 @@ import subprocess
 import logging
 from pathlib import Path
 import pandas as pd
+import os
 from cheat_at_search.logger import log_to_stdout
 
 
 logger = logging.getLogger(__name__)
 
 
-def fetch_wands(data_dir="data/wands", repo_url="https://github.com/wayfair/WANDS.git"):
+wands_path = "data/wands"
+if os.environ.get("CHEAT_AT_SEARCH_WANDS_DATA_PATH"):
+    wands_path = os.environ["CHEAT_AT_SEARCH_WANDS_DATA_PATH"]
+    logger.info(f"Using WANDS data path from environment variable: {wands_path}")
+
+
+def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.git"):
     """
     Clone the Wayfair Annotated Dataset (WANDS) from GitHub into a data directory.
 
