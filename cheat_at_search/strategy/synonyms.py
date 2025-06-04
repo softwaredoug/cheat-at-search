@@ -3,7 +3,7 @@ from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
 import numpy as np
 
-from cheat_at_search.agent.enrich import CachedEnricher, OllamaEnricher, OpenAIEnricher
+from cheat_at_search.agent.enrich import CachedEnricher, OpenAIEnricher
 from cheat_at_search.model import QueryWithSynonyms
 
 
@@ -15,7 +15,7 @@ class SynonymSearch(SearchStrategy):
             products['product_name'], snowball_tokenizer)
         self.index['product_description_snowball'] = SearchArray.index(
             products['product_description'], snowball_tokenizer)
-        self.enricher = CachedEnricher(OllamaEnricher(
+        self.enricher = CachedEnricher(OpenAIEnricher(
             system_prompt="You are a helpful AI assistant extracting synonyms from queries.",
             cls=QueryWithSynonyms
         ))
