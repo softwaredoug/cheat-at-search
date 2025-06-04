@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Literal, Optional
-from cheat_at_search.model.category_list import Categories, SubCategories
+from typing import List, Literal
+from cheat_at_search.model.category_list import Categories, CategoriesReversed, SubCategories, FullyQualifiedCategories
 
 
 class Query(BaseModel):
@@ -60,6 +60,50 @@ class BucketedQuery(Query):
     )
 
 
+class QueryCategory(Query):
+    """
+    Structured representation of a search query for furniture e-commerce.
+    Inherits keywords from the base Query model and adds category and sub-category.
+    """
+    category: Categories = Field(
+        description="Category of the product, if identified. Use 'No Category Fits' if ambiguous or no category in list fits"
+    )
+    sub_category: SubCategories = Field(
+        description="Sub-category of the product, if identified. Use 'No SubCategory Fits' if ambiguous or no sub-category in list fits"
+    )
+
+
+class QueryCategoryReversed(Query):
+    """
+    Structured representation of a search query for furniture e-commerce.
+    Inherits keywords from the base Query model and adds category and sub-category.
+    """
+    category: CategoriesReversed = Field(
+        description="Category of the product, if identified. Use 'No Category Fits' if ambiguous or no category in list fits"
+    )
+    sub_category: SubCategories = Field(
+        description="Sub-category of the product, if identified. Use 'No SubCategory Fits' if ambiguous or no sub-category in list fits"
+    )
+
+
+class QueryCategoryFullyQualified(Query):
+    """
+    Fully qualified search query that includes all structured information.
+    """
+    full_category: FullyQualifiedCategories = Field(
+        description="Fully qualified category of the product, if identified. Use 'No Category Fits' if ambiguous or no category in list fits. Options ordered from most common product categories to least common"
+    )
+
+    @property
+    def category(self) -> str:
+        return self.full_category.split('/')[0].strip()
+
+    @property
+    def sub_category(self) -> str:
+        parts = self.full_category.split('/')
+        return parts[1].strip() if len(parts) > 1 else 'No SubCategory Fits'
+
+
 class StructuredQuery(BaseModel):
     """
     Structured representation of a search query for furniture e-commerce.
@@ -88,12 +132,4 @@ class StructuredQuery(BaseModel):
     dimensions: List[str] = Field(
         default_factory=list,
         description="Any dimensions mentioned in the query"
-    )
-    category: Categories = Field(
-        default="",
-        description="Category of the product, if identified"
-    )
-    sub_category: SubCategories = Field(
-        default="",
-        description="Sub-category of the product, if identified"
     )

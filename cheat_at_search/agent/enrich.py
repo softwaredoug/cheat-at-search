@@ -121,7 +121,10 @@ class BatchOpenAIEnricher(Enricher):
             raise ValueError("task_id must be provided for batch enrichment.")
 
         # Prepend prompt hash, system prompt and model to task id
-        task_id = f"{task_id}_{md5(prompt.encode()).hexdigest()}_{md5(self.enricher.system_prompt.encode()).hexdigest()}_{self.enricher.model}"
+
+        schema = json.dumps(self.enricher.cls.model_json_schema(mode='serialization'))
+        schema_hash = md5(schema.encode()).hexdigest()
+        task_id = f"{task_id}_{md5(prompt.encode()).hexdigest()}_{md5(self.enricher.system_prompt.encode()).hexdigest()}_{self.enricher.model}_{schema_hash}"
         if task_id in self.task_cache:
             logger.info(f"Task ID {task_id} enrichment found in cache.")
             # If in cache, just return
@@ -140,79 +143,82 @@ class BatchOpenAIEnricher(Enricher):
         )
         self.batch_lines.append(batch_line)
 
-    def submit(self, block=True):
+    def submit(self, block=True, entries_per_batch=1000):
         if not self.batch_lines:
             logger.warning("No prompts to submit for batch enrichment.")
             return []
 
-        with open(f"{DATA_DIR}/batch.jsonl", 'w') as f:
-            for line in self.batch_lines:
-                f.write(json.dumps(line) + "\n")
-        batch_input_file = self.enricher.client.files.create(
-            file=open(f"{DATA_DIR}/batch.jsonl", "rb"),
-            purpose="batch"
-        )
+        batches = []
+        for i in range(0, len(self.batch_lines), entries_per_batch):
 
-        # Add empty entry to task cache if not exists
-        for task in self.batch_lines:
-            task_id = task['custom_id']
-            if task_id not in self.task_cache:
-                self.task_cache[task_id] = {}
+            with open(f"{DATA_DIR}/batch.jsonl", 'w') as f:
+                for line in self.batch_lines[i:i + entries_per_batch]:
+                    f.write(json.dumps(line) + "\n")
+            batch_input_file = self.enricher.client.files.create(
+                file=open(f"{DATA_DIR}/batch.jsonl", "rb"),
+                purpose="batch"
+            )
 
-        batch_input_file_id = batch_input_file.id
-        batch = self.enricher.client.batches.create(
-            input_file_id=batch_input_file_id,
-            endpoint="/v1/chat/completions",
-            completion_window="24h",
-            metadata={
-                "description": "nightly eval job"
-            }
-        )
-        # Wait for batch to be valid
-        batch = self.enricher.client.batches.retrieve(batch.id)
-        backoff = 4
-        while batch.status != "completed":
-            logger.info(f"Batch {batch.id} is {batch.status}, waiting for {backoff} seconds...")
-            sleep(backoff)
-            backoff *= 2
-            if backoff > 200:
-                backoff = 256
+            # Add empty entry to task cache if not exists
+            for task in self.batch_lines:
+                task_id = task['custom_id']
+                if task_id not in self.task_cache:
+                    self.task_cache[task_id] = {}
+
+            batch_input_file_id = batch_input_file.id
+            batch = self.enricher.client.batches.create(
+                input_file_id=batch_input_file_id,
+                endpoint="/v1/chat/completions",
+                completion_window="24h",
+                metadata={
+                    "description": "nightly eval job"
+                }
+            )
+            batches.append(batch)
+        for batch in batches:
+            # Wait for batch to be valid
             batch = self.enricher.client.batches.retrieve(batch.id)
-            print(batch.status)
+            backoff = 4
+            while batch.status != "completed":
+                logger.info(f"Batch {batch.id} is {batch.status}, waiting for {backoff} seconds...")
+                sleep(backoff)
+                backoff *= 2
+                if backoff > 200:
+                    backoff = 256
+                batch = self.enricher.client.batches.retrieve(batch.id)
+                print(batch.status)
 
-        resp = self.enricher.client.files.content(batch.output_file_id).text
-        for line in resp.splitlines():
-            resp = json.loads(line)
-            if 'error' in resp and resp['error']:
-                logger.error(f"Error in batch response: {resp['error']}")
-                continue
-            task_id = resp.get('custom_id')
-            choices = resp.get('response', {}).get('body', {}).get('choices', [])
-            if not choices:
-                logger.warning(f"No choices found for task ID {task_id}.")
-                continue
-            choice = choices[0]
-            if 'message' not in choice or 'content' not in choice['message']:
-                logger.warning(f"No content found for task ID {task_id}.")
-                continue
-            content = choice['message']['content']
-            # Parse into cls
-            try:
-                cls_value = self.enricher.cls.model_validate_json(content)
-                self.task_cache[task_id] = cls_value
-                logger.info(f"Task ID {task_id} enriched successfully.")
-            except Exception as e:
-                logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
-                continue
-        # Save to cache
-        with open(f"{DATA_DIR}/enrich_cache/batch_enrich.pkl", 'wb') as f:
-            pickle.dump(self.task_cache, f)
-
-        return batch.id
+            resp = self.enricher.client.files.content(batch.output_file_id).text
+            for line in resp.splitlines():
+                resp = json.loads(line)
+                if 'error' in resp and resp['error']:
+                    logger.error(f"Error in batch response: {resp['error']}")
+                    continue
+                task_id = resp.get('custom_id')
+                choices = resp.get('response', {}).get('body', {}).get('choices', [])
+                if not choices:
+                    logger.warning(f"No choices found for task ID {task_id}.")
+                    continue
+                choice = choices[0]
+                if 'message' not in choice or 'content' not in choice['message']:
+                    logger.warning(f"No content found for task ID {task_id}.")
+                    continue
+                content = choice['message']['content']
+                # Parse into cls
+                try:
+                    cls_value = self.enricher.cls.model_validate_json(content)
+                    self.task_cache[task_id] = cls_value
+                    logger.info(f"Task ID {task_id} enriched successfully.")
+                except Exception as e:
+                    logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
+                    continue
+            # Save to cache
+            with open(f"{DATA_DIR}/enrich_cache/batch_enrich.pkl", 'wb') as f:
+                pickle.dump(self.task_cache, f)
 
 
 class CachedEnricher(Enricher):
-    def __init__(self, enricher: Enricher, cache_file: str = None):
+    def __init__(self, enricher: Enricher, cache_file: str = None, identifier: str = None):
         if cache_file is None:
             enricher_class = enricher.__class__.__name__
             # Get hash of system prompt
@@ -222,6 +228,8 @@ class CachedEnricher(Enricher):
                 cache_file += f"_{system_prompt_hash}"
             if hasattr(enricher, 'model'):
                 cache_file += f"_{enricher.model}"
+            if identifier:
+                cache_file += f"_{identifier}"
             schema = json.dumps(enricher.cls.model_json_schema(mode='serialization'))
             schema_hash = md5(schema.encode()).hexdigest()
             cache_file += f"{schema_hash}_cache.pkl"

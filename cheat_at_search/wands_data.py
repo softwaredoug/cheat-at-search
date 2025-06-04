@@ -83,6 +83,12 @@ def _products(data_dir="data/wands"):
     df['product_description'].fillna('', inplace=True)
     df['product_name'].fillna('', inplace=True)
 
+    # Parse category and subcategory from 'category hierarchy'
+    cat_as_list = df['category hierarchy'].fillna('').str.split('/')
+    df['category'] = cat_as_list.apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else '')
+    df['sub_category'] = cat_as_list.apply(lambda x: x[1] if isinstance(x, list) and len(x) > 1 else '')
+    df['cat_subcat'] = df['category'] + ' / ' + df['sub_category']
+
     return df
 
 
@@ -157,7 +163,15 @@ queries = _queries()
 products = _products()
 
 labeled_queries = queries.merge(labels, how='left', on='query_id')
+labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
 
+
+def rel_attribute(query_products=labeled_query_products, grade=2, column='category'):
+    """Relevant categories in the labeled data useful for ground truth of different attributes."""
+    return query_products[query_products['grade'] == 2].groupby(['query', column])[column].count().sort_values(ascending=False)
+
+# In [13]: ndcgs(graded_category).mean()
+# Out[13]: np.float64(0.5561577962937873)
 
 if __name__ == "__main__":
     # Configure root logger
