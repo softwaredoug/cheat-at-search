@@ -16,9 +16,6 @@ dependencies = [
     "sentence-transformers (>=4.1.0,<5.0.0)",
     "torch (>=2.7.0,<3.0.0)",
     "openai (>=1.82.0,<2.0.0)",
-    "jupyter (>=1.1.1,<2.0.0)",
-    "ipython (>=9.2.0,<10.0.0)",
-    "tabulate (>=0.9.0,<0.10.0)"
 ]
 
 [tool.pylsp.plugins]
@@ -28,6 +25,10 @@ autopep8.enabled = false
 yapf.enabled = false
 black.enabled = false
 pyright.enabled = false
+
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^9.3.0"
 
 [pycodestyle]
 max-line-length = 120
