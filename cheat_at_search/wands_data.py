@@ -168,6 +168,24 @@ labeled_queries = queries.merge(labels, how='left', on='query_id')
 labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
 
 
+def _ideal10(labeled_queries):
+
+    ideal_results = labeled_queries.sort_values(['query_id', 'grade'], ascending=(True, False))
+    ideal_results['rank'] = ideal_results.groupby('query_id').cumcount() + 1
+    ideal_top_10 = ideal_results[ideal_results['rank'] <= 10] \
+        .add_prefix('ideal_') \
+        .rename(columns={'ideal_query_id': 'query_id', 'ideal_query': 'query'})
+
+    ideal_top_10 = ideal_top_10.merge(
+        products[['product_id', 'product_name']], how='left', left_on='ideal_product_id', right_on='product_id'
+    ).rename(columns={'product_name': 'ideal_product_name'}).drop(columns='ideal_query_class')
+
+    return ideal_top_10
+
+
+ideal_top_10 = _ideal10(labeled_queries)
+
+
 def rel_attribute(query_products=labeled_query_products, grade=2, column='category'):
     """Relevant categories in the labeled data useful for ground truth of different attributes."""
     return query_products[query_products['grade'] == 2].groupby(['query', column])[column].count().sort_values(ascending=False)
