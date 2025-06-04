@@ -1,6 +1,6 @@
 import os
 import logging
-import Pathlib
+import pathlib
 
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ def get_project_root():
     return os.path.dirname(os.path.dirname(file_dir))
 
 
-DATA_PATH = Pathlib.Path(get_project_root()) / "data"
+DATA_PATH = pathlib.Path(get_project_root()) / "data"
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
