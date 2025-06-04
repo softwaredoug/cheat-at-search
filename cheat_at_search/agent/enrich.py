@@ -225,6 +225,7 @@ class CachedEnricher(Enricher):
         if os.path.exists(self.cache_file):
             with open(self.cache_file, 'rb') as f:
                 self.cache = pickle.load(f)
+                logger.info(f"Loaded {len(self.cache)} entries from cache.")
         else:
             logger.warning(f"Cache file {self.cache_file} does not exist, starting with empty cache.")
             self.cache = {}
