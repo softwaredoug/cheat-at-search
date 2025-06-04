@@ -13,7 +13,6 @@ def get_project_root():
 
 DATA_PATH = pathlib.Path(get_project_root()) / "data"
 print("DATA PATH", os.getenv("CHEAT_AT_SEARCH_DATA_PATH"))
-import pdb; pdb.set_trace()
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")

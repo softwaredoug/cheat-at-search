@@ -3,13 +3,14 @@ import logging
 from pathlib import Path
 import pandas as pd
 from cheat_at_search.logger import log_to_stdout
-from cheat_at_search.data_dir import DATA_PATH, ensure_data_subdir
+from cheat_at_search.data_dir import DATA_PATH
 
 
 logger = logging.getLogger(__name__)
 
 
 wands_path = Path(DATA_PATH) / "wands"
+print(f"WANDS data path: {wands_path}")
 
 
 def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.git"):
@@ -138,8 +139,6 @@ def _labels():
     Returns:
         pandas.DataFrame containing relevance label data
     """
-    logger = log_to_stdout(logger_name=__name__)
-
     # Ensure we have the data
     data_path = fetch_wands()
 
