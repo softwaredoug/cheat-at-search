@@ -221,6 +221,7 @@ class CachedEnricher(Enricher):
         self.load_cache()
 
     def load_cache(self):
+        logger.info(f"Loading enrich cache from {self.cache_file}")
         if os.path.exists(self.cache_file):
             with open(self.cache_file, 'rb') as f:
                 self.cache = pickle.load(f)
@@ -231,7 +232,9 @@ class CachedEnricher(Enricher):
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         if prompt in self.cache:
+            logger.debug(f"Cache hit for prompt: {prompt}")
             return self.cache[prompt]
+        logger.debug(f"Cache miss for prompt: {prompt}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
         if enriched_data:
             self.cache[prompt] = enriched_data
