@@ -1,5 +1,5 @@
 [project]
-name = "cheat-with-llms"
+name = "cheat_at_search"
 version = "0.1.0"
 description = "Cheat with LLMs example code"
 authors = [
