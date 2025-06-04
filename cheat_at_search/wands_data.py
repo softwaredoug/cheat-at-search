@@ -42,7 +42,7 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.
     try:
         # Clone the repository
         subprocess.run(
-            ["git", "clone", repo_url, str(data_path)],
+            ["git", "clone", "--depth=1", repo_url, str(data_path)],
             check=True,
             capture_output=True,
             text=True
