@@ -9,7 +9,6 @@ from cheat_at_search.data_dir import DATA_PATH, ensure_data_subdir
 logger = logging.getLogger(__name__)
 
 
-ensure_data_subdir("wands")
 wands_path = Path(DATA_PATH) / "wands"
 
 
