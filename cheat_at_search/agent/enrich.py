@@ -1,4 +1,3 @@
-from ollama import chat
 from openai import OpenAI
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import DATA_PATH, ensure_data_subdir
@@ -22,32 +21,6 @@ ensure_data_subdir("enrich_cache")
 class Enricher:
     def enrich(self, prompt: str, task_id: str = None) -> Optional[BaseModel]:
         raise NotImplementedError("Subclasses must implement this method.")
-
-
-class OllamaEnricher(Enricher):
-    def __init__(self, cls: BaseModel, model: str = "llama3.2", system_prompt: str = None):
-        self.model = model
-        self.system_prompt = system_prompt
-        self.cls = cls
-
-    def enrich(self, prompt: str) -> Optional[BaseModel]:
-        try:
-            prompts = []
-            if self.system_prompt:
-                prompts.append({"role": "system", "content": self.system_prompt})
-                prompts.append({"role": "user", "content": prompt})
-            response = chat(
-                model=self.model,
-                messages=prompts,
-                format=self.cls.model_json_schema()
-            )
-            if response.message.content:
-                return self.cls.model_validate_json(response.message.content)
-        except Exception as e:
-            logger.error(f"Error parsing prompt '{prompt}': {str(e)}")
-            # Return a default object with keywords in case of errors
-            raise e
-        return None
 
 
 def to_openai_batched(task_id, model, prompts, cls: BaseModel,
