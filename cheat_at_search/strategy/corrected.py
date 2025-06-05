@@ -27,7 +27,7 @@ class SpellingCorrectedSearch(SearchStrategy):
 
             {query}
 
-            * Dont add hyphens (ie "anti scratch" not "anti-scratch")
+            * Dont add hyphens (ie "antiscratch" not "anti-scratch")
             * Dont correct stylized product names (ie "merlyn" not "merlin", "oller" not "oiler/oller")
         """
 
