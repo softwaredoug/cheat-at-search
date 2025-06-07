@@ -16,17 +16,17 @@ logger = log_to_stdout(logger_name="query_parser")
 
 
 CACHE_PATH = ensure_data_subdir("enrich_cache")
+KEY_PATH = f"{DATA_PATH}/openai_key.txt"
 openai_key = None
 if os.getenv("OPENAI_API_KEY"):
     openai_key = os.getenv("OPENAI_API_KEY")
 else:
     try:
-        key_path = f"{DATA_PATH}/openai_key.txt"
-        logger.info(f"Reading OpenAI API key from {key_path}")
-        with open(key_path, "r") as f:
+        logger.info(f"Reading OpenAI API key from {KEY_PATH}")
+        with open(KEY_PATH, "r") as f:
             openai_key = f.read().strip()
     except FileNotFoundError:
-        logger.warning(f"Either set OPENAI_API_KEY environment variable or create a key file at {key_path} holding the key.")
+        logger.warning(f"Either set OPENAI_API_KEY environment variable or create a key file at {KEY_PATH} holding the key.")
 
 
 class Enricher:
