@@ -52,7 +52,7 @@ def to_openai_batched(task_id, model, prompts, cls: BaseModel,
 
 
 class OpenAIEnricher(Enricher):
-    def __init__(self, cls: BaseModel, model: str = "o4-mini", system_prompt: str = None):
+    def __init__(self, cls: BaseModel, model: str, system_prompt: str = None):
         self.model = model
         self.cls = cls
         self.system_prompt = system_prompt
