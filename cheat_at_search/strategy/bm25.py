@@ -6,8 +6,8 @@ import numpy as np
 
 class BM25Search(SearchStrategy):
     def __init__(self, products,
-                 name_boost=5,
-                 description_boost=1):
+                 name_boost=9.3,
+                 description_boost=4.1):
         super().__init__(products)
         self.index = products
         self.name_boost = name_boost
