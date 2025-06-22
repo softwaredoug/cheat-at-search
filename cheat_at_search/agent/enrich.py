@@ -112,7 +112,7 @@ class BatchOpenAIEnricher(Enricher):
         schema_hash = md5(schema.encode()).hexdigest()
         task_id = f"{task_id}_{md5(prompt.encode()).hexdigest()}_{md5(self.enricher.system_prompt.encode()).hexdigest()}_{self.enricher.model}_{schema_hash}"
         if task_id in self.task_cache:
-            logger.info(f"Task ID {task_id} enrichment found in cache.")
+            logger.debug("Task ID {task_id} enrichment found in cache.")
             # If in cache, just return
             return self.task_cache[task_id]
 
@@ -129,7 +129,7 @@ class BatchOpenAIEnricher(Enricher):
         )
         self.batch_lines.append(batch_line)
 
-    def submit(self, block=True, entries_per_batch=1000):
+    def submit(self, entries_per_batch=1000):
         if not self.batch_lines:
             logger.warning("No prompts to submit for batch enrichment.")
             return []
@@ -152,7 +152,7 @@ class BatchOpenAIEnricher(Enricher):
                     self.task_cache[task_id] = {}
 
             batch_input_file_id = batch_input_file.id
-            batch = self.enricher.client.batches.create(
+            batch = self.enriicher.client.batches.create(
                 input_file_id=batch_input_file_id,
                 endpoint="/v1/chat/completions",
                 completion_window="24h",
@@ -201,6 +201,8 @@ class BatchOpenAIEnricher(Enricher):
             # Save to cache
             with open(f"{CACHE_PATH}/batch_enrich.pkl", 'wb') as f:
                 pickle.dump(self.task_cache, f)
+        # Clear batch lines after successfully blocking
+        self.batch_lines = []
 
 
 class CachedEnricher(Enricher):
