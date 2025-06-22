@@ -152,7 +152,7 @@ class BatchOpenAIEnricher(Enricher):
                     self.task_cache[task_id] = {}
 
             batch_input_file_id = batch_input_file.id
-            batch = self.enriicher.client.batches.create(
+            batch = self.enricher.client.batches.create(
                 input_file_id=batch_input_file_id,
                 endpoint="/v1/chat/completions",
                 completion_window="24h",
