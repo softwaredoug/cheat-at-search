@@ -194,7 +194,7 @@ class BatchOpenAIEnricher(Enricher):
                 try:
                     cls_value = self.enricher.cls.model_validate_json(content)
                     self.task_cache[task_id] = cls_value
-                    logger.info(f"Task ID {task_id} enriched successfully.")
+                    logger.debug(f"Task ID {task_id} enriched successfully.")
                 except Exception as e:
                     logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
                     continue
