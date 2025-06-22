@@ -96,6 +96,10 @@ class BatchOpenAIEnricher(Enricher):
             logger.warning("Batch enrichment cache file not found, starting with empty cache.")
             self.task_cache = {}
 
+    @property
+    def cls(self):
+        return self.enricher.cls
+
     def enrich(self, prompt, task_id: str = None) -> Optional[BaseModel]:
         # For batch processing, you would collect prompts and send them in bulk
         # Here we just call the enricher directly for simplicity
