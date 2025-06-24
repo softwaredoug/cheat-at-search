@@ -86,6 +86,7 @@ class OpenAIEnricher(Enricher):
                 return cls_value
         except Exception as e:
             logger.error(f"""
+                type: {type(e).__name__}
 
                 Error parsing response (resp_id: {response_id} | prev_resp_id: {prev_response_id})
 
@@ -94,6 +95,7 @@ class OpenAIEnricher(Enricher):
 
                 Exception:
                 {str(e)}
+                {repr(e)}
 
             """)
             # Return a default object with keywords in case of errors
