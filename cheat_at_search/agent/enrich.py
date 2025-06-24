@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import OpenAI, APIError
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir, DATA_PATH
 from typing import Optional
@@ -56,6 +56,7 @@ class OpenAIEnricher(Enricher):
         self.model = model
         self.cls = cls
         self.system_prompt = system_prompt
+        self.last_exception = None
         if not openai_key:
             raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
         self.client = OpenAI(
@@ -84,7 +85,8 @@ class OpenAIEnricher(Enricher):
             cls_value = response.output_parsed
             if cls_value:
                 return cls_value
-        except Exception as e:
+        except APIError as e:
+            self.last_exception = e
             logger.error(f"""
                 type: {type(e).__name__}
 
