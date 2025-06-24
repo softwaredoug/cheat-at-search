@@ -62,6 +62,9 @@ class OpenAIEnricher(Enricher):
             api_key=openai_key,
         )
 
+    def __hash__(self):
+        return hash((self.model, self.cls, self.system_prompt))
+
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         try:
             prompts = []
@@ -89,8 +92,9 @@ class BatchOpenAIEnricher(Enricher):
         self.enricher = enricher
         self.batch_lines = []
         self.task_cache = {}
+        enr_hash = hash(self.enricher)
         try:
-            with open(f"{CACHE_PATH}/batch_enrich.pkl", 'rb') as f:
+            with open(f"{CACHE_PATH}/batch_enrich_{enr_hash}.pkl", 'rb') as f:
                 self.task_cache = pickle.load(f)
         except FileNotFoundError:
             logger.warning("Batch enrichment cache file not found, starting with empty cache.")
