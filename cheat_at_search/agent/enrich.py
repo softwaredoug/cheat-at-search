@@ -66,6 +66,8 @@ class OpenAIEnricher(Enricher):
         return hash((self.model, self.cls, self.system_prompt))
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
+        response_id = None
+        prev_response_id = None
         try:
             prompts = []
             if self.system_prompt:
@@ -76,11 +78,24 @@ class OpenAIEnricher(Enricher):
                 input=prompts,
                 text_format=self.cls
             )
+            response_id = response.id
+            prev_response_id = response_id
+
             cls_value = response.output_parsed
             if cls_value:
                 return cls_value
         except Exception as e:
-            logger.error(f"Error parsing prompt '{prompt}': {str(e)}")
+            logger.error(f"""
+
+                Error parsing response (resp_id: {response_id} | prev_resp_id: {prev_response_id})
+
+                Prompt:
+                {prompt}:
+
+                Exception:
+                {str(e)}
+
+            """)
             # Return a default object with keywords in case of errors
             raise e
         return None
