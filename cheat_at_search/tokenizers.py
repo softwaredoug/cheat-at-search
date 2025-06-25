@@ -23,6 +23,19 @@ def snowball_tokenizer(text):
             for token in split]
 
 
+def taxonomy_tokenizer(text):
+    # Turn "/" into a special token that won't get stemmed
+    text = text.replace('/', 'ddd')
+    if type(text) == float:
+        return ''
+    if text is None:
+        return ''
+    text = text.translate(all_trans).replace("'", " ")
+    split = text.lower().split()
+    return [stem_word(token)
+            for token in split]
+
+
 def ws_tokenizer(text):
     if type(text) == float:
         return ''

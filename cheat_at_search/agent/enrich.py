@@ -112,11 +112,12 @@ class BatchOpenAIEnricher(Enricher):
         self.batch_lines = []
         self.task_cache = {}
         enr_hash = hash(self.enricher)
+        self.batch_cache_file = f"{CACHE_PATH}/batch_enrich_{enr_hash}.pkl"
         try:
-            with open(f"{CACHE_PATH}/batch_enrich_{enr_hash}.pkl", 'rb') as f:
+            with open(self.batch_cache_file, 'rb') as f:
                 self.task_cache = pickle.load(f)
         except FileNotFoundError:
-            logger.warning("Batch enrichment cache file not found, starting with empty cache.")
+            logger.warning("Batch enrichment cache file not found, starting with empty cache at {self.batch_cache_file}")
             self.task_cache = {}
 
     @property
@@ -222,7 +223,7 @@ class BatchOpenAIEnricher(Enricher):
                     logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
                     continue
             # Save to cache
-            with open(f"{CACHE_PATH}/batch_enrich.pkl", 'wb') as f:
+            with open(self.batch_cache_file, 'wb') as f:
                 pickle.dump(self.task_cache, f)
         # Clear batch lines after successfully blocking
         self.batch_lines = []
