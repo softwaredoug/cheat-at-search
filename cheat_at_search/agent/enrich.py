@@ -63,8 +63,8 @@ class OpenAIEnricher(Enricher):
             api_key=openai_key,
         )
 
-    def __hash__(self):
-        return hash((self.model, self.cls, self.system_prompt))
+    def str_hash(self):
+        return md5(f"{self.model}_{self.system_prompt}_{self.cls.__name__}".encode()).hexdigest()
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         response_id = None
@@ -111,7 +111,7 @@ class BatchOpenAIEnricher(Enricher):
         self.enricher = enricher
         self.batch_lines = []
         self.task_cache = {}
-        enr_hash = hash(self.enricher)
+        enr_hash = self.enricher.str_hash()
         self.batch_cache_file = f"{CACHE_PATH}/batch_enrich_{enr_hash}.pkl"
         try:
             with open(self.batch_cache_file, 'rb') as f:
