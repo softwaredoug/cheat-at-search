@@ -116,8 +116,9 @@ class BatchOpenAIEnricher(Enricher):
         try:
             with open(self.batch_cache_file, 'rb') as f:
                 self.task_cache = pickle.load(f)
+            logger.info(f"Loaded {len(self.task_cache)} entries from batch enrichment cache at {self.batch_cache_file}")
         except FileNotFoundError:
-            logger.warning("Batch enrichment cache file not found, starting with empty cache at {self.batch_cache_file}")
+            logger.warning(f"Batch enrichment cache file not found, starting with empty cache at {self.batch_cache_file}")
             self.task_cache = {}
 
     @property
