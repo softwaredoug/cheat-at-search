@@ -180,6 +180,8 @@ class BatchOpenAIEnricher(Enricher):
 
             with open(f"{CACHE_PATH}/batch.jsonl", 'w') as f:
                 for line in self.batch_lines[i:i + entries_per_batch]:
+                    task_id = line['custom_id']
+                    print(f"Submitting task ID {task_id} for batch enrichment.")
                     f.write(json.dumps(line) + "\n")
             batch_input_file = self.enricher.client.files.create(
                 file=open(f"{CACHE_PATH}/batch.jsonl", "rb"),
