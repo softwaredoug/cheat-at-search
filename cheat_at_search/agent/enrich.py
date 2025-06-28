@@ -156,6 +156,10 @@ class BatchOpenAIEnricher(Enricher):
             self.enricher.cls
         )
         self.batch_lines.append(batch_line)
+        # Check for uniqueness of all task_ids in the batch
+        task_ids = [line['custom_id'] for line in self.batch_lines]
+        if len(task_ids) != len(set(task_ids)):
+            logger.error(f"Duplicate task_id detected in batch: {task_id}. This may lead to errors in batch processing.")
 
     def get_output(self, task_id: str, prompt: str) -> Optional[BaseModel]:
         """Get the output of a batch enrichment."""
