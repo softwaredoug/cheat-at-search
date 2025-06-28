@@ -125,6 +125,12 @@ class BatchOpenAIEnricher(Enricher):
     def cls(self):
         return self.enricher.cls
 
+    def build_task_id(self, task_id, prompt: str):
+        schema = json.dumps(self.enricher.cls.model_json_schema(mode='serialization'))
+        schema_hash = md5(schema.encode()).hexdigest()
+        task_id = f"{task_id}_{md5(prompt.encode()).hexdigest()}_{md5(self.enricher.system_prompt.encode()).hexdigest()}_{self.enricher.model}_{schema_hash}"
+        return task_id
+
     def enrich(self, prompt, task_id: str = None) -> Optional[BaseModel]:
         # For batch processing, you would collect prompts and send them in bulk
         # Here we just call the enricher directly for simplicity
@@ -132,10 +138,7 @@ class BatchOpenAIEnricher(Enricher):
             raise ValueError("task_id must be provided for batch enrichment.")
 
         # Prepend prompt hash, system prompt and model to task id
-
-        schema = json.dumps(self.enricher.cls.model_json_schema(mode='serialization'))
-        schema_hash = md5(schema.encode()).hexdigest()
-        task_id = f"{task_id}_{md5(prompt.encode()).hexdigest()}_{md5(self.enricher.system_prompt.encode()).hexdigest()}_{self.enricher.model}_{schema_hash}"
+        task_id = self.build_task_id(task_id, prompt)
         if task_id in self.task_cache:
             logger.debug("Task ID {task_id} enrichment found in cache.")
             # If in cache, just return
@@ -153,6 +156,15 @@ class BatchOpenAIEnricher(Enricher):
             self.enricher.cls
         )
         self.batch_lines.append(batch_line)
+
+    def get_output(self, task_id: str, prompt: str) -> Optional[BaseModel]:
+        """Get the output of a batch enrichment."""
+        task_id = self.build_task_id(task_id, prompt)
+        if task_id in self.task_cache:
+            logger.debug(f"Retrieving task ID {task_id} from batch cache.")
+            return self.task_cache[task_id]
+        logger.warning(f"Task ID {task_id} not found in batch cache.")
+        return None
 
     def submit(self, entries_per_batch=1000):
         if not self.batch_lines:
@@ -298,6 +310,6 @@ class AutoEnricher(Enricher):
         """Submit the batch for enrichment."""
         self.batch_enricher.submit(entries_per_batch=entries_per_batch)
 
-    def get_batch_output(self, task_id: str) -> Optional[BaseModel]:
+    def get_batch_output(self, task_id: str, prompt: str) -> Optional[BaseModel]:
         """Get the output of a batch enrichment."""
-        return self.batch_enricher.task_cache.get(task_id, None)
+        return self.batch_enricher.get_output(task_id, prompt)
