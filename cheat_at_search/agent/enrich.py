@@ -176,12 +176,16 @@ class BatchOpenAIEnricher(Enricher):
             return []
 
         batches = []
+        submitted_tasks = set()
         for i in range(0, len(self.batch_lines), entries_per_batch):
 
             with open(f"{CACHE_PATH}/batch.jsonl", 'w') as f:
                 for line in self.batch_lines[i:i + entries_per_batch]:
                     task_id = line['custom_id']
-                    print(f"Submitting task ID {task_id} for batch enrichment.")
+                    if task_id in submitted_tasks:
+                        logger.warning(f"Task ID {task_id} already submitted, skipping.")
+                        continue
+                    submitted_tasks.add(task_id)
                     f.write(json.dumps(line) + "\n")
             batch_input_file = self.enricher.client.files.create(
                 file=open(f"{CACHE_PATH}/batch.jsonl", "rb"),
