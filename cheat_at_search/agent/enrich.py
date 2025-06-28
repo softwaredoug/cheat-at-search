@@ -298,6 +298,6 @@ class AutoEnricher(Enricher):
         """Submit the batch for enrichment."""
         self.batch_enricher.submit(entries_per_batch=entries_per_batch)
 
-    def get_batch_output(self, prompt, task_id: str) -> Optional[BaseModel]:
+    def get_batch_output(self, task_id: str) -> Optional[BaseModel]:
         """Get the output of a batch enrichment."""
         return self.batch_enricher.task_cache.get(task_id, None)
