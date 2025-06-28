@@ -282,7 +282,7 @@ class AutoEnricher(Enricher):
 
     def __init__(self, model: str, system_prompt: str, output_cls: BaseModel):
         self.system_prompt = system_prompt
-        self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt),
+        self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt)
         self.cached_enricher = CachedEnricher(self.enricher)
         self.batch_enricher = BatchOpenAIEnricher(self.enricher)
 
