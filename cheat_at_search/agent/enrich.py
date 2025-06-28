@@ -275,3 +275,29 @@ class CachedEnricher(Enricher):
             self.cache[prompt] = enriched_data
             self.save_cache()
         return enriched_data
+
+
+class AutoEnricher(Enricher):
+    """Either serial cached or batch enriched, depending on the context."""
+
+    def __init__(self, system_prompt: str, output_cls: BaseModel):
+        self.system_prompt = system_prompt
+        self.enricher = OpenAIEnricher(cls=output_cls, model="gpt-3.5-turbo", system_prompt=self.system_prompt),
+        self.cached_enricher = CachedEnricher(self.enricher, identifier="auto_enrich")
+        self.batch_enricher = BatchOpenAIEnricher(self.enricher)
+
+    def enrich(self, prompt: str, task_id: str = None) -> BaseModel:
+        """Enrich a single prompt, now, and cache the result."""
+        return self.cached_enricher.enrich(prompt)
+
+    def batch(self, prompt: str, task_id) -> None:
+        """Add prompt to batch for processing."""
+        self.batch_enricher.enrich(prompt, task_id=task_id)
+
+    def submit_batch(self, entries_per_batch=1000):
+        """Submit the batch for enrichment."""
+        self.batch_enricher.submit(entries_per_batch=entries_per_batch)
+
+    def get_batch_output(self, prompt, task_id: str) -> Optional[BaseModel]:
+        """Get the output of a batch enrichment."""
+        return self.batch_enricher.task_cache.get(task_id, None)
