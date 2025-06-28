@@ -280,10 +280,10 @@ class CachedEnricher(Enricher):
 class AutoEnricher(Enricher):
     """Either serial cached or batch enriched, depending on the context."""
 
-    def __init__(self, system_prompt: str, output_cls: BaseModel):
+    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel):
         self.system_prompt = system_prompt
-        self.enricher = OpenAIEnricher(cls=output_cls, model="gpt-3.5-turbo", system_prompt=self.system_prompt),
-        self.cached_enricher = CachedEnricher(self.enricher, identifier="auto_enrich")
+        self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt),
+        self.cached_enricher = CachedEnricher(self.enricher)
         self.batch_enricher = BatchOpenAIEnricher(self.enricher)
 
     def enrich(self, prompt: str, task_id: str = None) -> BaseModel:
