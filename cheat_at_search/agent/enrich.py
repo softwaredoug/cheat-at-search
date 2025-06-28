@@ -266,9 +266,16 @@ class CachedEnricher(Enricher):
     def load_cache(self):
         logger.info(f"Loading enrich cache from {self.cache_file}")
         if os.path.exists(self.cache_file):
-            with open(self.cache_file, 'rb') as f:
-                self.cache = pickle.load(f)
-                logger.info(f"Loaded {len(self.cache)} entries from cache.")
+            try:
+                with open(self.cache_file, 'rb') as f:
+                    self.cache = pickle.load(f)
+                    logger.info(f"Loaded {len(self.cache)} entries from cache.")
+            except Exception as e:
+                logger.error(f"Error loading cache file {self.cache_file}: {str(e)}")
+                logger.error("Starting with empty cache due to error.")
+                # Delete file
+                os.remove(self.cache_file)
+                self.cache = {}
         else:
             logger.warning(f"Cache file {self.cache_file} does not exist, starting with empty cache.")
             self.cache = {}
