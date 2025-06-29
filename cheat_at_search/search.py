@@ -1,6 +1,12 @@
 from cheat_at_search.strategy import BM25Search
 from cheat_at_search.wands_data import products, queries, ideal_top_10
 from cheat_at_search.eval import grade_results
+from cheat_at_search.data_dir import ensure_data_subdir
+import pandas as pd
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def run_strategy(strategy):
@@ -48,6 +54,18 @@ def vs_ideal(graded):
     return sxs
 
 
-bm25 = BM25Search(products)
-graded_bm25 = run_strategy(bm25)
-graded_bm25
+def run_bm25():
+    try:
+        bm25_results_path = ensure_data_subdir('bm25_results')
+        graded_bm25 = pd.read_pickle(bm25_results_path / 'graded_bm25.pkl')
+        return graded_bm25
+    except Exception:
+        logger.warning("BM25 results not found, running BM25 search strategy.")
+        bm25_results_path = ensure_data_subdir('bm25_results')
+        bm25 = BM25Search(products)
+        graded_bm25 = run_strategy(bm25)
+        graded_bm25.to_pickle(bm25_results_path / 'graded_bm25.pkl')
+        return graded_bm25
+
+
+graded_bm25 = run_bm25()
