@@ -172,7 +172,7 @@ class BatchOpenAIEnricher(Enricher):
 
     def submit(self, entries_per_batch=1000):
         if not self.batch_lines:
-            logger.warning("No prompts to submit for batch enrichment.")
+            logger.info("No prompts to submit for batch enrichment (they're probably cached.")
             return []
 
         batches = []
