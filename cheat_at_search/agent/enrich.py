@@ -297,12 +297,13 @@ class CachedEnricher(Enricher):
     def prompt_key(self, prompt: str) -> str:
         """Clean up the prompt to ensure it is suitable for caching."""
         # Remove all whitespace
+        print(prompt.split())
         md5("_".join(prompt.split()).encode()).hexdigest()
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         prompt_key = self.prompt_key(prompt)
         if prompt_key in self.cache:
-            logger.debug(f"Cache hit for prompt: {prompt_key}")
+            logger.info(f"Cache hit for prompt: {prompt_key}")
             return self.cache[prompt_key]
         logger.info(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
