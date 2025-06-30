@@ -65,7 +65,8 @@ class OpenAIEnricher(Enricher):
         )
 
     def str_hash(self):
-        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{self.cls.__name__}".encode()).hexdigest()
+        output_schema_hash = md5(json.dumps(self.cls.model_json_schema(mode='serialization')).encode()).hexdigest()
+        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{output_schema_hash}".encode()).hexdigest()
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         response_id = None
@@ -255,21 +256,13 @@ class BatchOpenAIEnricher(Enricher):
 
 
 class CachedEnricher(Enricher):
-    def __init__(self, enricher: Enricher, cache_file: str = None, identifier: str = None):
-        if cache_file is None:
-            enricher_class = enricher.__class__.__name__
-            # Get hash of system prompt
-            cache_file = f"{CACHE_PATH}/{enricher_class.lower()}"
-            if hasattr(enricher, 'system_prompt'):
-                system_prompt_hash = md5(enricher.system_prompt.encode()).hexdigest()
-                cache_file += f"_{system_prompt_hash}"
-            if hasattr(enricher, 'model'):
-                cache_file += f"_{enricher.model}"
-            if identifier:
-                cache_file += f"_{identifier}"
-            schema = json.dumps(enricher.cls.model_json_schema(mode='serialization'))
-            schema_hash = md5(schema.encode()).hexdigest()
-            cache_file += f"{schema_hash}_cache.pkl"
+    def __init__(self, enricher: Enricher):
+        enricher_class = enricher.__class__.__name__
+        # Get hash of system prompt
+        cache_file = f"{CACHE_PATH}/{enricher_class.lower()}"
+        if hasattr(enricher, 'str_hash'):
+            cache_file += f"_{enricher.str_hash()}"
+        cache_file += "_cache.pkl"
         self.enricher = enricher
         self.cache_file = cache_file
         self.cache = {}
