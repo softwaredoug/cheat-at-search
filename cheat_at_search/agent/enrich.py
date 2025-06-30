@@ -294,14 +294,20 @@ class CachedEnricher(Enricher):
         with open(self.cache_file, 'wb') as f:
             pickle.dump(self.cache, f)
 
+    def prompt_key(self, prompt: str) -> str:
+        """Clean up the prompt to ensure it is suitable for caching."""
+        # Remove all whitespace
+        md5("_".join(prompt.split()))
+
     def enrich(self, prompt: str) -> Optional[BaseModel]:
-        if prompt in self.cache:
-            logger.debug(f"Cache hit for prompt: {prompt}")
-            return self.cache[prompt]
-        logger.debug(f"Cache miss for prompt: {prompt}, enriching...")
+        prompt_key = self.prompt_key(prompt)
+        if prompt_key in self.cache:
+            logger.debug(f"Cache hit for prompt: {prompt_key}")
+            return self.cache[prompt_key]
+        logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
         if enriched_data:
-            self.cache[prompt] = enriched_data
+            self.cache[prompt_key] = enriched_data
             self.save_cache()
         return enriched_data
 
