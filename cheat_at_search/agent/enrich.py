@@ -304,7 +304,7 @@ class CachedEnricher(Enricher):
         if prompt_key in self.cache:
             logger.debug(f"Cache hit for prompt: {prompt_key}")
             return self.cache[prompt_key]
-        logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
+        logger.info(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
         if enriched_data:
             self.cache[prompt_key] = enriched_data
