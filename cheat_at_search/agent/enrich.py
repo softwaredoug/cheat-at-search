@@ -52,10 +52,11 @@ def to_openai_batched(task_id, model, prompts, cls: BaseModel,
 
 
 class OpenAIEnricher(Enricher):
-    def __init__(self, cls: BaseModel, model: str, system_prompt: str = None):
+    def __init__(self, cls: BaseModel, model: str, system_prompt: str = None, temperature: float = 0.0):
         self.model = model
         self.cls = cls
         self.system_prompt = system_prompt
+        self.temperature = temperature
         self.last_exception = None
         if not openai_key:
             raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
@@ -64,7 +65,7 @@ class OpenAIEnricher(Enricher):
         )
 
     def str_hash(self):
-        return md5(f"{self.model}_{self.system_prompt}_{self.cls.__name__}".encode()).hexdigest()
+        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{self.cls.__name__}".encode()).hexdigest()
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         response_id = None
@@ -76,6 +77,7 @@ class OpenAIEnricher(Enricher):
                 prompts.append({"role": "user", "content": prompt})
             response = self.client.responses.parse(
                 model=self.model,
+                temperature=self.temperature,
                 input=prompts,
                 text_format=self.cls
             )
