@@ -156,7 +156,8 @@ class BatchOpenAIEnricher(Enricher):
             task_id,
             self.enricher.model,
             prompts,
-            self.enricher.cls
+            self.enricher.cls,
+            temperature=self.enricher.temperature
         )
         self.batch_lines.append(batch_line)
         # Check for uniqueness of all task_ids in the batch
