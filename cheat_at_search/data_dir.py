@@ -38,6 +38,7 @@ def mount(use_gdrive=True, manual_path=None):
     Args:
         use_grive: If True, mount using grive; otherwise, use 'cheat-at-search-data/' directory.
     """
+    global DATA_PATH
     if manual_path:
         if not pathlib.Path(manual_path).exists():
             logger.info(f"Creating manual data directory: {manual_path}")
