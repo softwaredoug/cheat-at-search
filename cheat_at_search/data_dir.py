@@ -31,20 +31,27 @@ def ensure_data_subdir(subdir: str):
     return subdir_path
 
 
-def mount(use_gdrive=True, mount_path=None):
+def mount(use_gdrive=True, manual_path=None):
     """
     Mount the data directory to a specific path.
 
     Args:
-        use_grive: If True, mount using grive; otherwise, use local path.
-        mount_path: Optional path to mount the data directory.
+        use_grive: If True, mount using grive; otherwise, use 'cheat-at-search-data/' directory.
     """
+    if manual_path:
+        if not pathlib.Path(manual_path).exists():
+            logger.info(f"Creating manual data directory: {manual_path}")
+            pathlib.Path(manual_path).mkdir(parents=True, exist_ok=True)
+        DATA_PATH = pathlib.Path(manual_path)
     if use_gdrive:
         # Assumes you're running this in Google Colab
         try:
             from google.colab import drive
             drive.mount('/content/drive')
             DATA_PATH = '/content/drive/MyDrive/cheat-at-search-data/'
+            if not pathlib.Path(DATA_PATH).exists():
+                logger.info(f"Creating Google Drive data directory: {DATA_PATH}")
+                pathlib.Path(DATA_PATH).mkdir(parents=True, exist_ok=True)
         except ImportError:
             logger.error("Google Colab drive module not found. Ensure you're running this in Google Colab.")
             raise
