@@ -39,7 +39,6 @@ def mount(use_gdrive=True, mount_path=None):
         use_grive: If True, mount using grive; otherwise, use local path.
         mount_path: Optional path to mount the data directory.
     """
-    nonlocal DATA_PATH
     if use_gdrive:
         # Assumes you're running this in Google Colab
         try:
