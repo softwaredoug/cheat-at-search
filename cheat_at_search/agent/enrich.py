@@ -8,6 +8,7 @@ import json
 import os
 from hashlib import md5
 from time import sleep
+import getpass
 
 from openai.lib._parsing._completions import type_to_response_format_param
 
@@ -26,7 +27,11 @@ else:
         with open(KEY_PATH, "r") as f:
             openai_key = f.read().strip()
     except FileNotFoundError:
-        logger.warning(f"Either set OPENAI_API_KEY environment variable or create a key file at {KEY_PATH} holding the key.")
+        key = getpass.getpass("Enter your openai key: ")
+        with open(os.path.join(KEY_PATH), 'w') as f:
+            logger.info(f"Saving OpenAI API key to {KEY_PATH}")
+            f.write(key)
+            openai_key = key
 
 
 class Enricher:
