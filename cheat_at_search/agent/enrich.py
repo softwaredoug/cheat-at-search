@@ -318,9 +318,9 @@ class CachedEnricher(Enricher):
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         prompt_key = self.prompt_key(prompt)
         if prompt_key in self.cache:
-            logger.debug(f"Cache hit for prompt: {prompt_key}")
+            logger.info(f"Cache hit for prompt: {prompt_key}")
             return self.cache[prompt_key]
-        logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
+        logger.info(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
         if enriched_data:
             self.cache[prompt_key] = enriched_data
@@ -339,11 +339,11 @@ class AutoEnricher(Enricher):
 
     def enrich(self, prompt: str, task_id: str = None) -> BaseModel:
         """Enrich a single prompt, now, and cache the result."""
-        return self.cached_enricher.enricher.enrich(prompt)
+        return self.cached_enricher.enrich(prompt)
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
         """Get the number of tokens for a prompt (runs directly, does not cache)."""
-        return self.cached_enricher.get_num_tokens(prompt)
+        return self.cached_enricher.enricher.get_num_tokens(prompt)
 
     def batch(self, prompt: str, task_id) -> None:
         """Add prompt to batch for processing."""
