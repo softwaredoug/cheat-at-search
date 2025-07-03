@@ -95,8 +95,8 @@ class OpenAIEnricher(Enricher):
             )
             response_id = response.id
             prev_response_id = response_id
-            num_input_tokens = response.get('usage', {}).get('input_tokens', 0)
-            num_output_tokens = response.get('usage', {}).get('output_tokens', 0)
+            num_input_tokens = response.usage.input_tokens
+            num_output_tokens = response.usage.output_tokens
 
             cls_value = response.output_parsed
             if cls_value and return_num_tokens:
