@@ -9,6 +9,7 @@ import os
 from hashlib import md5
 from time import sleep
 import getpass
+from typing import Tuple
 
 from openai.lib._parsing._completions import type_to_response_format_param
 
@@ -73,7 +74,12 @@ class OpenAIEnricher(Enricher):
         output_schema_hash = md5(json.dumps(self.cls.model_json_schema(mode='serialization')).encode()).hexdigest()
         return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{output_schema_hash}".encode()).hexdigest()
 
-    def enrich(self, prompt: str) -> Optional[BaseModel]:
+    def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
+        """Run the response directly and return teh number of tokens"""
+        cls_value, num_input_tokens, num_output_tokens = self.enrich(prompt, return_num_tokens=True)
+        return num_input_tokens, num_output_tokens
+
+    def enrich(self, prompt: str, return_num_tokens=False) -> Optional[BaseModel]:
         response_id = None
         prev_response_id = None
         try:
@@ -89,9 +95,13 @@ class OpenAIEnricher(Enricher):
             )
             response_id = response.id
             prev_response_id = response_id
+            num_input_tokens = response.get('usage', {}).get('input_tokens', 0)
+            num_output_tokens = response.get('usage', {}).get('output_tokens', 0)
 
             cls_value = response.output_parsed
-            if cls_value:
+            if cls_value and return_num_tokens:
+                return cls_value, num_input_tokens, num_output_tokens
+            elif cls_value:
                 return cls_value
         except APIError as e:
             self.last_exception = e
@@ -300,6 +310,11 @@ class CachedEnricher(Enricher):
         # Remove all whitespace
         return md5("_".join(prompt.split()).encode()).hexdigest()
 
+    def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
+        """Run the response directly and return the number of tokens"""
+        cls_value, num_input_tokens, num_output_tokens = self.enrich(prompt, return_num_tokens=True)
+        return num_input_tokens, num_output_tokens
+
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         prompt_key = self.prompt_key(prompt)
         if prompt_key in self.cache:
@@ -324,7 +339,11 @@ class AutoEnricher(Enricher):
 
     def enrich(self, prompt: str, task_id: str = None) -> BaseModel:
         """Enrich a single prompt, now, and cache the result."""
-        return self.cached_enricher.enrich(prompt)
+        return self.cached_enricher.enricher.enrich(prompt)
+
+    def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
+        """Get the number of tokens for a prompt (runs directly, does not cache)."""
+        return self.cached_enricher.get_num_tokens(prompt)
 
     def batch(self, prompt: str, task_id) -> None:
         """Add prompt to batch for processing."""
