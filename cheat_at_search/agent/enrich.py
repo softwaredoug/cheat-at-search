@@ -218,15 +218,20 @@ class BatchOpenAIEnricher(Enricher):
                     self.task_cache[task_id] = {}
 
             batch_input_file_id = batch_input_file.id
-            batch = self.enricher.client.batches.create(
-                input_file_id=batch_input_file_id,
-                endpoint="/v1/chat/completions",
-                completion_window="24h",
-                metadata={
-                    "description": "nightly eval job"
-                }
-            )
-            batches.append(batch)
+            try:
+                batch = self.enricher.client.batches.create(
+                    input_file_id=batch_input_file_id,
+                    endpoint="/v1/chat/completions",
+                    completion_window="24h",
+                    metadata={
+                        "description": "nightly eval job"
+                    }
+                )
+                batches.append(batch)
+            except APIError as e:
+                logger.error(f"Error creating batch: {str(e)}")
+                logger.error("Batch enrichment failed, clearing batch lines.")
+                logger.error("Will wait for other batches to complete before retrying.")
         for batch in batches:
             # Wait for batch to be valid
             batch = self.enricher.client.batches.retrieve(batch.id)
