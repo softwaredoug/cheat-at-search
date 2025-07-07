@@ -28,7 +28,6 @@ class StoredLruCache:
         self.cache = {}
         self.cache_loaded = False
         self.cache_file = None
-        self.load_cache()
 
     def load_cache(self):
         """Load the cache from the file."""
