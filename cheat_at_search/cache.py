@@ -34,6 +34,7 @@ class StoredLruCache:
         try:
             with open(self.cache_file, 'rb') as f:
                 self.cache = pickle.load(f)
+                logger.info(f"Cache loaded from {self.cache_file} with {len(self.cache)} entries.")
             self.cache_loaded = True
         except (FileNotFoundError, EOFError):
             self.cache = {}
