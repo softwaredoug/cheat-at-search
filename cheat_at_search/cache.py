@@ -1,19 +1,33 @@
-from cheat_at_search.data_dir import DATA_DIR
+from cheat_at_search.data_dir import ensure_data_subdir
 import os
 import pickle
-
 import logging
+from hashlib import md5
+import inspect
+
 
 logger = logging.getLogger(__name__)
+
+
+stored_cache_path = ensure_data_subdir('stored_lru_cache')
+
+
+def get_function_signature_key(func):
+    qualname = func.__qualname__
+    module = func.__module__
+    signature = str(inspect.signature(func))
+    unique_string = f"{module}.{qualname}{signature}"
+    return unique_string
 
 
 class StoredLruCache:
     """An LRU cache decorator that stores its contents in a file."""
 
-    def __init__(self, maxsize=128, cache_file='cache.pkl'):
+    def __init__(self, maxsize=128):
         self.maxsize = maxsize
-        self.cache_file = os.path.join(DATA_DIR, cache_file)
         self.cache = {}
+        self.cache_loaded = False
+        self.cache_file = None
         self.load_cache()
 
     def load_cache(self):
@@ -21,8 +35,10 @@ class StoredLruCache:
         try:
             with open(self.cache_file, 'rb') as f:
                 self.cache = pickle.load(f)
+            self.cache_loaded = True
         except (FileNotFoundError, EOFError):
             self.cache = {}
+            self.cache_loaded = False
 
     def save_cache(self):
         """Save the cache to the file."""
@@ -35,6 +51,12 @@ class StoredLruCache:
             raise
 
     def __call__(self, func):
+        signature = get_function_signature_key(func)
+        self.cache_file = os.path.join(stored_cache_path, f"{md5(signature.encode()).hexdigest()}.pkl")
+        logger.info(f"Using cache file: {self.cache_file}")
+        if not self.cache_loaded:
+            self.load_cache()
+
         def wrapper(*args, **kwargs):
             key = (args, tuple(kwargs.items()))
             if key in self.cache:
