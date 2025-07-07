@@ -270,8 +270,14 @@ class BatchOpenAIEnricher(Enricher):
                     logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
                     continue
             # Save to cache
-            with open(self.batch_cache_file, 'wb') as f:
-                pickle.dump(self.task_cache, f)
+            try:
+                with open(self.batch_cache_file, 'wb') as f:
+                    pickle.dump(self.task_cache, f)
+            except KeyboardInterrupt:
+                logger.warning("Batch enrichment cache saving interrupted. Retrying save before raising exception.")
+                with open(self.batch_cache_file, 'wb') as f:
+                    pickle.dump(self.task_cache, f)
+                raise
         # Clear batch lines after successfully blocking
         self.batch_lines = []
 
@@ -307,8 +313,14 @@ class CachedEnricher(Enricher):
             self.cache = {}
 
     def save_cache(self):
-        with open(self.cache_file, 'wb') as f:
-            pickle.dump(self.cache, f)
+        try:
+            with open(self.cache_file, 'wb') as f:
+                pickle.dump(self.cache, f)
+        except KeyboardInterrupt:
+            logger.warning("Cache saving interrupted. Retrying save before raising exception.")
+            with open(self.cache_file, 'wb') as f:
+                pickle.dump(self.cache, f)
+            raise
 
     def prompt_key(self, prompt: str) -> str:
         """Clean up the prompt to ensure it is suitable for caching."""
