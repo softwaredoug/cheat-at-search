@@ -20,39 +20,39 @@ logger = log_to_stdout(logger_name="query_parser")
 
 CACHE_PATH = ensure_data_subdir("enrich_cache")
 
-# OpenAI key setup (only if not using Azure)
+# OpenAI key setup (lazy loading)
+KEY_PATH = f"{DATA_PATH}/openai_key.txt"
 openai_key = None
-use_azure = bool(os.getenv("USE_AZURE_OPENAI", "").lower() in ["true", "1", "yes"])
-if not use_azure:
-    KEY_PATH = f"{DATA_PATH}/openai_key.txt"
-    if os.getenv("OPENAI_API_KEY"):
-        openai_key = os.getenv("OPENAI_API_KEY")
-    else:
-        try:
-            logger.info(f"Reading OpenAI API key from {KEY_PATH}")
-            with open(KEY_PATH, "r") as f:
-                openai_key = f.read().strip()
-        except FileNotFoundError:
-            key = getpass.getpass("Enter your openai key: ")
-            with open(os.path.join(KEY_PATH), 'w') as f:
-                logger.info(f"Saving OpenAI API key to {KEY_PATH}")
-                f.write(key)
-                openai_key = key
-else:
-    # Prompt for Azure OpenAI config if not set in environment
+
+def get_openai_key():
+    global openai_key
+    if openai_key is None:
+        if os.getenv("OPENAI_API_KEY"):
+            openai_key = os.getenv("OPENAI_API_KEY")
+        else:
+            try:
+                logger.info(f"Reading OpenAI API key from {KEY_PATH}")
+                with open(KEY_PATH, "r") as f:
+                    openai_key = f.read().strip()
+            except FileNotFoundError:
+                key = getpass.getpass("Enter your openai key: ")
+                with open(os.path.join(KEY_PATH), 'w') as f:
+                    logger.info(f"Saving OpenAI API key to {KEY_PATH}")
+                    f.write(key)
+                    openai_key = key
+    return openai_key
+
+def get_azure_client():
     AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
     if not AZURE_OPENAI_API_KEY:
         AZURE_OPENAI_API_KEY = getpass.getpass("Enter your Azure OpenAI API key: ")
+    
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
     if not AZURE_OPENAI_ENDPOINT:
         AZURE_OPENAI_ENDPOINT = input("Enter your Azure OpenAI endpoint (e.g., https://your-resource.openai.azure.com/): ").strip()
-    AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
-    if not AZURE_OPENAI_API_VERSION:
-        AZURE_OPENAI_API_VERSION = input("Enter your Azure OpenAI API version (e.g., 2025-01-01-preview): ").strip()
-
-def get_azure_client():
-    if not AZURE_OPENAI_API_KEY:
-        raise ValueError("No Azure OpenAI API key provided. Set AZURE_OPENAI_API_KEY environment variable.")
+    
+    AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
+    
     return AzureOpenAI(
         api_key=AZURE_OPENAI_API_KEY,
         api_version=AZURE_OPENAI_API_VERSION,
@@ -86,11 +86,12 @@ class OpenAIEnricher(Enricher):
         self.system_prompt = system_prompt
         self.temperature = temperature
         self.last_exception = None
-        # Auto-detect Azure usage from environment variable
-        self.use_azure = use_azure or bool(os.getenv("USE_AZURE_OPENAI", "").lower() in ["true", "1", "yes"])
+        # Auto-detect Azure usage from environment variable (checked at runtime)
+        self.use_azure = bool(os.getenv("USE_AZURE_OPENAI", "").lower() in ["true", "1", "yes"])
         if self.use_azure:
             self.client = get_azure_client()
         else:
+            openai_key = get_openai_key()
             if not openai_key:
                 raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
             self.client = OpenAI(
@@ -384,7 +385,7 @@ class CachedEnricher(Enricher):
 class AutoEnricher(Enricher):
     """Either serial cached or batch enriched, depending on the context."""
 
-    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel, use_azure: bool = False):
+    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel):
         self.system_prompt = system_prompt
         self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt)
         self.cached_enricher = CachedEnricher(self.enricher)
