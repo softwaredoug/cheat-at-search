@@ -1,4 +1,5 @@
 from openai import OpenAI, APIError
+from openai import AzureOpenAI  # Add AzureOpenAI import
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir, DATA_PATH
 from typing import Optional
@@ -34,11 +35,23 @@ else:
             f.write(key)
             openai_key = key
 
+# Azure OpenAI config
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "https://fs-development.openai.azure.com/")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
+
+def get_azure_client():
+    if not AZURE_OPENAI_API_KEY:
+        raise ValueError("No Azure OpenAI API key provided. Set AZURE_OPENAI_API_KEY environment variable.")
+    return AzureOpenAI(
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AZURE_OPENAI_API_VERSION,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    )
 
 class Enricher:
     def enrich(self, prompt: str, task_id: str = None) -> Optional[BaseModel]:
         raise NotImplementedError("Subclasses must implement this method.")
-
 
 def to_openai_batched(task_id, model, prompts, cls: BaseModel,
                       temperature: float = 0.1):
@@ -56,7 +69,6 @@ def to_openai_batched(task_id, model, prompts, cls: BaseModel,
     }
     return task
 
-
 class OpenAIEnricher(Enricher):
     def __init__(self, cls: BaseModel, model: str, system_prompt: str = None, temperature: float = 0.0):
         self.model = model
@@ -64,18 +76,23 @@ class OpenAIEnricher(Enricher):
         self.system_prompt = system_prompt
         self.temperature = temperature
         self.last_exception = None
-        if not openai_key:
-            raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
-        self.client = OpenAI(
-            api_key=openai_key,
-        )
+        # Auto-detect Azure usage from environment variable
+        self.use_azure = use_azure or bool(os.getenv("USE_AZURE_OPENAI", "").lower() in ["true", "1", "yes"])
+        if self.use_azure:
+            self.client = get_azure_client()
+        else:
+            if not openai_key:
+                raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
+            self.client = OpenAI(
+                api_key=openai_key,
+            )
 
     def str_hash(self):
         output_schema_hash = md5(json.dumps(self.cls.model_json_schema(mode='serialization')).encode()).hexdigest()
-        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{output_schema_hash}".encode()).hexdigest()
+        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{output_schema_hash}_{self.use_azure}".encode()).hexdigest()
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
-        """Run the response directly and return teh number of tokens"""
+        """Run the response directly and return the number of tokens"""
         cls_value, num_input_tokens, num_output_tokens = self.enrich(prompt, return_num_tokens=True)
         return num_input_tokens, num_output_tokens
 
@@ -87,22 +104,46 @@ class OpenAIEnricher(Enricher):
             if self.system_prompt:
                 prompts.append({"role": "system", "content": self.system_prompt})
                 prompts.append({"role": "user", "content": prompt})
-            response = self.client.responses.parse(
-                model=self.model,
-                temperature=self.temperature,
-                input=prompts,
-                text_format=self.cls
-            )
-            response_id = response.id
-            prev_response_id = response_id
-            num_input_tokens = response.usage.input_tokens
-            num_output_tokens = response.usage.output_tokens
 
-            cls_value = response.output_parsed
-            if cls_value and return_num_tokens:
-                return cls_value, num_input_tokens, num_output_tokens
-            elif cls_value:
-                return cls_value
+            if self.use_azure:
+                # Azure expects deployment name as model
+                completion = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=prompts,
+                    temperature=self.temperature,
+                )
+                # Azure returns choices[0].message.content as the output
+                content = completion.choices[0].message.content
+                # Try to parse as JSON for pydantic
+                try:
+                    cls_value = self.cls.model_validate_json(content)
+                except Exception:
+                    # fallback: try to parse as dict
+                    cls_value = self.cls.model_validate(content)
+                # Azure does not provide token usage in the same way
+                num_input_tokens = getattr(completion.usage, "prompt_tokens", None)
+                num_output_tokens = getattr(completion.usage, "completion_tokens", None)
+                if cls_value and return_num_tokens:
+                    return cls_value, num_input_tokens, num_output_tokens
+                elif cls_value:
+                    return cls_value
+            else:
+                response = self.client.responses.parse(
+                    model=self.model,
+                    temperature=self.temperature,
+                    input=prompts,
+                    text_format=self.cls
+                )
+                response_id = response.id
+                prev_response_id = response_id
+                num_input_tokens = response.usage.input_tokens
+                num_output_tokens = response.usage.output_tokens
+
+                cls_value = response.output_parsed
+                if cls_value and return_num_tokens:
+                    return cls_value, num_input_tokens, num_output_tokens
+                elif cls_value:
+                    return cls_value
         except APIError as e:
             self.last_exception = e
             logger.error(f"""
@@ -118,10 +159,8 @@ class OpenAIEnricher(Enricher):
                 {repr(e)}
 
             """)
-            # Return a default object with keywords in case of errors
             raise e
         return None
-
 
 class BatchOpenAIEnricher(Enricher):
 
@@ -150,16 +189,12 @@ class BatchOpenAIEnricher(Enricher):
         return task_id
 
     def enrich(self, prompt, task_id: str = None) -> Optional[BaseModel]:
-        # For batch processing, you would collect prompts and send them in bulk
-        # Here we just call the enricher directly for simplicity
         if task_id is None:
             raise ValueError("task_id must be provided for batch enrichment.")
 
-        # Prepend prompt hash, system prompt and model to task id
         task_id = self.build_task_id(task_id, prompt)
         if task_id in self.task_cache:
             logger.debug("Task ID {task_id} enrichment found in cache.")
-            # If in cache, just return
             return self.task_cache[task_id]
 
         prompts = []
@@ -175,13 +210,11 @@ class BatchOpenAIEnricher(Enricher):
             temperature=self.enricher.temperature
         )
         self.batch_lines.append(batch_line)
-        # Check for uniqueness of all task_ids in the batch
         task_ids = [line['custom_id'] for line in self.batch_lines]
         if len(task_ids) != len(set(task_ids)):
             logger.error(f"Duplicate task_id detected in batch: {task_id}. This may lead to errors in batch processing.")
 
     def get_output(self, task_id: str, prompt: str) -> Optional[BaseModel]:
-        """Get the output of a batch enrichment."""
         task_id = self.build_task_id(task_id, prompt)
         if task_id in self.task_cache:
             logger.debug(f"Retrieving task ID {task_id} from batch cache.")
@@ -192,6 +225,11 @@ class BatchOpenAIEnricher(Enricher):
     def submit(self, entries_per_batch=1000):
         if not self.batch_lines:
             logger.info("No prompts to submit for batch enrichment (they're probably cached)")
+            return []
+
+        if getattr(self.enricher, "use_azure", False):
+            logger.warning("Batch enrichment is not implemented for Azure OpenAI. Skipping batch submission.")
+            self.batch_lines = []
             return []
 
         batches = []
@@ -211,7 +249,6 @@ class BatchOpenAIEnricher(Enricher):
                 purpose="batch"
             )
 
-            # Add empty entry to task cache if not exists
             for task in self.batch_lines:
                 task_id = task['custom_id']
                 if task_id not in self.task_cache:
@@ -233,7 +270,6 @@ class BatchOpenAIEnricher(Enricher):
                 logger.error("Batch enrichment failed, clearing batch lines.")
                 logger.error("Will wait for other batches to complete before retrying.")
         for batch in batches:
-            # Wait for batch to be valid
             batch = self.enricher.client.batches.retrieve(batch.id)
             backoff = 4
             while batch.status != "completed":
@@ -261,7 +297,6 @@ class BatchOpenAIEnricher(Enricher):
                     logger.warning(f"No content found for task ID {task_id}.")
                     continue
                 content = choice['message']['content']
-                # Parse into cls
                 try:
                     cls_value = self.enricher.cls.model_validate_json(content)
                     self.task_cache[task_id] = cls_value
@@ -269,7 +304,6 @@ class BatchOpenAIEnricher(Enricher):
                 except Exception as e:
                     logger.error(f"Error parsing content for task ID {task_id}: {str(e)}")
                     continue
-            # Save to cache
             try:
                 with open(self.batch_cache_file, 'wb') as f:
                     pickle.dump(self.task_cache, f)
@@ -278,14 +312,11 @@ class BatchOpenAIEnricher(Enricher):
                 with open(self.batch_cache_file, 'wb') as f:
                     pickle.dump(self.task_cache, f)
                 raise
-        # Clear batch lines after successfully blocking
         self.batch_lines = []
-
 
 class CachedEnricher(Enricher):
     def __init__(self, enricher: Enricher):
         enricher_class = enricher.__class__.__name__
-        # Get hash of system prompt
         cache_file = f"{CACHE_PATH}/{enricher_class.lower()}"
         if hasattr(enricher, 'str_hash'):
             cache_file += f"_{enricher.str_hash()}"
@@ -305,7 +336,6 @@ class CachedEnricher(Enricher):
             except Exception as e:
                 logger.error(f"Error loading cache file {self.cache_file}: {str(e)}")
                 logger.error("Starting with empty cache due to error.")
-                # Delete file
                 os.remove(self.cache_file)
                 self.cache = {}
         else:
@@ -323,13 +353,10 @@ class CachedEnricher(Enricher):
             raise
 
     def prompt_key(self, prompt: str) -> str:
-        """Clean up the prompt to ensure it is suitable for caching."""
-        # Remove all whitespace
         return md5("_".join(prompt.split()).encode()).hexdigest()
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
-        """Run the response directly and return the number of tokens"""
-        cls_value, num_input_tokens, num_output_tokens = self.enrich(prompt, return_num_tokens=True)
+        cls_value, num_input_tokens, num_output_tokens = self.enricher.enrich(prompt, return_num_tokens=True)
         return num_input_tokens, num_output_tokens
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
@@ -344,32 +371,26 @@ class CachedEnricher(Enricher):
             self.save_cache()
         return enriched_data
 
-
 class AutoEnricher(Enricher):
     """Either serial cached or batch enriched, depending on the context."""
 
-    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel):
+    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel, use_azure: bool = False):
         self.system_prompt = system_prompt
         self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt)
         self.cached_enricher = CachedEnricher(self.enricher)
         self.batch_enricher = BatchOpenAIEnricher(self.enricher)
 
     def enrich(self, prompt: str, task_id: str = None) -> BaseModel:
-        """Enrich a single prompt, now, and cache the result."""
         return self.cached_enricher.enrich(prompt)
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
-        """Get the number of tokens for a prompt (runs directly, does not cache)."""
         return self.cached_enricher.enricher.get_num_tokens(prompt)
 
     def batch(self, prompt: str, task_id) -> None:
-        """Add prompt to batch for processing."""
         self.batch_enricher.enrich(prompt, task_id=task_id)
 
     def submit_batch(self, entries_per_batch=1000):
-        """Submit the batch for enrichment."""
         self.batch_enricher.submit(entries_per_batch=entries_per_batch)
 
     def get_batch_output(self, prompt: str, task_id: str) -> Optional[BaseModel]:
-        """Get the output of a batch enrichment."""
         return self.batch_enricher.get_output(task_id, prompt)
