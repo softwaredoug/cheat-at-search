@@ -19,26 +19,36 @@ logger = log_to_stdout(logger_name="query_parser")
 
 
 CACHE_PATH = ensure_data_subdir("enrich_cache")
-KEY_PATH = f"{DATA_PATH}/openai_key.txt"
-openai_key = None
-if os.getenv("OPENAI_API_KEY"):
-    openai_key = os.getenv("OPENAI_API_KEY")
-else:
-    try:
-        logger.info(f"Reading OpenAI API key from {KEY_PATH}")
-        with open(KEY_PATH, "r") as f:
-            openai_key = f.read().strip()
-    except FileNotFoundError:
-        key = getpass.getpass("Enter your openai key: ")
-        with open(os.path.join(KEY_PATH), 'w') as f:
-            logger.info(f"Saving OpenAI API key to {KEY_PATH}")
-            f.write(key)
-            openai_key = key
 
-# Azure OpenAI config
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "https://fs-development.openai.azure.com/")
-AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
+# OpenAI key setup (only if not using Azure)
+openai_key = None
+use_azure = bool(os.getenv("USE_AZURE_OPENAI", "").lower() in ["true", "1", "yes"])
+if not use_azure:
+    KEY_PATH = f"{DATA_PATH}/openai_key.txt"
+    if os.getenv("OPENAI_API_KEY"):
+        openai_key = os.getenv("OPENAI_API_KEY")
+    else:
+        try:
+            logger.info(f"Reading OpenAI API key from {KEY_PATH}")
+            with open(KEY_PATH, "r") as f:
+                openai_key = f.read().strip()
+        except FileNotFoundError:
+            key = getpass.getpass("Enter your openai key: ")
+            with open(os.path.join(KEY_PATH), 'w') as f:
+                logger.info(f"Saving OpenAI API key to {KEY_PATH}")
+                f.write(key)
+                openai_key = key
+else:
+    # Prompt for Azure OpenAI config if not set in environment
+    AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+    if not AZURE_OPENAI_API_KEY:
+        AZURE_OPENAI_API_KEY = getpass.getpass("Enter your Azure OpenAI API key: ")
+    AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+    if not AZURE_OPENAI_ENDPOINT:
+        AZURE_OPENAI_ENDPOINT = input("Enter your Azure OpenAI endpoint (e.g., https://your-resource.openai.azure.com/): ").strip()
+    AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
+    if not AZURE_OPENAI_API_VERSION:
+        AZURE_OPENAI_API_VERSION = input("Enter your Azure OpenAI API version (e.g., 2025-01-01-preview): ").strip()
 
 def get_azure_client():
     if not AZURE_OPENAI_API_KEY:
