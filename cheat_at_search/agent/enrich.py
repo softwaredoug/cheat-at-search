@@ -11,6 +11,7 @@ from time import sleep
 import getpass
 from typing import Tuple
 import pandas as pd
+from tqdm import tqdm
 
 from openai.lib._parsing._completions import type_to_response_format_param
 
@@ -387,7 +388,7 @@ class AutoEnricher(Enricher):
 
 class ProductEnricher:
 
-    def __init__(self, enricher, prompt_fn, attrs=None):
+    def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None):
         self.enricher = enricher
         self.prompt_fn = prompt_fn
         if attrs is None:
@@ -405,6 +406,7 @@ class ProductEnricher:
             return self.enricher.enrich(prompt)
 
         logger.info(f"Enriching {len(products)} products immediately (non-batch)")
+        tqdm.pandas(desc="Enriching products")
         results = products[['product_name', 'product_description', 'product_id']].apply(
             lambda x: enrich_one(*x), axis=1)
         for attr in self.attrs:
