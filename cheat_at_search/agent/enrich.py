@@ -400,6 +400,8 @@ class ProductEnricher:
             attrs = set(attrs)  # Ensure unique attributes
             # Get properties too
             attrs = attrs.union(attr for attr in dir(output_cls) if isinstance(getattr(output_cls, attr), property))
+            # Remove any beginning with __
+            attrs = {attr for attr in attrs if not attr.startswith('__')}
             logger.info(f"Enriching products with attributes: {attrs}")
         self.attrs = attrs
 
