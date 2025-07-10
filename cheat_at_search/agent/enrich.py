@@ -402,6 +402,9 @@ class ProductEnricher:
             attrs = attrs.union(attr for attr in dir(output_cls) if isinstance(getattr(output_cls, attr), property))
             # Remove any beginning with __
             attrs = {attr for attr in attrs if not attr.startswith('__')}
+            # Remove pydantic internal attributes
+            attrs = {attr for attr in attrs if attr not in
+                     ["model_fields_set", "model_extra", "model_config", "model_json_schema"]}
             logger.info(f"Enriching products with attributes: {attrs}")
         self.attrs = attrs
 
