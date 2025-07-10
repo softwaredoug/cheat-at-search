@@ -414,7 +414,6 @@ class ProductEnricher:
             product_description = row['product_description']
             product_id = row['product_id']
             enriched_data = enrich_one(product_name, product_description, product_id)
-            logger.info(f"Enriched product {product_id} ({product_name})")
             if enriched_data:
                 for attr in self.attrs:
                     value = getattr(enriched_data, attr, None)
