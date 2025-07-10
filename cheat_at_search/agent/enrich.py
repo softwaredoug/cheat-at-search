@@ -397,8 +397,10 @@ class ProductEnricher:
         if attrs is None:  # Inferred from the BaseModel
             output_cls = enricher.output_cls
             attrs = output_cls.__fields__.keys()
+            attrs = set(attrs)  # Ensure unique attributes
             # Get properties too
             attrs = attrs.union(attr for attr in dir(output_cls) if isinstance(getattr(output_cls, attr), property))
+            logger.info(f"Enriching products with attributes: {attrs}")
         self.attrs = attrs
 
     def enrich_one(self, product_name: str, product_description: str, product_id: str):
