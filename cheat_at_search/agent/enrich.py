@@ -387,11 +387,12 @@ class AutoEnricher(Enricher):
 
 
 class ProductEnricher:
+    """Enrich a dataframe of products."""
 
     def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None):
         self.enricher = enricher
         self.prompt_fn = prompt_fn
-        if attrs is None:
+        if attrs is None:  # Inferred from the BaseModel
             output_cls = enricher.output_cls
             attrs = output_cls.__fields__.keys()
         self.attrs = attrs
@@ -406,11 +407,18 @@ class ProductEnricher:
             return self.enricher.enrich(prompt)
 
         logger.info(f"Enriching {len(products)} products immediately (non-batch)")
-        tqdm.pandas(desc="Enriching products")
-        results = products[['product_name', 'product_description', 'product_id']].apply(
-            lambda x: enrich_one(*x), axis=1)
-        for attr in self.attrs:
-            products[attr] = results.apply(lambda x: getattr(x, attr) if hasattr(x, attr) else "")
+        for idx, row in tqdm(products.iterrows(), total=len(products), desc="Enriching products"):
+            product_name = row['product_name']
+            product_description = row['product_description']
+            product_id = row['product_id']
+            enriched_data = enrich_one(product_name, product_description, product_id)
+            if enriched_data:
+                for attr in self.attrs:
+                    products.at[idx, attr] = getattr(enriched_data, attr, "")
+            else:
+                logger.warning(f"Enrichment failed for product {product_id} ({product_name})")
+                for attr in self.attrs:
+                    products.at[idx, attr] = ""
         return products
 
     def batch_all(self, products: pd.DataFrame):
