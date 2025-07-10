@@ -389,9 +389,11 @@ class AutoEnricher(Enricher):
 class ProductEnricher:
     """Enrich a dataframe of products."""
 
-    def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None):
+    def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None,
+                 separator: str = " sep "):
         self.enricher = enricher
         self.prompt_fn = prompt_fn
+        self.separator = separator
         if attrs is None:  # Inferred from the BaseModel
             output_cls = enricher.output_cls
             attrs = output_cls.__fields__.keys()
@@ -415,7 +417,13 @@ class ProductEnricher:
             logger.info(f"Enriched product {product_id} ({product_name})")
             if enriched_data:
                 for attr in self.attrs:
-                    products.at[idx, attr] = getattr(enriched_data, attr, "")
+                    value = getattr(enriched_data, attr, None)
+                    # If iterable, join
+                    if isinstance(value, (list, tuple)):
+                        value = self.separator.join(map(str, value))
+                    elif value is None:
+                        value = ""
+                    products.at[idx, attr] = value if value is not None else ""
             else:
                 logger.warning(f"Enrichment failed for product {product_id} ({product_name})")
                 for attr in self.attrs:
