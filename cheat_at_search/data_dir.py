@@ -7,8 +7,15 @@ logger = logging.getLogger(__name__)
 
 
 def get_project_root():
-    file_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.dirname(os.path.dirname(file_dir))
+    # Loop backwards until "cheat-at-search"
+    # is found in the directory structure
+    file_dir = os.path.abspath(__file__)
+    while not os.path.basename(file_dir) == "cheat_at_search":
+        file_dir = os.path.dirname(file_dir)
+        if not file_dir or file_dir == "/":
+            raise ValueError("Project root directory 'cheat-at-search' not found in the path.")
+
+    return os.path.dirname(file_dir)
 
 
 DATA_PATH = pathlib.Path(get_project_root()) / "data"

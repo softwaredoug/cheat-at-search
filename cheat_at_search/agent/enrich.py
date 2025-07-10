@@ -10,6 +10,7 @@ from hashlib import md5
 from time import sleep
 import getpass
 from typing import Tuple
+import pandas as pd
 
 from openai.lib._parsing._completions import type_to_response_format_param
 
@@ -234,6 +235,7 @@ class BatchOpenAIEnricher(Enricher):
                 logger.error("Will wait for other batches to complete before retrying.")
         for batch in batches:
             # Wait for batch to be valid
+            logger.info(f"Batch {batch.id}, waiting for completion...")
             batch = self.enricher.client.batches.retrieve(batch.id)
             backoff = 4
             while batch.status != "completed":
@@ -244,6 +246,8 @@ class BatchOpenAIEnricher(Enricher):
                     backoff = 256
                 batch = self.enricher.client.batches.retrieve(batch.id)
                 print(batch.status)
+
+            logger.info(f"Batch {batch.id} completed successfully.")
 
             resp = self.enricher.client.files.content(batch.output_file_id).text
             for line in resp.splitlines():
@@ -278,6 +282,7 @@ class BatchOpenAIEnricher(Enricher):
                 with open(self.batch_cache_file, 'wb') as f:
                     pickle.dump(self.task_cache, f)
                 raise
+            logger.info(f"Batch {batch.id} result saved")
         # Clear batch lines after successfully blocking
         self.batch_lines = []
 
@@ -373,3 +378,58 @@ class AutoEnricher(Enricher):
     def get_batch_output(self, prompt: str, task_id: str) -> Optional[BaseModel]:
         """Get the output of a batch enrichment."""
         return self.batch_enricher.get_output(task_id, prompt)
+
+    @property
+    def output_cls(self):
+        """Return the output class of the enricher."""
+        return self.enricher.cls
+
+
+class ProductEnricher:
+
+    def __init__(self, enricher, prompt_fn, attrs=None):
+        self.enricher = enricher
+        self.prompt_fn = prompt_fn
+        if attrs is None:
+            output_cls = enricher.output_cls
+            attrs = output_cls.__fields__.keys()
+        self.attrs = attrs
+
+    def enrich_one(self, product_name: str, product_description: str, product_id: str):
+        prompt = self.prompt_fn(product_name, product_description)
+        return self.enricher.enrich(prompt)
+
+    def enrich_all(self, products: pd.DataFrame):
+        def enrich_one(product_name, product_description, product_id):
+            prompt = self.prompt_fn(product_name, product_description)
+            return self.enricher.enrich(prompt)
+
+        logger.info(f"Enriching {len(products)} products immediately (non-batch)")
+        results = products[['product_name', 'product_description', 'product_id']].apply(
+            lambda x: enrich_one(*x), axis=1)
+        for attr in self.attrs:
+            products[attr] = results.apply(lambda x: getattr(x, attr) if hasattr(x, attr) else "")
+        return products
+
+    def batch_all(self, products: pd.DataFrame):
+
+        def submit_batch_job(product_name, product_description, product_id):
+            prompt = self.prompt_fn(product_name, product_description)
+            self.enricher.batch(prompt, product_id)
+
+        products[['product_name', 'product_description', 'product_id']].apply(lambda x: submit_batch_job(*x), axis=1)
+
+    def fetch_all(self, products: pd.DataFrame):
+
+        def fetch_attr_value(product_name, product_description, product_id, attr):
+            prompt = self.prompt_fn(product_name, product_description)
+            result = self.enricher.get_batch_output(prompt, product_id)
+            return getattr(result, attr) if hasattr(result, attr) else ""
+
+        logger.info(f"Submitting batch job for {len(products)} products")
+
+        logger.info("Batch done, fetching results")
+        for attr in self.attrs:
+            products[attr] = products[['product_name', 'product_description', 'product_id']].apply(
+                lambda x: fetch_attr_value(*x, attr=attr), axis=1)
+        return products

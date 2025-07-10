@@ -2,6 +2,9 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 
 from cheat_at_search.model.category_list import Categories, SubCategories, FullyQualifiedCategories
+from sentence_transformers import SentenceTransformer
+from cheat_at_search.cache import StoredLruCache
+import numpy as np
 
 
 class ProductCategory(BaseModel):
@@ -101,4 +104,70 @@ class ProductRoom(BaseModel):
     room: RoomType = Field(
         default="unknown",
         description="Room for this furniture product (use unknown if applies to any room or unknown room type)"
+    )
+
+
+class BrandedTerms(BaseModel):
+    """
+    Represents a classification of a product.
+
+    In this case, hallucinated, something the model is making up that looks like one
+    of our classifications
+    """
+    branded_terms: list[str] = Field(
+        description="Any branded terms (product lines, brand names, etc) mentioned"
+    )
+
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+
+@StoredLruCache(maxsize=50000)
+def encode(text):
+    return model.encode(text)
+
+
+ItemTypes = Literal[
+    "area rug", "accent pillow", "bed", "cocktail table", "floor & wall tile",
+    "entertainment center", "kitchen mat", "sectional", "sofa", "patio sofa",
+    "doormat", "furniture cushion", "wall clock", "garden statue",
+    "kitchen island", "garment rack", "mattress pad",
+    "loveseat", "armchair", "recliner", "coffee table", "end table",
+    "tv stand", "media console", "bookshelf", "bed frame", "mattress", "nightstand",
+    "dresser", "wardrobe", "chest of drawers", "dining table", "dining chair", "bar stool",
+    "sideboard", "buffet", "bench", "office chair", "desk", "filing cabinet", "bookcase",
+    "patio chair", "patio table", "outdoor sofa", "umbrella", "grill", "toolbox",
+    "door knob", "door lock", "deadbolt", "light switch", "outlet", "extension cord",
+    "smart bulb", "ceiling fan", "floor lamp", "table lamp", "chandelier", "rug",
+    "curtains", "blinds", "shower curtain", "mirror", "wall art", "picture frame",
+    "clock", "candle holder", "vase", "planter", "kitchen faucet", "sink", "toilet",
+    "bathroom faucet", "chaise lounge",
+    "shower head", "plunger", "broom", "dustpan", "mop", "bucket", "vacuum", "trash can",
+    "recycling bin", "laundry basket", "ironing board", "drying rack", "cutlery", "slow cooker",
+    "frying pan", "saucepan", "mixing bowl", "cutting board", "storage bin", "shelving unit",
+    "no item type matches", "unknown", "ottoman", "comforter", "chair cushion", "refrigerator",
+    "greenhouse", "crown molding", "vanity", "flag", "potted plant", "basket", "podium",
+    "blanket", "anti-fatigue mat", "serving tray"
+]
+
+
+class ItemType(BaseModel):
+    """
+    Represents a classification of a product.
+
+    In this case, hallucinated, something the model is making up that looks like one
+    of our classifications
+    """
+    @property
+    def similarity(self):
+        """Compare item_type to item_type_unconstrained"""
+        return np.dot(encode(self.item_type), encode(self.item_type_unconstrained))
+
+    item_type: ItemTypes = Field(
+        ...,
+        description="The type of item this product is from the provided list. Use 'no item type matches' if no item type matches the item"
+    )
+    item_type_unconstrained: str = Field(
+        ...,
+        description="The type of item this product is, ie dining table, bed, etc"
     )
