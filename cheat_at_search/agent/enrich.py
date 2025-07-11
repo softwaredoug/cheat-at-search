@@ -448,7 +448,7 @@ class ProductEnricher:
             prompt = self.prompt_fn(product)
             self.enricher.batch(prompt, task_id=product['product_id'])
 
-        products.apply(lambda x: submit_batch_job(*x), axis=1)
+        products.apply(lambda x: submit_batch_job(x.to_dict()), axis=1)
 
     def fetch_all(self, products: pd.DataFrame):
 
@@ -462,5 +462,5 @@ class ProductEnricher:
         logger.info("Batch done, fetching results")
         for attr in self.attrs:
             products[attr] = products.apply(
-                lambda x: fetch_attr_value(*x, attr=attr), axis=1)
+                lambda x: fetch_attr_value(x.to_dict(), attr=attr), axis=1)
         return products
