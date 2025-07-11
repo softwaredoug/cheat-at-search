@@ -11,6 +11,9 @@ from hashlib import md5
 from time import sleep
 import getpass
 from typing import Tuple
+import pandas as pd
+from tqdm import tqdm
+from searcharray import SearchArray
 
 from openai.lib._parsing._completions import type_to_response_format_param
 
@@ -281,6 +284,8 @@ class BatchOpenAIEnricher(Enricher):
                 logger.error("Batch enrichment failed, clearing batch lines.")
                 logger.error("Will wait for other batches to complete before retrying.")
         for batch in batches:
+            # Wait for batch to be valid
+            logger.info(f"Batch {batch.id}, waiting for completion...")
             batch = self.enricher.client.batches.retrieve(batch.id)
             backoff = 4
             while batch.status != "completed":
@@ -291,6 +296,8 @@ class BatchOpenAIEnricher(Enricher):
                     backoff = 256
                 batch = self.enricher.client.batches.retrieve(batch.id)
                 print(batch.status)
+
+            logger.info(f"Batch {batch.id} completed successfully.")
 
             resp = self.enricher.client.files.content(batch.output_file_id).text
             for line in resp.splitlines():
@@ -323,6 +330,8 @@ class BatchOpenAIEnricher(Enricher):
                 with open(self.batch_cache_file, 'wb') as f:
                     pickle.dump(self.task_cache, f)
                 raise
+            logger.info(f"Batch {batch.id} result saved")
+        # Clear batch lines after successfully blocking
         self.batch_lines = []
 
 class CachedEnricher(Enricher):
@@ -405,3 +414,101 @@ class AutoEnricher(Enricher):
 
     def get_batch_output(self, prompt: str, task_id: str) -> Optional[BaseModel]:
         return self.batch_enricher.get_output(task_id, prompt)
+
+    @property
+    def output_cls(self):
+        """Return the output class of the enricher."""
+        return self.enricher.cls
+
+
+class ProductEnricher:
+    """Enrich a dataframe of products."""
+
+    def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None,
+                 separator: str = " sep "):
+        self.enricher = enricher
+        self.prompt_fn = prompt_fn
+        self.separator = separator
+        if attrs is None:  # Inferred from the BaseModel
+            output_cls = enricher.output_cls
+            attrs = output_cls.__fields__.keys()
+            attrs = set(attrs)  # Ensure unique attributes
+            # Get properties too
+            attrs = attrs.union(attr for attr in dir(output_cls) if isinstance(getattr(output_cls, attr), property))
+            # Remove any beginning with __
+            attrs = {attr for attr in attrs if not attr.startswith('__')}
+            # Remove pydantic internal attributes
+            attrs = {attr for attr in attrs if attr not in
+                     ["model_fields_set", "model_extra", "model_config", "model_json_schema"]}
+            logger.info(f"Enriching products with attributes: {attrs}")
+        self.attrs = attrs
+
+    def _slice_out_searcharray_cols(self, products: pd.DataFrame) -> pd.DataFrame:
+        """Slice out columns that are SearchArray columns."""
+        searcharray_cols = [
+            col for col in products.columns
+            if isinstance(products[col].array, SearchArray)
+        ]
+        return products.drop(columns=searcharray_cols, errors='ignore')
+
+    def enrich_one(self, product: dict):
+        prompt = self.prompt_fn(product)
+        return self.enricher.enrich(prompt)
+
+    def enrich_all(self, products: pd.DataFrame):
+        products = self._slice_out_searcharray_cols(products)
+
+        def enrich_one(product):
+            prompt = self.prompt_fn(product)
+            return self.enricher.enrich(prompt)
+
+        logger.info(f"Enriching {len(products)} products immediately (non-batch)")
+        for idx, row in tqdm(products.iterrows(), total=len(products), desc="Enriching products"):
+            product = row.to_dict()
+            enriched_data = enrich_one(product)
+            if enriched_data:
+                for attr in self.attrs:
+                    value = getattr(enriched_data, attr, None)
+                    # If iterable, join
+                    if isinstance(value, (list, tuple)):
+                        value = self.separator.join(map(str, value))
+                    elif value is None:
+                        value = ""
+                    products.at[idx, attr] = value if value is not None else ""
+            else:
+                logger.warning(f"Enrichment failed for product {product.get('product_id', 'unknown')}")
+                for attr in self.attrs:
+                    products.at[idx, attr] = ""
+        return products
+
+    def batch_and_wait(self, products: pd.DataFrame):
+        """Submit batch jobs and wait for completion."""
+        products = self._slice_out_searcharray_cols(products)
+        self.batch_all(products)
+        self.enricher.submit_batch()
+        return self.fetch_all(products)
+
+    def batch_all(self, products: pd.DataFrame):
+        products = self._slice_out_searcharray_cols(products)
+
+        def submit_batch_job(product: dict):
+            prompt = self.prompt_fn(product)
+            self.enricher.batch(prompt, task_id=product['product_id'])
+
+        products.apply(lambda x: submit_batch_job(x.to_dict()), axis=1)
+
+    def fetch_all(self, products: pd.DataFrame):
+        products = self._slice_out_searcharray_cols(products)
+
+        def fetch_attr_value(product: dict, attr: str):
+            prompt = self.prompt_fn(product)
+            result = self.enricher.get_batch_output(prompt, task_id=product['product_id'])
+            return getattr(result, attr) if hasattr(result, attr) else ""
+
+        logger.info(f"Submitting batch job for {len(products)} products")
+
+        logger.info("Batch done, fetching results")
+        for attr in self.attrs:
+            products[attr] = products.apply(
+                lambda x: fetch_attr_value(x.to_dict(), attr=attr), axis=1)
+        return products
