@@ -408,21 +408,19 @@ class ProductEnricher:
             logger.info(f"Enriching products with attributes: {attrs}")
         self.attrs = attrs
 
-    def enrich_one(self, product_name: str, product_description: str, product_id: str):
-        prompt = self.prompt_fn(product_name, product_description)
+    def enrich_one(self, product: dict):
+        prompt = self.prompt_fn(product)
         return self.enricher.enrich(prompt)
 
     def enrich_all(self, products: pd.DataFrame):
-        def enrich_one(product_name, product_description, product_id):
-            prompt = self.prompt_fn(product_name, product_description)
+        def enrich_one(product):
+            prompt = self.prompt_fn(product)
             return self.enricher.enrich(prompt)
 
         logger.info(f"Enriching {len(products)} products immediately (non-batch)")
         for idx, row in tqdm(products.iterrows(), total=len(products), desc="Enriching products"):
-            product_name = row['product_name']
-            product_description = row['product_description']
-            product_id = row['product_id']
-            enriched_data = enrich_one(product_name, product_description, product_id)
+            product = row.to_dict()
+            enriched_data = enrich_one(product)
             if enriched_data:
                 for attr in self.attrs:
                     value = getattr(enriched_data, attr, None)
@@ -433,30 +431,36 @@ class ProductEnricher:
                         value = ""
                     products.at[idx, attr] = value if value is not None else ""
             else:
-                logger.warning(f"Enrichment failed for product {product_id} ({product_name})")
+                logger.warning(f"Enrichment failed for product {product.get('product_id', 'unknown')}")
                 for attr in self.attrs:
                     products.at[idx, attr] = ""
         return products
 
+    def batch_and_wait(self, products: pd.DataFrame):
+        """Submit batch jobs and wait for completion."""
+        self.batch_all(products)
+        self.enricher.submit_batch()
+        return self.fetch_all(products)
+
     def batch_all(self, products: pd.DataFrame):
 
-        def submit_batch_job(product_name, product_description, product_id):
-            prompt = self.prompt_fn(product_name, product_description)
-            self.enricher.batch(prompt, product_id)
+        def submit_batch_job(product: dict):
+            prompt = self.prompt_fn(product)
+            self.enricher.batch(prompt, task_id=product['product_id'])
 
-        products[['product_name', 'product_description', 'product_id']].apply(lambda x: submit_batch_job(*x), axis=1)
+        products.apply(lambda x: submit_batch_job(*x), axis=1)
 
     def fetch_all(self, products: pd.DataFrame):
 
-        def fetch_attr_value(product_name, product_description, product_id, attr):
-            prompt = self.prompt_fn(product_name, product_description)
-            result = self.enricher.get_batch_output(prompt, product_id)
+        def fetch_attr_value(product: dict, attr: str):
+            prompt = self.prompt_fn(product)
+            result = self.enricher.get_batch_output(prompt, task_id=product['product_id'])
             return getattr(result, attr) if hasattr(result, attr) else ""
 
         logger.info(f"Submitting batch job for {len(products)} products")
 
         logger.info("Batch done, fetching results")
         for attr in self.attrs:
-            products[attr] = products[['product_name', 'product_description', 'product_id']].apply(
+            products[attr] = products.apply(
                 lambda x: fetch_attr_value(*x, attr=attr), axis=1)
         return products
