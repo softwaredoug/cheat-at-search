@@ -12,6 +12,7 @@ import getpass
 from typing import Tuple
 import pandas as pd
 from tqdm import tqdm
+from searcharray import SearchArray
 
 from openai.lib._parsing._completions import type_to_response_format_param
 
@@ -408,11 +409,21 @@ class ProductEnricher:
             logger.info(f"Enriching products with attributes: {attrs}")
         self.attrs = attrs
 
+    def _slice_out_searcharray_cols(self, products: pd.DataFrame) -> pd.DataFrame:
+        """Slice out columns that are SearchArray columns."""
+        searcharray_cols = [
+            col for col in products.columns
+            if isinstance(products[col].array, SearchArray)
+        ]
+        return products.drop(columns=searcharray_cols, errors='ignore')
+
     def enrich_one(self, product: dict):
         prompt = self.prompt_fn(product)
         return self.enricher.enrich(prompt)
 
     def enrich_all(self, products: pd.DataFrame):
+        products = self._slice_out_searcharray_cols(products)
+
         def enrich_one(product):
             prompt = self.prompt_fn(product)
             return self.enricher.enrich(prompt)
@@ -438,11 +449,13 @@ class ProductEnricher:
 
     def batch_and_wait(self, products: pd.DataFrame):
         """Submit batch jobs and wait for completion."""
+        products = self._slice_out_searcharray_cols(products)
         self.batch_all(products)
         self.enricher.submit_batch()
         return self.fetch_all(products)
 
     def batch_all(self, products: pd.DataFrame):
+        products = self._slice_out_searcharray_cols(products)
 
         def submit_batch_job(product: dict):
             prompt = self.prompt_fn(product)
@@ -451,6 +464,7 @@ class ProductEnricher:
         products.apply(lambda x: submit_batch_job(x.to_dict()), axis=1)
 
     def fetch_all(self, products: pd.DataFrame):
+        products = self._slice_out_searcharray_cols(products)
 
         def fetch_attr_value(product: dict, attr: str):
             prompt = self.prompt_fn(product)
