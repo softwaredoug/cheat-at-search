@@ -258,15 +258,13 @@ def train(start_epoch=0, epochs=3):
             print(f"Checkpoint saved for epoch {epoch + 1}")
 
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(dataloader)}")
-        strategy = EmbeddingSearch(
-            enriched_products, TwoTowerEmbedder(model, enriched_queries, enriched_products)
-        )
-        graded_results = run_strategy(strategy)
-        avg_ndcg = ndcgs(graded_results).mean()
-        print(f"Average NDCG after epoch {epoch + 1}: {avg_ndcg:.4f}")
 
 
 if __name__ == "__main__":
     log_to_stdout(level=logging.INFO)
     # run_baseline_strategy(enriched_products, enriched_queries)
-    train(epochs=10, start_epoch=3)
+    run_strategy_for_epoch(enriched_products, enriched_queries, 1)
+    run_strategy_for_epoch(enriched_products, enriched_queries, 2)
+    run_strategy_for_epoch(enriched_products, enriched_queries, 3)
+    run_strategy_for_epoch(enriched_products, enriched_queries, 4)
+    train(epochs=10, start_epoch=4)

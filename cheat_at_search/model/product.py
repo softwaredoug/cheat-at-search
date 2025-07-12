@@ -180,3 +180,13 @@ class ItemType(BaseModel):
         ...,
         description="The type of item this product is, ie dining table, bed, etc"
     )
+
+
+class Material(BaseModel):
+    """
+    Represents the material of a product.
+    """
+    materials: list[str] = Field(
+        ...,
+        description="Materials of the product, if available"
+    )
