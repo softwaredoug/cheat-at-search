@@ -1,7 +1,10 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
+from cheat_at_search.cache import StoredLruCache
+import numpy as np
 
 from cheat_at_search.model.category_list import Categories, SubCategories, FullyQualifiedCategories
+from sentence_transformers import SentenceTransformer
 
 
 class ProductCategory(BaseModel):
@@ -98,10 +101,19 @@ class ProductRoom(BaseModel):
     """
     Classification of product to a room
     """
+
     room: RoomType = Field(
         default="unknown",
         description="Room for this furniture product (use unknown if applies to any room or unknown room type)"
     )
+
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+
+@StoredLruCache(maxsize=50000)
+def encode(text):
+    return model.encode(text)
 
 
 class BrandedTerms(BaseModel):
@@ -147,6 +159,19 @@ class ItemType(BaseModel):
     In this case, hallucinated, something the model is making up that looks like one
     of our classifications
     """
+    @property
+    def similarity(self):
+        """Compare item_type to item_type_unconstrained"""
+        return np.dot(encode(self.item_type), encode(self.item_type_unconstrained))
+
+    @property
+    def item_type_same(self):
+        """Check if item_type matches item_type_unconstrained"""
+        THRESHOLD = 0.5
+        if self.similarity < THRESHOLD:
+            return "no item type matches"
+        return self.item_type
+
     item_type: ItemTypes = Field(
         ...,
         description="The type of item this product is from the provided list. Use 'no item type matches' if no item type matches the item"
