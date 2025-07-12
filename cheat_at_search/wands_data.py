@@ -9,10 +9,10 @@ from cheat_at_search.data_dir import DATA_PATH
 logger = logging.getLogger(__name__)
 
 
-wands_path = Path(DATA_PATH) / "wands"
+wands_path = Path(DATA_PATH) / "wands_enriched"
 
 
-def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.git"):
+def fetch_wands(data_dir=wands_path, repo_url="https://github.com/softwaredoug/WANDS.git"):
     """
     Clone the Wayfair Annotated Dataset (WANDS) from GitHub into a data directory.
 
@@ -96,6 +96,26 @@ def _products():
     return df
 
 
+def _enriched_products():
+    """Queries enriched with LLM information."""
+    # Ensure we have the data
+    data_path = fetch_wands()
+
+    # Path to the products CSV file
+    products_file = data_path / "dataset" / "enriched" / "enriched_products.csv.gz"
+
+    if not products_file.exists():
+        logger.error(f"Enriched products file not found at {products_file}")
+        raise FileNotFoundError(f"Enriched products file not found at {products_file}")
+
+    logger.info(f"Loading enriched products from {products_file}")
+
+    df = pd.read_csv(products_file, compression='gzip')
+
+    logger.info(f"Loaded {len(df)} enriched products")
+    return df
+
+
 def _queries():
     """
     Load WANDS queries into a pandas DataFrame.
@@ -124,6 +144,27 @@ def _queries():
 
     logger.info(f"Loaded {len(df)} queries")
 
+    return df
+
+
+def _enriched_queries():
+    """Queries enriched with LLM information."""
+    # Ensure we have the data
+    data_path = fetch_wands()
+
+    # Path to the queries CSV file
+    queries_file = data_path / "dataset" / "enriched" / "query_attributes.csv"
+
+    if not queries_file.exists():
+        logger.error(f"Enriched queries file not found at {queries_file}")
+        raise FileNotFoundError(f"Enriched queries file not found at {queries_file}")
+
+    logger.info(f"Loading enriched queries from {queries_file}")
+
+    df = pd.read_csv(queries_file)
+    df['materials'].fillna('No Materials Fit', inplace=True)
+
+    logger.info(f"Loaded {len(df)} enriched queries")
     return df
 
 
@@ -163,6 +204,8 @@ def _labels():
 labels = _labels()
 queries = _queries()
 products = _products()
+enriched_products = _enriched_products()
+enriched_queries = _enriched_queries()
 
 labeled_queries = queries.merge(labels, how='left', on='query_id')
 labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
