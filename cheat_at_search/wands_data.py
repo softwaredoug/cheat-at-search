@@ -208,6 +208,8 @@ def _query_bags():
 
     # Load the tab-delimited CSV file
     df = pd.read_pickle(query_bags_file)
+    df = df.rename(columns={
+        'category hierarchy_bag': 'classifications_bag'})
 
     logger.info(f"Loaded {len(df)} query bags")
 
