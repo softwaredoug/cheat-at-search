@@ -36,7 +36,13 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/softwaredoug/W
         logger.info(f"Directory {data_path} already exists. Checking for updates...")
         try:
             subprocess.run(
-                ["git", "-C", str(data_path), "pull", "origin", "main", "--allow-unrelated-histories"],
+                ["git", "-C", str(data_path), "fetch", "origin"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            subprocess.run(
+                ["git", "-C", str(data_path), "reset", "--hard", "origin/main"],
                 check=True,
                 capture_output=True,
                 text=True
