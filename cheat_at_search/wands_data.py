@@ -37,7 +37,7 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.
         # Optionally, you could pull the latest changes if it's a git repo
         try:
             subprocess.run(
-                ["git", "-C", str(data_path), "pull"],
+                ["git", "-C", str(data_path), "pull", "origin", "main", "--allow-unrelated-histories"],
                 check=True,
                 capture_output=True,
                 text=True
