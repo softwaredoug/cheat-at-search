@@ -1,6 +1,6 @@
 from cheat_at_search.wands_data import products, labeled_query_products, queries
 from cheat_at_search.model.product import ItemType, BrandedTerms, ProductRoom, Material
-from cheat_at_search.model.query import QueryClassification
+from cheat_at_search.model.query import QueryClassification, SpellingCorrectedQuery
 from cheat_at_search.agent.enrich import AutoEnricher, ProductEnricher
 import logging
 import os
@@ -101,6 +101,37 @@ classification_enricher = AutoEnricher(
 )
 
 
+spell_correct_enricher = AutoEnricher(
+    model="gpt-4.1",
+    system_prompt="You are a helpful AI assistant that very lightly spell-checks furniture e-commerce queries.",
+    output_cls=SpellingCorrectedQuery
+)
+
+
+def better_corrector_prompt(query):
+    prompt = f"""
+        Hey you're a furniture expert, you know all about what Wayfair sells.
+
+        Take this query and provide up to 2-3 spelling corrections, but only if they are very minor and would not change the meaning of the query.
+
+        * Dont compound words. Just leave the original form alone: IE don't turn anti scratch into anti scratch
+        * Dont decompound words Just leave the original form alone: IE dont turn antiscratch into anti scratch
+        * Dont add hyphens (ie "anti scratch" not "anti-scratch")
+        * Remember your Wayfair expertise -- dont correct stylized product names known from the wayfair product line or other furniture / home improvement brands"
+        * If it doesn't look like a standard English word, maybe leave it alone? It migth be a stylized furniture name, product line, or designer's name
+
+        Return an empty list if no corrections are needed.
+
+        {query}
+
+    """
+    return prompt
+
+
+def better_corrector(query):
+    return spell_correct_enricher.enrich(better_corrector_prompt(query))
+
+
 def get_prompt_fully_qualified(query):
     prompt = f"""
 
@@ -192,9 +223,15 @@ def enrich_all(products, labeled_query_products):
     labeled_query_products = labeled_query_products.merge(products[['product_id', 'item_type_same', 'item_type',
                                                                     'room', 'branded_terms', 'materials',
                                                                     'item_type_unconstrained', 'item_type_sim']], how='left', on='product_id')
+
+    # Convert lists to " sep " delimited strings
+    labeled_query_products['branded_terms'] = labeled_query_products['branded_terms'].apply(lambda x: [] if x is None else x)
     labeled_query_products['branded_terms'] = labeled_query_products['branded_terms'].apply(set).apply(" sep ".join)
+    labeled_query_products['materials'] = labeled_query_products['materials'].apply(lambda x: [] if x is None else x)
     labeled_query_products['materials'] = labeled_query_products['materials'].apply(set).apply(" sep ".join)
+    products['branded_terms'] = products['branded_terms'].apply(lambda x: [] if not x else x)
     products['branded_terms'] = products['branded_terms'].apply(set).apply(" sep ".join)
+    products['materials'] = products['materials'].apply(lambda x: [] if x is None else x)
     products['materials'] = products['materials'].apply(set).apply(" sep ".join)
 
     ground_truth_item_type_q = get_top_col_vals(labeled_query_products, 'item_type_same', 'no item type matches', cutoff=0.8).drop(columns='count')
@@ -256,6 +293,7 @@ def enrich_all(products, labeled_query_products):
     query_attributes['query'] = query_attributes['query'].str.strip()
     for query in query_attributes['query'].unique():
         query_attributes.loc[query_attributes['query'] == query, 'query_classification'] = " sep ".join(fully_classified(query).classifications)
+        query_attributes.loc[query_attributes['query'] == query, 'corrected_query'] = better_corrector(query).corrected_keywords
 
     labeled_query_products = labeled_query_products.merge(
         query_attributes, how='left', on='query',

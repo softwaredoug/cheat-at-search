@@ -33,7 +33,19 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/wayfair/WANDS.
 
     # Check if the directory already exists
     if data_path.exists():
-        logger.info(f"Directory {data_path} already exists. Skipping clone.")
+        logger.info(f"Directory {data_path} already exists. Skipping clone, updating if necessary.")
+        # Optionally, you could pull the latest changes if it's a git repo
+        try:
+            subprocess.run(
+                ["git", "-C", str(data_path), "pull"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            logger.info(f"Updated WANDS dataset at {data_path}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to update WANDS dataset: {e.stderr}")
+            raise
         return data_path
 
     logger.info(f"Cloning WANDS dataset from {repo_url} to {data_path}")

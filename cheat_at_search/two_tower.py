@@ -185,7 +185,7 @@ def run_strategy_for_epoch(products, queries, epoch):
     print(f"Using device: {device}")
     # Load two_tower_model at the specified epoch
     model = TwoTowerModel().to(device)
-    model_path = f"two_tower_epoch_{epoch}.pth"
+    model_path = f"data/two_tower/two_tower_epoch_{epoch}.pth"
     if os.path.exists(model_path):
         model.load_state_dict(torch.load(model_path, map_location=device))
         print(f"Model loaded from {model_path}")
@@ -213,13 +213,15 @@ def train(start_epoch=0, epochs=3):
     if start_epoch > 0:
         model = TwoTowerModel().to(device)
 
-        model_path = f"two_tower_epoch_{start_epoch}.pth"
+        model_path = f"data/two_tower/two_tower_epoch_{start_epoch}.pth"
         if os.path.exists(model_path):
             model.load_state_dict(torch.load(model_path, map_location=device))
             print(f"Model loaded from {model_path}")
+        else:
+            raise FileNotFoundError(f"Model checkpoint not found at {model_path}")
 
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    optimizer = optim.AdamW(model.parameters(), lr=2e-5)
+    optimizer = optim.AdamW(model.parameters(), lr=0.1)
 
     for epoch in range(start_epoch, epochs):
         model.train()
@@ -269,6 +271,8 @@ if __name__ == "__main__":
     # run_strategy_for_epoch(enriched_products, enriched_queries, 4)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 5)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 6)
-    start_epoch = 10
-    run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch - 1)
+    start_epoch = 22
+    run_strategy_for_epoch(enriched_products, enriched_queries, 1)
+    run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch // 2)
+    run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch)
     train(epochs=50, start_epoch=start_epoch)

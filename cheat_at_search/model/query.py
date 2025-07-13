@@ -40,17 +40,6 @@ class QueryWithSynonyms(Query):
     )
 
 
-class SpellingCorrectedQuery(Query):
-    """
-    Model for search queries with spelling corrections applied.
-    Inherits keywords from the base Query model.
-    """
-    corrected_keywords: str = Field(
-        ...,
-        description="Identical to original query string, but with spelling corrections applied"
-    )
-
-
 class BucketedQuery(Query):
     """
     Extended model for search queries that includes synonyms for keywords.
@@ -517,4 +506,25 @@ class StructuredQuery(BaseModel):
     dimensions: List[str] = Field(
         default_factory=list,
         description="Any dimensions mentioned in the query"
+    )
+
+
+class Query(BaseModel):
+    """
+    Base model for search queries, containing common query attributes.
+    """
+    keywords: str = Field(
+        ...,
+        description="The original search query keywords sent in as input"
+    )
+
+
+class SpellingCorrectedQuery(Query):
+    """
+    Model for search queries with spelling corrections applied.
+    Inherits keywords from the base Query model.
+    """
+    corrected_keywords: str = Field(
+        ...,
+        description="Identical to original query string, but with spelling corrections applied"
     )
