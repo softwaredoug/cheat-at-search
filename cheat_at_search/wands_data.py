@@ -52,7 +52,6 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/softwaredoug/W
             logger.error(f"Failed to update WANDS dataset: {e.stderr}")
             raise
         return data_path
-        return data_path
 
     logger.info(f"Cloning WANDS dataset from {repo_url} to {data_path}")
 
@@ -199,7 +198,7 @@ def _query_bags():
     data_path = fetch_wands()
 
     # Path to the query bags CSV file
-    query_bags_file = data_path / "dataset" / "query_bags.pkl"
+    query_bags_file = data_path / "dataset" / "enriched" / "query_bags.pkl"
 
     if not query_bags_file.exists():
         logger.error(f"Query bags file not found at {query_bags_file}")
