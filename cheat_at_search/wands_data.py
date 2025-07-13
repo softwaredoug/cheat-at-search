@@ -130,6 +130,10 @@ def _enriched_products():
 
     df = pd.read_csv(products_file, compression='gzip')
 
+    df['classification'] = df['category hierarchy']
+    for col in df.columns:
+        df[col].fillna('', inplace=True)
+
     logger.info(f"Loaded {len(df)} enriched products")
     return df
 
@@ -180,7 +184,10 @@ def _enriched_queries():
     logger.info(f"Loading enriched queries from {queries_file}")
 
     df = pd.read_csv(queries_file)
-    df['materials'].fillna('No Materials Fit', inplace=True)
+    df['materials'].fillna('unknown', inplace=True)
+    df['classification'] = df['query_classification']
+    for col in df.columns:
+        df[col].fillna('unknown', inplace=True)
 
     logger.info(f"Loaded {len(df)} enriched queries")
     return df
