@@ -41,7 +41,7 @@ def ndcg_delta(variant_graded, baseline_graded):
     return delta.sort_values(ascending=False)
 
 
-def vs_ideal(graded):
+def ivs_ideal(graded):
     cols = ['query_id', 'query', 'rank', 'product_id', 'product_name', 'grade', 'dcg', 'ndcg']
     graded_view = graded[cols].rename(
         columns={'product_id': 'product_id_actual', 'product_name': 'product_name_actual'}

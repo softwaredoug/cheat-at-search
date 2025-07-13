@@ -469,11 +469,13 @@ class ProductEnricher:
         def fetch_attr_value(product: dict, attr: str):
             prompt = self.prompt_fn(product)
             result = self.enricher.get_batch_output(prompt, task_id=product['product_id'])
-            return getattr(result, attr) if hasattr(result, attr) else ""
+            attr_value = getattr(result, attr) if hasattr(result, attr) else None
+            if attr_value is None:
+                logger.warning(f"Maybe bad batch? Attribute {attr} not found in result for product {product.get('product_id', 'unknown')}")
+                batch_cache_file = self.enricher.batch_enricher.batch_cache_file
+                logger.warning(f"Consider deleting the batch cache file: {batch_cache_file} to retry.")
+            return attr_value
 
-        logger.info(f"Submitting batch job for {len(products)} products")
-
-        logger.info("Batch done, fetching results")
         for attr in self.attrs:
             products[attr] = products.apply(
                 lambda x: fetch_attr_value(x.to_dict(), attr=attr), axis=1)

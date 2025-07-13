@@ -263,8 +263,12 @@ def train(start_epoch=0, epochs=3):
 if __name__ == "__main__":
     log_to_stdout(level=logging.INFO)
     # run_baseline_strategy(enriched_products, enriched_queries)
-    run_strategy_for_epoch(enriched_products, enriched_queries, 1)
-    run_strategy_for_epoch(enriched_products, enriched_queries, 2)
-    run_strategy_for_epoch(enriched_products, enriched_queries, 3)
-    run_strategy_for_epoch(enriched_products, enriched_queries, 4)
-    train(epochs=10, start_epoch=4)
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 1)
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 2)
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 3)
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 4)
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 5)
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 6)
+    start_epoch = 10
+    run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch - 1)
+    train(epochs=50, start_epoch=start_epoch)

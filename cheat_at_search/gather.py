@@ -194,13 +194,15 @@ def enrich_all(products, labeled_query_products):
                                                                     'item_type_unconstrained', 'item_type_sim']], how='left', on='product_id')
     labeled_query_products['branded_terms'] = labeled_query_products['branded_terms'].apply(set).apply(" sep ".join)
     labeled_query_products['materials'] = labeled_query_products['materials'].apply(set).apply(" sep ".join)
+    products['branded_terms'] = products['branded_terms'].apply(set).apply(" sep ".join)
+    products['materials'] = products['materials'].apply(set).apply(" sep ".join)
 
-    ground_truth_rooms_q = get_top_col_vals(labeled_query_products, 'room', 'No Room Fits', cutoff=0.8).drop(columns='count')
     ground_truth_item_type_q = get_top_col_vals(labeled_query_products, 'item_type_same', 'no item type matches', cutoff=0.8).drop(columns='count')
+    ground_truth_rooms_q = get_top_col_vals(labeled_query_products, 'room', 'No Room Fits', cutoff=0.8).drop(columns='count')
     ground_truth_branded_terms_q = get_top_col_vals(labeled_query_products, 'branded_terms',
                                                     'No Branded Terms Fits', cutoff=0.8).drop(columns='count')
-    ground_truth_branded_terms_q = get_top_col_vals(labeled_query_products, 'materials',
-                                                    'No Materials Fit', cutoff=0.8).drop(columns='count')
+    ground_truth_materials_q = get_top_col_vals(labeled_query_products, 'materials',
+                                                'No Materials Fit', cutoff=0.8).drop(columns='count')
     logger.info("Gathering category hierarchy")
     ground_truth_classifications_q = get_top_col_vals(labeled_query_products, 'category hierarchy', 'No Classification Fits', cutoff=0.8).drop(columns='count')
     logger.info("Gathering categories")
@@ -209,6 +211,7 @@ def enrich_all(products, labeled_query_products):
     ground_truth_sub_category_q = get_top_col_vals(labeled_query_products, 'sub_category', 'No SubCategory Fits', cutoff=0.8).drop(columns='count')
     logger.info("Gathering product classes")
     ground_truth_product_class_q = get_top_col_vals(labeled_query_products, 'product_class', 'No Category Fits', cutoff=0.8).drop(columns='count')
+    ground_truth_it_unconstrained = get_top_col_vals(labeled_query_products, 'item_type_unconstrained', 'No Category Fits', cutoff=0.8).drop(columns='count')
 
     query_attributes = ground_truth_rooms_q.merge(
         ground_truth_item_type_q, how='outer', on='query'
@@ -222,8 +225,32 @@ def enrich_all(products, labeled_query_products):
         ground_truth_category_q, how='outer', on='query'
     ).merge(
         ground_truth_sub_category_q, how='outer', on='query'
+    ).merge(
+        ground_truth_materials_q, how='outer', on='query'
+    ).merge(
+        ground_truth_it_unconstrained, how='outer', on='query'
     )
+    assert len(query_attributes) == 480
 
+    # Turn every 'missing' field into 'unknown' in query_attributes
+    query_attributes.loc[query_attributes['room'] == 'No Room Fits', 'room'] = 'unknown'
+    query_attributes.loc[query_attributes['room'].isna(), 'room'] = 'unknown'
+    query_attributes.loc[query_attributes['item_type_same'] == 'no item type matches', 'item_type_same'] = 'unknown'
+    query_attributes.loc[query_attributes['item_type_same'].isna(), 'item_type_same'] = 'unknown'
+    query_attributes.loc[query_attributes['branded_terms'] == 'No Branded Terms Fits', 'branded_terms'] = 'unknown'
+    query_attributes.loc[query_attributes['branded_terms'].isna(), 'branded_terms'] = 'unknown'
+    query_attributes.loc[query_attributes['category hierarchy'] == 'No Classification Fits', 'category hierarchy'] = 'unknown'
+    query_attributes.loc[query_attributes['category hierarchy'].isna(), 'category hierarchy'] = 'unknown'
+    query_attributes.loc[query_attributes['category'] == 'No Category Fits', 'category'] = 'unknown'
+    query_attributes.loc[query_attributes['category'].isna(), 'category'] = 'unknown'
+    query_attributes.loc[query_attributes['sub_category'] == 'No SubCategory Fits', 'sub_category'] = 'unknown'
+    query_attributes.loc[query_attributes['sub_category'].isna(), 'sub_category'] = 'unknown'
+    query_attributes.loc[query_attributes['product_class'] == 'No Category Fits', 'product_class'] = 'unknown'
+    query_attributes.loc[query_attributes['product_class'].isna(), 'product_class'] = 'unknown'
+    query_attributes.loc[query_attributes['materials'] == 'No Materials Fit', 'materials'] = 'unknown'
+    query_attributes.loc[query_attributes['materials'].isna(), 'materials'] = 'unknown'
+    query_attributes.loc[query_attributes['item_type_unconstrained'] == 'no item type matches', 'item_type_unconstrained'] = 'unknown'
+    query_attributes.loc[query_attributes['item_type_unconstrained'].isna(), 'item_type_unconstrained'] = 'unknown'
     # Add classifications
     logger.info("Classifying queries")
     query_attributes['query'] = query_attributes['query'].str.strip()
