@@ -193,6 +193,28 @@ def _enriched_queries():
     return df
 
 
+def _query_bags():
+    """Load the query bags helping measure similarity."""
+    # Ensure we have the data
+    data_path = fetch_wands()
+
+    # Path to the query bags CSV file
+    query_bags_file = data_path / "dataset" / "query_bags.pkl"
+
+    if not query_bags_file.exists():
+        logger.error(f"Query bags file not found at {query_bags_file}")
+        raise FileNotFoundError(f"Query bags file not found at {query_bags_file}")
+
+    logger.info(f"Loading query bags from {query_bags_file}")
+
+    # Load the tab-delimited CSV file
+    df = pd.read_pickle(query_bags_file)
+
+    logger.info(f"Loaded {len(df)} query bags")
+
+    return df
+
+
 def _labels():
     """
     Load WANDS relevance labels into a pandas DataFrame.
@@ -231,6 +253,7 @@ queries = _queries()
 products = _products()
 enriched_products = _enriched_products()
 enriched_queries = _enriched_queries()
+query_bags = _query_bags()
 
 labeled_queries = queries.merge(labels, how='left', on='query_id')
 labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
