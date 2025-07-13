@@ -4,7 +4,9 @@ from cheat_at_search.model.query import QueryClassification, SpellingCorrectedQu
 from cheat_at_search.agent.enrich import AutoEnricher, ProductEnricher
 import logging
 import os
+import pandas as pd
 from cheat_at_search.data_dir import ensure_data_subdir
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +190,33 @@ def get_top_col_vals(labeled_query_products, column, no_fit_label, cutoff=0.8):
     return ground_truth_cat
 
 
+def get_col_vals_by_query_and_grade(labeled_query_products, column):
+    """
+    Get the values of a column grouped by query and grade.
+    This is useful for getting the top categories, rooms, materials, etc.
+    """
+    def count_list(x):
+        """Count the number of items in a list into a dict."""
+        lst = []
+        for val in x:
+            if not val:
+                lst.append('unknown')
+            else:
+                lst.append(val)
+        return dict(Counter(lst))
+    bagged = labeled_query_products.groupby(['query', 'grade'])[column].apply(list)
+    bagged_counted = bagged.apply(count_list)
+
+    # Create full index with all combinations of query and grades 0, 1, 2
+    queries = labeled_query_products['query'].unique()
+    grades = [0, 1, 2]
+    full_index = pd.MultiIndex.from_product([queries, grades], names=['query', 'grade'])
+    bag = bagged_counted.reindex(full_index, fill_value={}).rename(f"{column}_bag")
+    return bag
+    # Assign any missing query/grades an empty list
+
+
+
 def enrich_all(products, labeled_query_products):
     item_type = ProductEnricher(
         enricher=item_type_enricher,
@@ -229,6 +258,31 @@ def enrich_all(products, labeled_query_products):
     labeled_query_products['branded_terms'] = labeled_query_products['branded_terms'].apply(set).apply(" sep ".join)
     labeled_query_products['materials'] = labeled_query_products['materials'].apply(lambda x: [] if x is None else x)
     labeled_query_products['materials'] = labeled_query_products['materials'].apply(set).apply(" sep ".join)
+
+    # Develop bags for similarity measurement
+    item_type_same_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'item_type_same')
+    item_type_unconstrained_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'item_type_unconstrained')
+    branded_terms_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'branded_terms')
+    materials_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'materials')
+    room_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'room')
+    category_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'category')
+    sub_category_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'sub_category')
+    product_class_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'product_class')
+    classification_bag = get_col_vals_by_query_and_grade(labeled_query_products, 'category hierarchy')
+    # Merge them all
+    query_bags = pd.concat([
+        item_type_unconstrained_bag,
+        item_type_same_bag,
+        branded_terms_bag,
+        materials_bag,
+        room_bag,
+        category_bag,
+        sub_category_bag,
+        product_class_bag,
+        classification_bag,
+
+    ], axis=1)
+
     products['branded_terms'] = products['branded_terms'].apply(lambda x: [] if not x else x)
     products['branded_terms'] = products['branded_terms'].apply(set).apply(" sep ".join)
     products['materials'] = products['materials'].apply(lambda x: [] if x is None else x)
@@ -270,6 +324,7 @@ def enrich_all(products, labeled_query_products):
     assert len(query_attributes) == 480
 
     # Turn every 'missing' field into 'unknown' in query_attributes
+    logger.info("Turn every missing into unknown")
     query_attributes.loc[query_attributes['room'] == 'No Room Fits', 'room'] = 'unknown'
     query_attributes.loc[query_attributes['room'].isna(), 'room'] = 'unknown'
     query_attributes.loc[query_attributes['item_type_same'] == 'no item type matches', 'item_type_same'] = 'unknown'
@@ -299,15 +354,23 @@ def enrich_all(products, labeled_query_products):
         query_attributes, how='left', on='query',
         suffixes=('_product', '_query')
     )
-    return products, query_attributes, labeled_query_products
+    # Final cleanup
+    for col in products.columns:
+        products[col].fillna('', inplace=True)
+
+    for col in query_attributes.columns:
+        query_attributes[col].fillna('unknown', inplace=True)
+
+    return products, query_attributes, labeled_query_products, query_bags
 
 
 def main(products, labeled_query_products):
     enrich_output_dir = ensure_data_subdir('enrich_output')
-    products, query_attributes, labeled_query_products = enrich_all(products, labeled_query_products)
+    products, query_attributes, labeled_query_products, query_bags = enrich_all(products, labeled_query_products)
     products.to_csv(os.path.join(enrich_output_dir, 'enriched_products.csv'), index=False)
     query_attributes.to_csv(os.path.join(enrich_output_dir, 'query_attributes.csv'), index=False)
     labeled_query_products.to_csv(os.path.join(enrich_output_dir, 'labeled_query_products.csv'), index=False)
+    query_bags.to_pickle(os.path.join(enrich_output_dir, 'query_bags.pkl'))
 
 
 if __name__ == "__main__":

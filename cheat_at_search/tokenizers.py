@@ -1,4 +1,4 @@
-import Stemmer
+worldsgimport Stemmer
 import string
 
 stemmer = Stemmer.Stemmer('english', maxCacheSize=0)

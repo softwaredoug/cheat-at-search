@@ -221,7 +221,7 @@ def train(start_epoch=0, epochs=3):
             raise FileNotFoundError(f"Model checkpoint not found at {model_path}")
 
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    optimizer = optim.AdamW(model.parameters(), lr=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-5)
 
     for epoch in range(start_epoch, epochs):
         model.train()
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     # run_strategy_for_epoch(enriched_products, enriched_queries, 4)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 5)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 6)
-    start_epoch = 22
+    start_epoch = 26
     run_strategy_for_epoch(enriched_products, enriched_queries, 1)
     run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch // 2)
     run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch)
