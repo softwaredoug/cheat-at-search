@@ -189,6 +189,8 @@ def run_strategy_for_epoch(products, queries, epoch):
     if os.path.exists(model_path):
         model.load_state_dict(torch.load(model_path, map_location=device))
         print(f"Model loaded from {model_path}")
+    else:
+        raise FileNotFoundError(f"Model checkpoint not found at {model_path}")
 
     # Run the strategy with the loaded model
     embedder = TwoTowerEmbedder(model, queries, products)
@@ -256,7 +258,7 @@ def train(start_epoch=0, epochs=3):
 
         # Checkpoint
         if (epoch + 1) % 1 == 0:
-            torch.save(model.state_dict(), f"two_tower_epoch_{epoch + 1}.pth")
+            torch.save(model.state_dict(), f"data/two_tower/two_tower_epoch_{epoch + 1}.pth")
             print(f"Checkpoint saved for epoch {epoch + 1}")
 
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(dataloader)}")
@@ -271,7 +273,7 @@ if __name__ == "__main__":
     # run_strategy_for_epoch(enriched_products, enriched_queries, 4)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 5)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 6)
-    start_epoch = 26
+    start_epoch = 25
     run_strategy_for_epoch(enriched_products, enriched_queries, 1)
     run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch // 2)
     run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch)

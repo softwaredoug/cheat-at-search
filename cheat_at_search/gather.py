@@ -198,8 +198,11 @@ def get_col_vals_by_query_and_grade(labeled_query_products, column):
     def count_list(x):
         """Count the number of items in a list into a dict."""
         lst = []
+        import math
         for val in x:
-            if not val:
+            if isinstance(val, float) and math.isnan(val):
+                lst.append('unknown')
+            elif not val:
                 lst.append('unknown')
             else:
                 lst.append(val)
@@ -214,7 +217,6 @@ def get_col_vals_by_query_and_grade(labeled_query_products, column):
     bag = bagged_counted.reindex(full_index, fill_value={}).rename(f"{column}_bag")
     return bag
     # Assign any missing query/grades an empty list
-
 
 
 def enrich_all(products, labeled_query_products):
