@@ -273,8 +273,8 @@ if __name__ == "__main__":
     # run_strategy_for_epoch(enriched_products, enriched_queries, 4)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 5)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 6)
-    start_epoch = 25
+    start_epoch = 34
     run_strategy_for_epoch(enriched_products, enriched_queries, 1)
     run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch // 2)
     run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch)
-    train(epochs=50, start_epoch=start_epoch)
+    train(epochs=500, start_epoch=start_epoch)
