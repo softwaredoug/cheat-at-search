@@ -7,6 +7,9 @@ import os
 import pandas as pd
 from cheat_at_search.data_dir import ensure_data_subdir
 from collections import Counter
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +293,31 @@ def enrich_all(products, labeled_query_products):
     products['materials'] = products['materials'].apply(lambda x: [] if x is None else x)
     products['materials'] = products['materials'].apply(set).apply(" sep ".join)
 
+    # Encode category hierarchy into embeddings
+    category_embeddings = model.encode(products['category hierarchy'].fillna('').tolist())
+
+    def product_string_for_embeddding(product):
+        """
+        Create a string representation of the product for embedding.
+        """
+        return f"""Product Name: {product['product_name']}
+
+        Product Description:
+        {product['product_description']}
+
+        Product Category Hierarchy:
+        {product['category hierarchy']}"""
+
+    product_embeddings = model.encode(
+        products.apply(product_string_for_embeddding, axis=1).tolist()
+    )
+
+    embeddings_df = pd.DataFrame({
+        'product_id': products['product_id'],
+        'category_embeddings': list(category_embeddings),
+        'product_embeddings': list(product_embeddings)
+    })
+
     ground_truth_item_type_q = get_top_col_vals(labeled_query_products, 'item_type_same', 'no item type matches', cutoff=0.8).drop(columns='count')
     ground_truth_rooms_q = get_top_col_vals(labeled_query_products, 'room', 'No Room Fits', cutoff=0.8).drop(columns='count')
     ground_truth_branded_terms_q = get_top_col_vals(labeled_query_products, 'branded_terms',
@@ -363,16 +391,17 @@ def enrich_all(products, labeled_query_products):
     for col in query_attributes.columns:
         query_attributes[col].fillna('unknown', inplace=True)
 
-    return products, query_attributes, labeled_query_products, query_bags
+    return products, query_attributes, labeled_query_products, query_bags, embeddings_df
 
 
 def main(products, labeled_query_products):
     enrich_output_dir = ensure_data_subdir('enrich_output')
-    products, query_attributes, labeled_query_products, query_bags = enrich_all(products, labeled_query_products)
+    products, query_attributes, labeled_query_products, query_bags, embeddings_df = enrich_all(products, labeled_query_products)
     products.to_csv(os.path.join(enrich_output_dir, 'enriched_products.csv'), index=False)
     query_attributes.to_csv(os.path.join(enrich_output_dir, 'query_attributes.csv'), index=False)
     labeled_query_products.to_csv(os.path.join(enrich_output_dir, 'labeled_query_products.csv'), index=False)
     query_bags.to_pickle(os.path.join(enrich_output_dir, 'query_bags.pkl'))
+    embeddings_df.to_pickle(os.path.join(enrich_output_dir, 'embeddings_df.pkl'))
 
 
 if __name__ == "__main__":
