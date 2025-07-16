@@ -199,7 +199,7 @@ def _product_embeddings():
     data_path = fetch_wands()
 
     # Path to the product embeddings CSV file
-    embeddings_file = data_path / "dataset" / "enriched" / "embeddings_df.pkl.gz"
+    embeddings_file = data_path / "dataset" / "enriched" / "product_embeddings.npy.npz"
 
     if not embeddings_file.exists():
         logger.error(f"Product embeddings file not found at {embeddings_file}")
@@ -207,11 +207,26 @@ def _product_embeddings():
 
     logger.info(f"Loading product embeddings from {embeddings_file}")
 
-    # Load the tab-delimited CSV file
-    df = pd.read_pickle(embeddings_file, compression='gzip')
-    product_embeddings = np.stack(df['product_embeddings'].to_numpy())
-    classification_embeddings = np.stack(df['category_embeddings'].to_numpy())
-    return product_embeddings, classification_embeddings
+    embeddings = np.load(embeddings_file, allow_pickle=True)
+    return embeddings['arr_0']
+
+
+def _product_embeddings_all():
+    """Load product embeddings from the WANDS dataset."""
+    # Ensure we have the data
+    data_path = fetch_wands()
+
+    # Path to the product embeddings CSV file
+    embeddings_file = data_path / "dataset" / "enriched" / "product_embeddings_all_fields.npy.npz"
+
+    if not embeddings_file.exists():
+        logger.error(f"Product embeddings file not found at {embeddings_file}")
+        raise FileNotFoundError(f"Product embeddings file not found at {embeddings_file}")
+
+    logger.info(f"Loading product embeddings from {embeddings_file}")
+
+    embeddings = np.load(embeddings_file, allow_pickle=True)
+    return embeddings['arr_0']
 
 
 def _query_bags():
@@ -277,7 +292,8 @@ products = _products()
 enriched_products = _enriched_products()
 enriched_queries = _enriched_queries()
 query_bags = _query_bags()
-product_embeddings, classification_embeddings = _product_embeddings()
+product_embeddings = _product_embeddings()
+product_embeddings_all = _product_embeddings_all()
 
 labeled_queries = queries.merge(labels, how='left', on='query_id')
 labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
