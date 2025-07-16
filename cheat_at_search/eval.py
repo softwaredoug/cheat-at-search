@@ -15,7 +15,7 @@ def grade_results(search_results: pd.DataFrame, max_grade=2, k=10) -> pd.DataFra
     """Grade search results based on the labeled queries."""
     search_results = search_results[search_results['rank'] <= k]
     graded_results = search_results.merge(labeled_queries, on=['query_id', 'query', 'product_id'], how='left')
-    graded_results['grade'].fillna(0, inplace=True)
+    graded_results['grade'] = graded_results['grade'].fillna(0)
     rank_discounts = 1 / np.log2(2 ** graded_results['rank'])
     graded_results['discounted_gain'] = ((2 ** graded_results['grade']) - 1) * rank_discounts
     graded_results['idcg'] = idcg_max(max_grade=max_grade, k=k)
