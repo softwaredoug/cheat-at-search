@@ -8,6 +8,7 @@ import pandas as pd
 from cheat_at_search.data_dir import ensure_data_subdir
 from collections import Counter
 from sentence_transformers import SentenceTransformer
+import numpy as np
 
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
@@ -222,6 +223,15 @@ def get_col_vals_by_query_and_grade(labeled_query_products, column):
     # Assign any missing query/grades an empty list
 
 
+ATTRs = ['materials', 'branded_terms', 'item_type_unconstrained', 'category hierarchy',
+         'category', 'sub_category', 'product_name', 'product_description', 'item_type_same']
+
+
+def product_string(product, properties=['product_name', 'product_description']):
+    return "\n".join(f"{property}: {product[property]}"
+                     for property in properties)
+
+
 def enrich_all(products, labeled_query_products):
     item_type = ProductEnricher(
         enricher=item_type_enricher,
@@ -293,30 +303,10 @@ def enrich_all(products, labeled_query_products):
     products['materials'] = products['materials'].apply(lambda x: [] if x is None else x)
     products['materials'] = products['materials'].apply(set).apply(" sep ".join)
 
-    # Encode category hierarchy into embeddings
-    category_embeddings = model.encode(products['category hierarchy'].fillna('').tolist())
-
-    def product_string_for_embeddding(product):
-        """
-        Create a string representation of the product for embedding.
-        """
-        return f"""Product Name: {product['product_name']}
-
-        Product Description:
-        {product['product_description']}
-
-        Product Category Hierarchy:
-        {product['category hierarchy']}"""
-
-    product_embeddings = model.encode(
-        products.apply(product_string_for_embeddding, axis=1).tolist()
-    )
-
-    embeddings_df = pd.DataFrame({
-        'product_id': products['product_id'],
-        'category_embeddings': list(category_embeddings),
-        'product_embeddings': list(product_embeddings)
-    })
+    product_strings = products.apply(product_string, axis=1)
+    product_embeddings = model.encode(product_strings.tolist(), show_progress_bar=True)
+    product_strings_all_fileds = products.apply(lambda row: product_string(row, properties=ATTRs), axis=1)
+    product_embeddings_all_fields = model.encode(product_strings_all_fileds.tolist(), show_progress_bar=True)
 
     ground_truth_item_type_q = get_top_col_vals(labeled_query_products, 'item_type_same', 'no item type matches', cutoff=0.8).drop(columns='count')
     ground_truth_rooms_q = get_top_col_vals(labeled_query_products, 'room', 'No Room Fits', cutoff=0.8).drop(columns='count')
@@ -391,17 +381,20 @@ def enrich_all(products, labeled_query_products):
     for col in query_attributes.columns:
         query_attributes[col].fillna('unknown', inplace=True)
 
-    return products, query_attributes, labeled_query_products, query_bags, embeddings_df
+    return products, query_attributes, labeled_query_products, query_bags, product_embeddings, product_embeddings_all_fields
 
 
 def main(products, labeled_query_products):
     enrich_output_dir = ensure_data_subdir('enrich_output')
-    products, query_attributes, labeled_query_products, query_bags, embeddings_df = enrich_all(products, labeled_query_products)
+    products, query_attributes, labeled_query_products, query_bags, product_embeddings, product_embeddings_all_fields \
+        = enrich_all(products, labeled_query_products)
     products.to_csv(os.path.join(enrich_output_dir, 'enriched_products.csv'), index=False)
     query_attributes.to_csv(os.path.join(enrich_output_dir, 'query_attributes.csv'), index=False)
     labeled_query_products.to_csv(os.path.join(enrich_output_dir, 'labeled_query_products.csv'), index=False)
     query_bags.to_pickle(os.path.join(enrich_output_dir, 'query_bags.pkl'))
-    embeddings_df.to_pickle(os.path.join(enrich_output_dir, 'embeddings_df.pkl'))
+    # Save the product embeddings
+    np.savez_compressed(os.path.join(enrich_output_dir, 'product_embeddings.npy'), product_embeddings)
+    np.savez_compressed(os.path.join(enrich_output_dir, 'product_embeddings_all_fields.npy'), product_embeddings_all_fields)
 
 
 if __name__ == "__main__":
