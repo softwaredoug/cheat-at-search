@@ -12,6 +12,9 @@ import pandas as pd
 import logging
 from cheat_at_search.search import run_strategy, ndcgs
 from cheat_at_search.logger import log_to_stdout
+from sys import argv
+
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from torch.utils.data import Dataset
 
@@ -57,7 +60,7 @@ def run_baseline_strategy(products, queries):
 
 
 class TwoTowerModel(nn.Module):
-    def __init__(self, model_name="distilbert-base-uncased", embedding_dim=768):
+    def __init__(self, model_name="sentence-transformers/all-MiniLM-L6-v2", embedding_dim=384):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.text_encoder = AutoModel.from_pretrained(model_name)
@@ -65,7 +68,7 @@ class TwoTowerModel(nn.Module):
         self.embedding_dim = embedding_dim
 
         # Optional: Projection layers to reduce embedding size
-        self.doc_proj = nn.Linear(embedding_dim, embedding_dim)
+        self.doc_proj = nn.Linear(embedding_dim * 2, embedding_dim)
         self.query_proj = nn.Linear(embedding_dim, embedding_dim)
 
         # Document feature projections
@@ -92,7 +95,7 @@ class TwoTowerModel(nn.Module):
         doc_features.append(description_embedding)
 
         # Concatenate product name and description embeddings
-        doc_emb = torch.stack(doc_features, dim=0).mean(dim=0)
+        doc_emb = torch.cat(doc_features, dim=1)
         doc_emb = self.doc_proj(doc_emb)
 
         # Normalize embeddings (optional, helps with cosine similarity)
@@ -124,7 +127,8 @@ class TwoTowerModel(nn.Module):
             description_embedding = self.encode_text(desc_tokens)
             description_embedding = self.product_description_proj(description_embedding)
 
-            doc_emb = torch.stack([name_embedding, description_embedding], dim=0).mean(dim=0)
+            # Concatenate product name and description embeddings
+            doc_emb = torch.cat([name_embedding, description_embedding], dim=1)
             doc_emb = self.doc_proj(doc_emb)
             doc_emb = nn.functional.normalize(doc_emb, dim=1)
         return doc_emb
@@ -144,7 +148,7 @@ class TwoTowerModel(nn.Module):
             description_embedding = self.encode_text(desc_tokens)
             description_embedding = self.product_description_proj(description_embedding)
 
-            doc_emb = torch.stack([name_embedding, description_embedding], dim=0).mean(dim=0)
+            doc_emb = torch.cat([name_embedding, description_embedding], dim=1)
             doc_emb = self.doc_proj(doc_emb)
             doc_emb = nn.functional.normalize(doc_emb, dim=1)
         return doc_emb
@@ -196,6 +200,7 @@ def run_strategy_for_epoch(products, queries, epoch):
     embedder = TwoTowerEmbedder(model, queries, products)
     embedder.query("foo")
     strategy = EmbeddingSearch(products, embedder)
+
     graded_results = run_strategy(strategy)
     avg_ndcg = ndcgs(graded_results).mean()
     print(f"Average NDCG after epoch {epoch}: {avg_ndcg:.4f}")
@@ -215,7 +220,7 @@ def train(start_epoch=0, epochs=3):
     if start_epoch > 0:
         model = TwoTowerModel().to(device)
 
-        model_path = f"data/two_tower/two_tower_epoch_{start_epoch}.pth"
+        model_path = f"data/two_tower/two_tower_epoch_{start_epoch - 1}.pth"
         if os.path.exists(model_path):
             model.load_state_dict(torch.load(model_path, map_location=device))
             print(f"Model loaded from {model_path}")
@@ -224,6 +229,7 @@ def train(start_epoch=0, epochs=3):
 
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
     optimizer = optim.AdamW(model.parameters(), lr=1e-5)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=1)
 
     for epoch in range(start_epoch, epochs):
         model.train()
@@ -256,6 +262,9 @@ def train(start_epoch=0, epochs=3):
             if torch.backends.mps.is_available():
                 torch.mps.empty_cache()
 
+        avg_loss = total_loss / len(dataloader)
+        scheduler.step(avg_loss)
+
         # Checkpoint
         if (epoch + 1) % 1 == 0:
             torch.save(model.state_dict(), f"data/two_tower/two_tower_epoch_{epoch + 1}.pth")
@@ -273,8 +282,10 @@ if __name__ == "__main__":
     # run_strategy_for_epoch(enriched_products, enriched_queries, 4)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 5)
     # run_strategy_for_epoch(enriched_products, enriched_queries, 6)
-    start_epoch = 34
-    run_strategy_for_epoch(enriched_products, enriched_queries, 1)
-    run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch // 2)
-    run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch)
+    start_epoch = int(argv[1]) if len(argv) > 1 else 0
+    # run_strategy_for_epoch(enriched_products, enriched_queries, 1)
+    if start_epoch != 0:
+        run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch // 2)
+        run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch - 4)
+        run_strategy_for_epoch(enriched_products, enriched_queries, start_epoch - 1)
     train(epochs=500, start_epoch=start_epoch)

@@ -307,6 +307,13 @@ def enrich_all(products, labeled_query_products):
     product_embeddings = model.encode(product_strings.tolist(), show_progress_bar=True)
     product_strings_all_fileds = products.apply(lambda row: product_string(row, properties=ATTRs), axis=1)
     product_embeddings_all_fields = model.encode(product_strings_all_fileds.tolist(), show_progress_bar=True)
+    product_strings_all_but_description = products.apply(
+        lambda row: product_string(row, properties=['product_name', 'item_type_same', 'item_type_unconstrained',
+                                                    'branded_terms', 'materials', 'room', 'category hierarchy',
+                                                    'category', 'sub_category', 'product_class']),
+        axis=1
+    )
+    product_embeddings_all_but_description = model.encode(product_strings_all_but_description.tolist(), show_progress_bar=True)
 
     ground_truth_item_type_q = get_top_col_vals(labeled_query_products, 'item_type_same', 'no item type matches', cutoff=0.8).drop(columns='count')
     ground_truth_rooms_q = get_top_col_vals(labeled_query_products, 'room', 'No Room Fits', cutoff=0.8).drop(columns='count')
@@ -381,13 +388,14 @@ def enrich_all(products, labeled_query_products):
     for col in query_attributes.columns:
         query_attributes[col].fillna('unknown', inplace=True)
 
-    return products, query_attributes, labeled_query_products, query_bags, product_embeddings, product_embeddings_all_fields
+    return products, query_attributes, labeled_query_products, query_bags, product_embeddings, \
+        product_embeddings_all_fields, product_embeddings_all_but_description
 
 
 def main(products, labeled_query_products):
     enrich_output_dir = ensure_data_subdir('enrich_output')
-    products, query_attributes, labeled_query_products, query_bags, product_embeddings, product_embeddings_all_fields \
-        = enrich_all(products, labeled_query_products)
+    products, query_attributes, labeled_query_products, query_bags, product_embeddings, product_embeddings_all_fields, \
+        product_embeddings_all_but_description = enrich_all(products, labeled_query_products)
     products.to_csv(os.path.join(enrich_output_dir, 'enriched_products.csv'), index=False)
     query_attributes.to_csv(os.path.join(enrich_output_dir, 'query_attributes.csv'), index=False)
     labeled_query_products.to_csv(os.path.join(enrich_output_dir, 'labeled_query_products.csv'), index=False)
@@ -395,6 +403,7 @@ def main(products, labeled_query_products):
     # Save the product embeddings
     np.savez_compressed(os.path.join(enrich_output_dir, 'product_embeddings.npy'), product_embeddings)
     np.savez_compressed(os.path.join(enrich_output_dir, 'product_embeddings_all_fields.npy'), product_embeddings_all_fields)
+    np.savez_compressed(os.path.join(enrich_output_dir, 'product_embeddings_all_but_description.npy'), product_embeddings_all_but_description)
 
 
 if __name__ == "__main__":
