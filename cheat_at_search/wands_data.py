@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from cheat_at_search.logger import log_to_stdout
+import sys
 from cheat_at_search.data_dir import DATA_PATH
 
 
@@ -286,20 +286,7 @@ def _labels():
     return df
 
 
-labels = _labels()
-queries = _queries()
-products = _products()
-enriched_products = _enriched_products()
-enriched_queries = _enriched_queries()
-query_bags = _query_bags()
-product_embeddings = _product_embeddings()
-product_embeddings_all = _product_embeddings_all()
-
-labeled_queries = queries.merge(labels, how='left', on='query_id')
-labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
-
-
-def _ideal10(labeled_queries):
+def _ideal10(products, labeled_queries):
 
     ideal_results = labeled_queries.sort_values(['query_id', 'grade'], ascending=(True, False))
     ideal_results['rank'] = ideal_results.groupby('query_id').cumcount() + 1
@@ -314,32 +301,59 @@ def _ideal10(labeled_queries):
     return ideal_top_10
 
 
-ideal_top_10 = _ideal10(labeled_queries)
+def __getattr__(name):
+    """Load dataset lazily."""
+    ds = None
+    print(f"Loading dataset: {name}")
+    if name in globals():
+        return globals()[name]
+
+    if name == 'labels':
+        ds = _labels()
+    elif name == 'queries':
+        ds = _queries()
+    elif name == 'products':
+        ds = _products()
+    elif name == 'enriched_products':
+        ds = _enriched_products()
+    elif name == 'enriched_queries':
+        ds = _enriched_queries()
+    elif name == 'query_bags':
+        ds = _query_bags()
+    elif name == 'product_embeddings':
+        ds = _product_embeddings()
+    elif name == 'product_embeddings_all':
+        ds = _product_embeddings_all()
+    elif name in ['labeled_queries', 'labeled_query_products', 'ideal_top_10']:
+        if 'queries' not in globals():
+            globals()['queries'] = _queries()
+        if 'labels' not in globals():
+            globals()['labels'] = _labels()
+        if 'products' not in globals():
+            globals()['products'] = _products()
+        queries = globals()['queries']
+        labels = globals()['labels']
+        products = globals()['products']
+        labeled_queries = queries.merge(labels, how='left', on='query_id')
+        labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
+        ideal_top_10 = _ideal10(products, labeled_queries)
+        globals()['labeled_queries'] = labeled_queries
+        globals()['labeled_query_products'] = labeled_query_products
+        globals()['ideal_top_10'] = ideal_top_10
+        if name == 'labeled_queries':
+            ds = labeled_queries
+        elif name == 'labeled_query_products':
+            ds = labeled_query_products
+        elif name == 'ideal_top_10':
+            ds = ideal_top_10
+
+    globals()[name] = ds
+    return ds
 
 
-def rel_attribute(query_products=labeled_query_products, grade=2, column='category'):
+def rel_attribute(query_products=None, grade=2, column='category'):
     """Relevant categories in the labeled data useful for ground truth of different attributes."""
+    if query_products is None:
+        # Call module to get labeled_query_products
+        query_products = getattr(sys.modules[__name__], "labeled_query_products")
     return query_products[query_products['grade'] == 2].groupby(['query', column])[column].count().sort_values(ascending=False)
-
-
-if __name__ == "__main__":
-    # Configure root logger
-    root_logger = log_to_stdout(logger_name=None, level="INFO")
-
-    # Test the functions
-    fetch_wands()
-
-    # Load and display product info
-    products_df = products()
-    print(f"Products shape: {products_df.shape}")
-    print(f"Products columns: {products_df.columns.tolist()}")
-
-    # Load and display query info
-    queries_df = queries()
-    print(f"Queries shape: {queries_df.shape}")
-    print(f"Queries columns: {queries_df.columns.tolist()}")
-
-    # Load and display label info
-    labels_df = labels()
-    print(f"Labels shape: {labels_df.shape}")
-    print(f"Labels columns: {labels_df.columns.tolist()}")
