@@ -1,6 +1,6 @@
 from openai import OpenAI, APIError
 from cheat_at_search.logger import log_to_stdout
-from cheat_at_search.data_dir import ensure_data_subdir, DATA_PATH, OPENAI_KEY
+from cheat_at_search.data_dir import ensure_data_subdir
 from typing import Optional
 from pydantic import BaseModel
 import pickle
@@ -20,8 +20,6 @@ logger = log_to_stdout(logger_name="query_parser")
 
 
 CACHE_PATH = ensure_data_subdir("enrich_cache")
-KEY_PATH = f"{DATA_PATH}/openai_key.txt"
-openai_key = OPENAI_KEY
 
 
 class Enricher:
@@ -53,6 +51,10 @@ class OpenAIEnricher(Enricher):
         self.system_prompt = system_prompt
         self.temperature = temperature
         self.last_exception = None
+
+        # Reimport to get openai key in case later mount
+        from cheat_at_search.data_dir import OPENAI_KEY as openai_key
+
         if not openai_key:
             raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
         self.client = OpenAI(
