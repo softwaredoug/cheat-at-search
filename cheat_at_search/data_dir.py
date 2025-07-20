@@ -1,6 +1,7 @@
 import os
 import logging
 import pathlib
+import getpass
 
 
 logger = logging.getLogger(__name__)
@@ -70,4 +71,35 @@ def mount(use_gdrive=True, manual_path=None):
             path_directory.mkdir(parents=True, exist_ok=True)
         DATA_PATH = path_directory
 
+    # Check for OpenAI key in data directory
+    KEY_PATH = f"{DATA_PATH}/openai_key.txt"
+    try:
+        logger.info(f"Reading OpenAI API key from {KEY_PATH}")
+        with open(KEY_PATH, "r") as f:
+            openai_key = f.read().strip()
+            globals()['openai_key'] = openai_key
+    except FileNotFoundError:
+        key = getpass.getpass("Enter your openai key: ")
+        with open(os.path.join(KEY_PATH), 'w') as f:
+            logger.info(f"Saving OpenAI API key to {KEY_PATH}")
+            f.write(key)
+            globals()['openai_key'] = key
+
     logger.info(f"Mounting data directory at {DATA_PATH}")
+
+
+def __getattr__(name):
+    """
+    Allow access to DATA_PATH as a module attribute.
+    """
+    if name == "OPENAI_KEY":
+        if os.getenv("OPENAI_API_KEY"):
+            openai_key = os.getenv("OPENAI_API_KEY")
+            globals()['openai_key'] = openai_key
+            return openai_key
+        if 'openai_key' in globals():
+            return globals()['openai_key']
+        else:
+            raise AttributeError("OpenAI key not set. Please mount the data directory first.")
+        return DATA_PATH
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

@@ -1,6 +1,6 @@
 from openai import OpenAI, APIError
 from cheat_at_search.logger import log_to_stdout
-from cheat_at_search.data_dir import ensure_data_subdir, DATA_PATH
+from cheat_at_search.data_dir import ensure_data_subdir, DATA_PATH, OPENAI_KEY
 from typing import Optional
 from pydantic import BaseModel
 import pickle
@@ -8,7 +8,6 @@ import json
 import os
 from hashlib import md5
 from time import sleep
-import getpass
 from typing import Tuple
 import pandas as pd
 from tqdm import tqdm
@@ -22,20 +21,7 @@ logger = log_to_stdout(logger_name="query_parser")
 
 CACHE_PATH = ensure_data_subdir("enrich_cache")
 KEY_PATH = f"{DATA_PATH}/openai_key.txt"
-openai_key = None
-if os.getenv("OPENAI_API_KEY"):
-    openai_key = os.getenv("OPENAI_API_KEY")
-else:
-    try:
-        logger.info(f"Reading OpenAI API key from {KEY_PATH}")
-        with open(KEY_PATH, "r") as f:
-            openai_key = f.read().strip()
-    except FileNotFoundError:
-        key = getpass.getpass("Enter your openai key: ")
-        with open(os.path.join(KEY_PATH), 'w') as f:
-            logger.info(f"Saving OpenAI API key to {KEY_PATH}")
-            f.write(key)
-            openai_key = key
+openai_key = OPENAI_KEY
 
 
 class Enricher:
