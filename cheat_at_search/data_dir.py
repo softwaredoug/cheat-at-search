@@ -93,13 +93,15 @@ def __getattr__(name):
     Allow access to DATA_PATH as a module attribute.
     """
     if name == "OPENAI_KEY":
+        print("Accessing OpenAI API key.")
         if os.getenv("OPENAI_API_KEY"):
             openai_key = os.getenv("OPENAI_API_KEY")
             globals()['openai_key'] = openai_key
             return openai_key
-        if 'openai_key' in globals():
+        elif 'openai_key' in globals():
+            print("OpenAI Key available from previous mount.")
             return globals()['openai_key']
         else:
-            raise AttributeError("OpenAI key not set. Please mount the data directory first.")
-        return DATA_PATH
+            logger.warning("OpenAI key not set. Please mount the data directory first.")
+            return ''
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
