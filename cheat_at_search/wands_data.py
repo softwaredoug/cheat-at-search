@@ -102,8 +102,8 @@ def _products():
 
     split_features = df['product_features'].str.split('|')
     df['features'] = split_features
-    df['product_description'].fillna('', inplace=True)
-    df['product_name'].fillna('', inplace=True)
+    df['product_description'] = df['product_description'].fillna('')
+    df['product_name'] = df['product_name'].fillna('')
 
     # Parse category and subcategory from 'category hierarchy'
     cat_as_list = df['category hierarchy'].fillna('').str.split('/')
@@ -304,9 +304,10 @@ def _ideal10(products, labeled_queries):
 def __getattr__(name):
     """Load dataset lazily."""
     ds = None
-    print(f"Loading dataset: {name}")
     if name in globals():
         return globals()[name]
+
+    logging.info(f"Loading dataset: {name} for the first time")
 
     if name == 'labels':
         ds = _labels()
