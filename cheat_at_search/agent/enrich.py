@@ -112,7 +112,7 @@ class OpenAIEnricher(Enricher):
             response = self.client.responses.parse(
                 model=self.model,
                 temperature=self.temperature if self.temperature else None,
-                verbosity=self.verbosity if self.verbosity else None,
+                text={"verbosity": self.verbosity} if self.verbosity else None,
                 reasoning={'effort': self.reasoning_effort} if self.reasoning_effort else None,
                 input=prompts,
                 text_format=self.cls
