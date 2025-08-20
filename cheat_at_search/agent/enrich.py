@@ -376,9 +376,15 @@ class CachedEnricher(Enricher):
 class AutoEnricher(Enricher):
     """Either serial cached or batch enriched, depending on the context."""
 
-    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel):
+    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel,
+                 temperature: Optional[float] = None,
+                 reasoning_effort: Optional[str] = None,
+                 verbosity: Optional[str] = None):
         self.system_prompt = system_prompt
-        self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt)
+        self.enricher = OpenAIEnricher(cls=output_cls, model=model, system_prompt=self.system_prompt,
+                                       temperature=temperature,
+                                       verbosity=verbosity,
+                                       reasoning_effort=reasoning_effort)
         self.cached_enricher = CachedEnricher(self.enricher)
         self.batch_enricher = BatchOpenAIEnricher(self.enricher)
 
