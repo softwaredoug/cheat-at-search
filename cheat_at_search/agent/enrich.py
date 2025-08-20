@@ -28,7 +28,7 @@ class Enricher:
 
 
 def to_openai_batched(task_id, model, prompts, cls: BaseModel,
-                      temperature: float = 0.1):
+                      temperature: Optional[float] = None):
     cls_to_json = type_to_response_format_param(cls)
     task = {
         "custom_id": task_id,
@@ -37,19 +37,50 @@ def to_openai_batched(task_id, model, prompts, cls: BaseModel,
         "body": {
             "model": model,
             "messages": prompts,
-            "temperature": temperature,
             "response_format": cls_to_json,
         }
     }
+    if temperature is not None:
+        task['body']['temperature'] = temperature
     return task
 
 
+def validate_params(model, temperature, verbosity, reasoning_effort):
+    if 'gpt-4' in model:
+        if verbosity is not None:
+            raise ValueError("Verbosity is not supported for GPT-4 models.")
+        if reasoning_effort is not None:
+            raise ValueError("Reasoning effort is not supported for GPT-4 models.")
+        if temperature is not None and temperature < 0:
+            raise ValueError("Temperature must be non-negative for GPT-4 models.")
+        if temperature is None:
+            temperature = 0.0
+    elif 'gpt-5' in model:
+        if verbosity is not None and verbosity not in ['low', 'medium', 'high']:
+            raise ValueError("Verbosity must be one of ['low', 'medium', 'high'] for GPT-5 models.")
+        elif verbosity is None:
+            verbosity = 'low'
+        if reasoning_effort is not None and reasoning_effort not in ['minimal', 'low', 'medium', 'high']:
+            raise ValueError("Reasoning effort must be one of ['minimal', 'low', 'medium', 'high'] for GPT-5 models.")
+        elif reasoning_effort is None:
+            reasoning_effort = 'medium'
+        if temperature is not None:
+            raise ValueError("Temperature is not supported for GPT-5 models.")
+    return model, temperature, verbosity, reasoning_effort
+
+
 class OpenAIEnricher(Enricher):
-    def __init__(self, cls: BaseModel, model: str, system_prompt: str = None, temperature: float = 0.0):
-        self.model = model
+    def __init__(self, cls: BaseModel, model: str, system_prompt: str = None,
+                 temperature: Optional[float] = None,
+                 verbosity: Optional[str] = None,
+                 reasoning_effort: Optional[str] = None):
         self.cls = cls
         self.system_prompt = system_prompt
+        model, temperature, verbosity, reasoning_effort = validate_params(model, temperature, verbosity, reasoning_effort)
+        self.model = model
         self.temperature = temperature
+        self.verbosity = verbosity
+        self.reasoning_effort = reasoning_effort
         self.last_exception = None
 
         # Reimport to get openai key in case later mount
@@ -63,7 +94,7 @@ class OpenAIEnricher(Enricher):
 
     def str_hash(self):
         output_schema_hash = md5(json.dumps(self.cls.model_json_schema(mode='serialization')).encode()).hexdigest()
-        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{output_schema_hash}".encode()).hexdigest()
+        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{self.verbosity}_{self.reasoning_effort}_{output_schema_hash}".encode()).hexdigest()
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
         """Run the response directly and return teh number of tokens"""
@@ -80,7 +111,9 @@ class OpenAIEnricher(Enricher):
                 prompts.append({"role": "user", "content": prompt})
             response = self.client.responses.parse(
                 model=self.model,
-                temperature=self.temperature,
+                temperature=self.temperature if self.temperature else None,
+                verbosity=self.verbosity if self.verbosity else None,
+                reasoning_effort=self.reasoning_effort if self.reasoning_effort else None,
                 input=prompts,
                 text_format=self.cls
             )
