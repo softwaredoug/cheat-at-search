@@ -69,6 +69,11 @@ def validate_params(model, temperature, verbosity, reasoning_effort):
     return model, temperature, verbosity, reasoning_effort
 
 
+def pathify_openai_model(model: str) -> str:
+    if 'gpt-4' in model or 'gpt-5' in model:
+        return f"openai/{model}"
+
+
 class OpenAIEnricher(Enricher):
     def __init__(self, cls: BaseModel, model: str, system_prompt: str = None,
                  temperature: Optional[float] = None,
@@ -84,13 +89,13 @@ class OpenAIEnricher(Enricher):
         self.last_exception = None
 
         # Reimport to get openai key in case later mount
-        from cheat_at_search.data_dir import OPENAI_KEY as openai_key
+        from cheat_at_search.data_dir import OPENAI_API_KEY as api_key
 
-        if not openai_key:
+        if not api_key:
             raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
         self.client = OpenAI(
-            api_key=openai_key,
-            base_url="https://openrouter.ai/api/v1"
+            api_key=api_key,
+            # base_url="https://openrouter.ai/api/v1"
         )
 
     def str_hash(self):
