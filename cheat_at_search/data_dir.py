@@ -39,6 +39,23 @@ def ensure_data_subdir(subdir: str):
     return subdir_path
 
 
+def mount_key(keyname):
+    keyname = keyname.lower().strip()
+    KEY_PATH = f"{DATA_PATH}/{keyname}.txt"
+    try:
+        logger.info(f"Reading {keyname} API key from {KEY_PATH}")
+        with open(KEY_PATH, "r") as f:
+            openai_key = f.read().strip()
+            globals()[keyname] = openai_key
+            logger.info(f"{keyname} key loaded successfully.")
+    except FileNotFoundError:
+        key = getpass.getpass(f"Enter your {keyname}: ")
+        with open(os.path.join(KEY_PATH), 'w') as f:
+            logger.info(f"Saving {keyname} key to {KEY_PATH}")
+            f.write(key)
+            globals()[keyname] = key
+
+
 def mount(use_gdrive=True, manual_path=None):
     """
     Mount the data directory to a specific path.
@@ -52,7 +69,7 @@ def mount(use_gdrive=True, manual_path=None):
             logger.info(f"Creating manual data directory: {manual_path}")
             pathlib.Path(manual_path).mkdir(parents=True, exist_ok=True)
         DATA_PATH = pathlib.Path(manual_path)
-    if use_gdrive:
+    elif use_gdrive:
         # Assumes you're running this in Google Colab
         try:
             from google.colab import drive
@@ -72,36 +89,35 @@ def mount(use_gdrive=True, manual_path=None):
         DATA_PATH = path_directory
 
     # Check for OpenAI key in data directory
-    KEY_PATH = f"{DATA_PATH}/openai_key.txt"
-    try:
-        logger.info(f"Reading OpenAI API key from {KEY_PATH}")
-        with open(KEY_PATH, "r") as f:
-            openai_key = f.read().strip()
-            globals()['openai_key'] = openai_key
-    except FileNotFoundError:
-        key = getpass.getpass("Enter your openai key: ")
-        with open(os.path.join(KEY_PATH), 'w') as f:
-            logger.info(f"Saving OpenAI API key to {KEY_PATH}")
-            f.write(key)
-            globals()['openai_key'] = key
+    mount_key("OPENAI_API_KEY")
+    mount_key("OPENROUTER_API_KEY")
 
     logger.info(f"Mounting data directory at {DATA_PATH}")
+
+
+def get_attr_key(keyname):
+    keyname = keyname.lower().strip()
+    keyname_env = keyname.upper()
+    logger.info(f"Looking for {keyname} in environment variables or globals...")
+    if os.getenv(keyname_env):
+        openai_key = os.getenv(keyname_env)
+        globals()[keyname] = openai_key
+        return openai_key
+    elif keyname in globals():
+        logger.info(f"{keyname} available from previous mount.")
+        return globals()[keyname]
+    else:
+        logger.warning(f"{keyname} key not set. Please mount the data directory first.")
+        return ''
 
 
 def __getattr__(name):
     """
     Allow access to DATA_PATH as a module attribute.
     """
-    if name == "OPENAI_KEY":
-        print("Accessing OpenAI API key.")
-        if os.getenv("OPENAI_API_KEY"):
-            openai_key = os.getenv("OPENAI_API_KEY")
-            globals()['openai_key'] = openai_key
-            return openai_key
-        elif 'openai_key' in globals():
-            print("OpenAI Key available from previous mount.")
-            return globals()['openai_key']
-        else:
-            logger.warning("OpenAI key not set. Please mount the data directory first.")
-            return ''
+    if name == "OPENAI_API_KEY":
+        return get_attr_key("OPENAI_API_KEY")
+    if name == "OPENROUTER_API_KEY":
+        return get_attr_key("OPENROUTER_API_KEY")
+
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

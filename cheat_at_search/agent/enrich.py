@@ -90,6 +90,7 @@ class OpenAIEnricher(Enricher):
             raise ValueError("No OpenAI API key provided. Set OPENAI_API_KEY environment variable or create a key file in the cache directory.")
         self.client = OpenAI(
             api_key=openai_key,
+            base_url="https://openrouter.ai/api/v1"
         )
 
     def str_hash(self):
