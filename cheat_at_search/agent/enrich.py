@@ -46,7 +46,7 @@ def to_openai_batched(task_id, model, prompts, cls: BaseModel,
 
 
 def validate_params(model, temperature, verbosity, reasoning_effort):
-    if 'gpt-4' in model:
+    if ('gpt-4' in model) or ('gpt-5-main' in model):
         if verbosity is not None:
             raise ValueError("Verbosity is not supported for GPT-4 models.")
         if reasoning_effort is not None:
