@@ -6,7 +6,7 @@ import tempfile
 from typing import Literal
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def mounted_data_dir():
     """
     Fixture to mount the data directory before running tests.
