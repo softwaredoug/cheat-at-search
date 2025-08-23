@@ -56,7 +56,7 @@ def mount_key(keyname):
             globals()[keyname] = key
 
 
-def mount(use_gdrive=True, manual_path=None):
+def mount(use_gdrive=True, manual_path=None, load_keys=True):
     """
     Mount the data directory to a specific path.
 
@@ -89,8 +89,9 @@ def mount(use_gdrive=True, manual_path=None):
         DATA_PATH = path_directory
 
     # Check for OpenAI key in data directory
-    mount_key("OPENAI_API_KEY")
-    mount_key("OPENROUTER_API_KEY")
+    if load_keys:
+        mount_key("OPENAI_API_KEY")
+        mount_key("OPENROUTER_API_KEY")
 
     logger.info(f"Mounting data directory at {DATA_PATH}")
 
