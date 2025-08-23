@@ -1,4 +1,4 @@
-from cheat_at_search.agent.enrich_client import EnrichClient
+from cheat_at_search.agent.enrich_client import EnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
 import os
@@ -62,6 +62,10 @@ class CachedEnrichClient(EnrichClient):
         cls_value, num_input_tokens, num_output_tokens = self.enrich(prompt, return_num_tokens=True)
         return num_input_tokens, num_output_tokens
 
+    def debug(self, prompt: str) -> Optional[DebugMetaData]:
+        """Enrich a single prompt, now, and return debug metadata."""
+        return self.enricher.debug(prompt)
+
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         prompt_key = self.prompt_key(prompt)
         if prompt_key in self.cache:
@@ -73,3 +77,6 @@ class CachedEnrichClient(EnrichClient):
             self.cache[prompt_key] = enriched_data
             self.save_cache()
         return enriched_data
+
+    def str_hash(self) -> str:
+        return self.enricher.str_hash()

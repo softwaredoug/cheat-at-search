@@ -1,19 +1,33 @@
 from abc import ABC, abstractmethod
-import requests
 from typing import Optional
 from pydantic import BaseModel
-import json
-from hashlib import md5
-from typing import Tuple
+
+
+class DebugMetaData:
+    def __init__(self, model: str,
+                 prompt_tokens: int,
+                 completion_tokens: int,
+                 reasoning_tokens: int,
+                 response_id: Optional[str] = None,
+                 output: BaseModel = None):
+        self.model = model
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.reasoning_tokens = reasoning_tokens
+        self.total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
+        self.response_id = response_id
+        self.output = output
 
 
 class EnrichClient(ABC):
     @abstractmethod
-    def enrich(self, prompt: str, task_id: str = None) -> Optional[BaseModel]:
+    def enrich(self, prompt: str) -> Optional[BaseModel]:
         pass
 
-    def str_hash(self):
+    @abstractmethod
+    def debug(self, prompt: str) -> Optional[DebugMetaData]:
         pass
 
-    def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
+    @abstractmethod
+    def str_hash(self) -> str:
         pass

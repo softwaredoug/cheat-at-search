@@ -1,11 +1,10 @@
 import requests
-from cheat_at_search.agent.enrich_client import EnrichClient
+from cheat_at_search.agent.enrich_client import EnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
-from typing import Optional
+from typing import Optional, Tuple
 from pydantic import BaseModel
 import json
 from hashlib import md5
-from typing import Tuple
 from openai.lib._parsing._completions import type_to_response_format_param
 
 
@@ -76,6 +75,20 @@ class OpenRouterEnrichClient(EnrichClient):
         return num_input_tokens, num_output_tokens
 
     def enrich(self, prompt: str, return_num_tokens=False) -> Optional[BaseModel]:
+        """Enrich a single prompt, now."""
+        metadata = self._enrich(prompt, return_num_tokens=return_num_tokens)
+        if metadata:
+            if return_num_tokens:
+                return metadata.output, metadata.prompt_tokens, metadata.completion_tokens
+            return metadata.output
+        return None
+
+    def debug(self, prompt: str) -> Optional[DebugMetaData]:
+        """Enrich a single prompt, now, and return debug metadata."""
+        return self._enrich(prompt, return_num_tokens=True)
+
+    def _enrich(self, prompt: str, return_num_tokens=False) -> Tuple[Optional[BaseModel],
+                                                                     Optional[DebugMetaData]]:
         response_id = None
         prev_response_id = None
         try:
@@ -105,11 +118,17 @@ class OpenRouterEnrichClient(EnrichClient):
             prev_response_id = response_id
             num_input_tokens = out['usage']['prompt_tokens'] if 'usage' in out and 'prompt_tokens' in out['usage'] else 0
             num_output_tokens = out['usage']['completion_tokens'] if 'usage' in out and 'completion_tokens' in out['usage'] else 0
+            reasoning_tokens = 0  # Not provided by OpenRouter
 
-            if parsed and return_num_tokens:
-                return parsed, num_input_tokens, num_output_tokens
-            elif parsed:
-                return parsed
+            metadata = DebugMetaData(
+                model=self.model,
+                prompt_tokens=num_input_tokens,
+                completion_tokens=num_output_tokens,
+                reasoning_tokens=reasoning_tokens,
+                response_id=response_id,
+                output=parsed
+            )
+            return metadata
         except requests.HTTPError as e:
             self.last_exception = e
             logger.error(f"""
@@ -125,6 +144,5 @@ class OpenRouterEnrichClient(EnrichClient):
                 {repr(e)}
 
             """)
-            # Return a default object with keywords in case of errors
             raise e
         return None
