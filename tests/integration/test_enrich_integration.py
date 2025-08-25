@@ -9,7 +9,8 @@ from typing import Literal
 models_to_test = [
     "openai/gpt-4.1-nano",
     "openai/gpt-4.1-mini",
-    "openai/gpt-4.1"
+    "openai/gpt-4.1",
+    "anthropic/claude-sonnet-4-20250514"
 ]
 
 

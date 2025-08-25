@@ -6,15 +6,22 @@ from typing import Optional, Tuple
 from pydantic import BaseModel
 import json
 from hashlib import md5
-from openai.lib._parsing._completions import type_to_response_format_param
 
 
 logger = log_to_stdout("instructor_enrich_client")
 
 
 def normalize_usage(completion):
-    if hasattr(completion, "usage"):  # OpenAI / Anthropic
-        return dict(completion.usage)
+    if hasattr(completion, "usage") and hasattr(completion.usage, "input_tokens"):  # OpenAI
+        normalized = {
+            "prompt_tokens": completion.usage.input_tokens,
+            "completion_tokens": completion.usage.output_tokens,
+        }
+        if hasattr(completion.usage, "total_tokens"):
+            normalized["total_tokens"] = completion.usage.total_tokens
+        else:
+            normalized["total_tokens"] = normalized["prompt_tokens"] + normalized["completion_tokens"]
+        return normalized
     elif hasattr(completion, "usage_metadata"):  # Gemini
         return {
             "prompt_tokens": completion.usage_metadata.prompt_token_count,
@@ -57,8 +64,8 @@ class InstructorEnrichClient(EnrichClient):
 
             resp, completion = self.client.chat.completions.create_with_completion(
                 response_model=self.response_model,
-                messages=prompts,
-                response_format=type_to_response_format_param(self.response_model),
+                messages=prompts
+                # response_format=type_to_response_format_param(self.response_model),
             )
             usage = normalize_usage(completion)
             debug_metadata = DebugMetaData(

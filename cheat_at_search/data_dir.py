@@ -95,9 +95,9 @@ def mount(use_gdrive=True, manual_path=None, load_keys=True):
     logger.info(f"Mounting data directory at {DATA_PATH}")
 
 
-def get_attr_key(keyname):
-    keyname = keyname.lower().strip()
-    keyname_env = keyname.upper()
+def key_for_provider(provider: str) -> str:
+    keyname = provider.lower().strip()
+    keyname_env = f"{keyname}_API_KEY".upper()
     logger.info(f"Looking for {keyname} in environment variables or globals...")
     if os.getenv(keyname_env):
         openai_key = os.getenv(keyname_env)
@@ -110,29 +110,10 @@ def get_attr_key(keyname):
         mount_key(keyname_env)
 
 
-def key_for_provider(provider: str) -> str:
-    if provider == "openai":
-        return get_attr_key("OPENAI_API_KEY")
-    if provider == "openrouter":
-        return get_attr_key("OPENROUTER_API_KEY")
-    if provider == "anthropic":
-        return get_attr_key("ANTHROPIC_API_KEY")
-    if provider == "google":
-        return get_attr_key("GOOGLE_API_KEY")
-
-
 def __getattr__(name):
     """
     Allow access to DATA_PATH as a module attribute.
     """
-    if name == "OPENAI_API_KEY":
-        return get_attr_key("OPENAI_API_KEY")
-    if name == "OPENROUTER_API_KEY":
-        return get_attr_key("OPENROUTER_API_KEY")
-    if name == "ANTHROPIC_API_KEY":
-        return get_attr_key("ANTHROPIC_API_KEY")
-    if name == "GOOGLE_API_KEY":
-        return get_attr_key("GOOGLE_API_KEY")
     if name == "DATA_PATH":
         return DATA_PATH
 
