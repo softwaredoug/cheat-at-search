@@ -8,6 +8,14 @@ from pydantic import BaseModel, Field
 from typing import Literal, get_args
 
 
+models_to_test = [
+    "openai/gpt-4.1-nano",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1",
+    "anthropic/claude-sonnet-4-20250514"
+]
+
+
 @pytest.fixture(scope="module")
 def mounted_data_dir():
     """
@@ -46,11 +54,12 @@ class Room(BaseModel):
     )
 
 
-def test_product_enrichment(mounted_data_dir):
+@pytest.mark.parametrize("model", models_to_test)
+def test_product_enrichment(model, mounted_data_dir):
     room_enricher = AutoEnricher(
-        model="gpt-4.1-mini",
+        model=model,
         system_prompt="You are a helpful furniture, hardware, and home-goods ecommerce shopping assistant that understands furniture products",
-        output_cls=Room
+        response_model=Room
     )
 
     def get_room_prompt(product) -> str:

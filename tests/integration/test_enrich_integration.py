@@ -40,13 +40,13 @@ class ColorEnrichLiteral(BaseModel):
 
 
 @pytest.mark.parametrize("model", models_to_test)
-@pytest.mark.parametrize("output_cls", [ColorEnrich, ColorEnrichLiteral])
-def test_simple_enrichment(mounted_data_dir, output_cls, model):
+@pytest.mark.parametrize("response_model", [ColorEnrich, ColorEnrichLiteral])
+def test_simple_enrichment(mounted_data_dir, response_model, model):
 
     enricher = AutoEnricher(
         model=model,
         system_prompt="You are a helpful AI assistant that classifies e-commerce products",
-        output_cls=output_cls,
+        response_model=response_model,
     )
 
     prompt = """
@@ -60,13 +60,13 @@ def test_simple_enrichment(mounted_data_dir, output_cls, model):
 
 
 @pytest.mark.parametrize("model", models_to_test)
-@pytest.mark.parametrize("output_cls", [ColorEnrich, ColorEnrichLiteral])
-def test_debug(mounted_data_dir, output_cls, model):
+@pytest.mark.parametrize("response_model", [ColorEnrich, ColorEnrichLiteral])
+def test_debug(mounted_data_dir, response_model, model):
 
     enricher = AutoEnricher(
         model=model,
         system_prompt="You are a helpful AI assistant that classifies e-commerce products",
-        output_cls=output_cls,
+        response_model=response_model,
     )
 
     prompt = """
@@ -88,7 +88,7 @@ def test_simple_enrich_literal_respects_literals(mounted_data_dir, model):
     enricher = AutoEnricher(
         model=model,
         system_prompt="You are a helpful AI assistant that classifies e-commerce products",
-        output_cls=ColorEnrichLiteral
+        response_model=ColorEnrichLiteral
     )
 
     prompt = """

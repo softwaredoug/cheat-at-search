@@ -22,6 +22,12 @@ def normalize_usage(completion):
         else:
             normalized["total_tokens"] = normalized["prompt_tokens"] + normalized["completion_tokens"]
         return normalized
+    elif hasattr(completion, "usage") and hasattr(completion.usage, "prompt_tokens"):  # OpenRouter
+        return {
+            "prompt_tokens": completion.usage.prompt_tokens,
+            "completion_tokens": completion.usage.completion_tokens,
+            "total_tokens": completion.usage.total_tokens,
+        }
     elif hasattr(completion, "usage_metadata"):  # Gemini
         return {
             "prompt_tokens": completion.usage_metadata.prompt_token_count,

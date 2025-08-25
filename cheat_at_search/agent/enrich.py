@@ -17,12 +17,12 @@ logger = log_to_stdout(logger_name="query_parser")
 class AutoEnricher:
     """Either serial cached or batch enriched, depending on the context."""
 
-    def __init__(self, model: str, system_prompt: str, output_cls: BaseModel,
+    def __init__(self, model: str, system_prompt: str, response_model: BaseModel,
                  temperature: Optional[float] = None,
                  reasoning_effort: Optional[str] = None,
                  verbosity: Optional[str] = None):
         self.system_prompt = system_prompt
-        self.enricher = InstructorEnrichClient(response_model=output_cls,
+        self.enricher = InstructorEnrichClient(response_model=response_model,
                                                model=model,
                                                system_prompt=self.system_prompt,
                                                temperature=temperature,
@@ -69,7 +69,7 @@ class ProductEnricher:
         self.prompt_fn = prompt_fn
         self.separator = separator
         if attrs is None:  # Inferred from the BaseModel
-            output_cls = enricher.output_cls
+            output_cls = enricher.response_model
             attrs = output_cls.__fields__.keys()
             attrs = set(attrs)  # Ensure unique attributes
             # Get properties too
