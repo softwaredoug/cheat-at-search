@@ -63,14 +63,14 @@ class CachedEnrichClient(EnrichClient):
         return num_input_tokens, num_output_tokens
 
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
-        """Enrich a single prompt, now, and return debug metadata."""
         return self.enricher.debug(prompt)
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         prompt_key = self.prompt_key(prompt)
         if prompt_key in self.cache:
             logger.debug(f"Cache hit for prompt: {prompt_key}")
-            return self.cache[prompt_key]
+            as_json = self.cache[prompt_key]
+            return self.response_model.model_validate_json(as_json)
         logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
         if enriched_data:
@@ -80,3 +80,7 @@ class CachedEnrichClient(EnrichClient):
 
     def str_hash(self) -> str:
         return self.enricher.str_hash()
+
+    @property
+    def response_model(self):
+        return self.enricher.response_model

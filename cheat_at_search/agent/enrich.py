@@ -1,5 +1,6 @@
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.cached_enrich_client import CachedEnrichClient
+from cheat_at_search.agent.enrich_client import DebugMetaData
 from cheat_at_search.agent.instructor_enrich_client import InstructorEnrichClient
 from typing import Optional
 from pydantic import BaseModel
@@ -29,9 +30,13 @@ class AutoEnricher:
                                                reasoning_effort=reasoning_effort)
         self.cached_enricher = CachedEnrichClient(self.enricher)
 
-    def enrich(self, prompt: str, task_id: str = None) -> BaseModel:
+    def enrich(self, prompt: str) -> BaseModel:
         """Enrich a single prompt, now, and cache the result."""
         return self.cached_enricher.enrich(prompt)
+
+    def debug(self, prompt: str) -> Optional[DebugMetaData]:
+        """Enrich a single prompt, now, and return debug metadata."""
+        return self.cached_enricher.debug(prompt)
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
         """Get the number of tokens for a prompt (runs directly, does not cache)."""
@@ -50,9 +55,9 @@ class AutoEnricher:
         return self.batch_enricher.get_output(task_id, prompt)
 
     @property
-    def output_cls(self):
+    def response_model(self):
         """Return the output class of the enricher."""
-        return self.enricher.cls
+        return self.enricher.response_model
 
 
 class ProductEnricher:

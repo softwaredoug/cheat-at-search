@@ -18,6 +18,9 @@ class DebugMetaData:
         self.response_id = response_id
         self.output = output
 
+    def __repr__(self):
+        return f"DebugMetaData(model={self.model}, prompt_tokens={self.prompt_tokens}, completion_tokens={self.completion_tokens}, reasoning_tokens={self.reasoning_tokens}, total_tokens={self.total_tokens}, response_id={self.response_id}, output={self.output})"
+
 
 class EnrichClient(ABC):
     @abstractmethod
@@ -30,4 +33,8 @@ class EnrichClient(ABC):
 
     @abstractmethod
     def str_hash(self) -> str:
+        pass
+
+    @property
+    def response_model(self):
         pass

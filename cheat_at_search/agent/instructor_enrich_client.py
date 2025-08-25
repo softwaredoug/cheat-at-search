@@ -12,6 +12,19 @@ from openai.lib._parsing._completions import type_to_response_format_param
 logger = log_to_stdout("instructor_enrich_client")
 
 
+def normalize_usage(completion):
+    if hasattr(completion, "usage"):  # OpenAI / Anthropic
+        return dict(completion.usage)
+    elif hasattr(completion, "usage_metadata"):  # Gemini
+        return {
+            "prompt_tokens": completion.usage_metadata.prompt_token_count,
+            "completion_tokens": completion.usage_metadata.candidates_token_count,
+            "total_tokens": completion.usage_metadata.total_token_count,
+        }
+    else:
+        return {}
+
+
 class InstructorEnrichClient(EnrichClient):
     def __init__(self,
                  response_model: BaseModel,
@@ -20,7 +33,7 @@ class InstructorEnrichClient(EnrichClient):
                  temperature: Optional[float] = None,
                  verbosity: Optional[str] = None,
                  reasoning_effort: Optional[str] = None):
-        self.response_model = response_model
+        self._response_model = response_model
         self.model = model
         self.provider = model.split('/')[0]
         self.api_key = key_for_provider(self.provider)
@@ -42,12 +55,21 @@ class InstructorEnrichClient(EnrichClient):
                 prompts.append({"role": "system", "content": self.system_prompt})
                 prompts.append({"role": "user", "content": prompt})
 
-            resp = self.client.chat.completions.create(
+            resp, completion = self.client.chat.completions.create_with_completion(
                 response_model=self.response_model,
                 messages=prompts,
-                response_format=type_to_response_format_param(self.response_model)
+                response_format=type_to_response_format_param(self.response_model),
             )
-            return resp, None
+            usage = normalize_usage(completion)
+            debug_metadata = DebugMetaData(
+                model=self.model,
+                prompt_tokens=usage.get("prompt_tokens", 0),
+                completion_tokens=usage.get("completion_tokens", 0),
+                reasoning_tokens=usage.get("reasoning_tokens", 0),
+                response_id=getattr(completion, 'id', None),
+                output=resp
+            )
+            return resp, debug_metadata
         except Exception as e:
             logger.error(f"Error during enrichment: {str(e)}")
             return None, None
@@ -60,3 +82,7 @@ class InstructorEnrichClient(EnrichClient):
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
         """Enrich a single prompt, now, and return debug metadata."""
         return self._enrich(prompt)[1]
+
+    @property
+    def response_model(self):
+        return self._response_model
