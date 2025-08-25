@@ -2,6 +2,7 @@ import os
 import logging
 import pathlib
 import getpass
+import json
 
 
 logger = logging.getLogger(__name__)
@@ -41,19 +42,22 @@ def ensure_data_subdir(subdir: str):
 
 def mount_key(keyname):
     keyname = keyname.lower().strip()
-    KEY_PATH = f"{DATA_PATH}/{keyname}.txt"
+    KEY_PATH = f"{DATA_PATH}/keys.json"
+    key_json = {}
     try:
         logger.info(f"Reading {keyname} API key from {KEY_PATH}")
         with open(KEY_PATH, "r") as f:
-            openai_key = f.read().strip()
+            key_json = json.load(f)
+            openai_key = key_json[keyname]
             globals()[keyname] = openai_key
             logger.info(f"{keyname} key loaded successfully.")
-    except FileNotFoundError:
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
         key = getpass.getpass(f"Enter your {keyname}: ")
+        key_json[keyname] = key
         with open(os.path.join(KEY_PATH), 'w') as f:
+            json.dump(key_json, f)
             logger.info(f"Saving {keyname} key to {KEY_PATH}")
-            f.write(key)
-            globals()[keyname] = key
+        globals()[keyname] = key
 
 
 def mount(use_gdrive=True, manual_path=None, load_keys=True):
@@ -88,11 +92,6 @@ def mount(use_gdrive=True, manual_path=None, load_keys=True):
             path_directory.mkdir(parents=True, exist_ok=True)
         DATA_PATH = path_directory
 
-    # Check for OpenAI key in data directory
-    if load_keys:
-        mount_key("OPENAI_API_KEY")
-        mount_key("OPENROUTER_API_KEY")
-
     logger.info(f"Mounting data directory at {DATA_PATH}")
 
 
@@ -108,8 +107,18 @@ def get_attr_key(keyname):
         logger.info(f"{keyname} available from previous mount.")
         return globals()[keyname]
     else:
-        logger.warning(f"{keyname} key not set. Please mount the data directory first.")
-        return ''
+        mount_key(keyname_env)
+
+
+def key_for_provider(provider: str) -> str:
+    if provider == "openai":
+        return get_attr_key("OPENAI_API_KEY")
+    if provider == "openrouter":
+        return get_attr_key("OPENROUTER_API_KEY")
+    if provider == "anthropic":
+        return get_attr_key("ANTHROPIC_API_KEY")
+    if provider == "google":
+        return get_attr_key("GOOGLE_API_KEY")
 
 
 def __getattr__(name):
@@ -120,5 +129,11 @@ def __getattr__(name):
         return get_attr_key("OPENAI_API_KEY")
     if name == "OPENROUTER_API_KEY":
         return get_attr_key("OPENROUTER_API_KEY")
+    if name == "ANTHROPIC_API_KEY":
+        return get_attr_key("ANTHROPIC_API_KEY")
+    if name == "GOOGLE_API_KEY":
+        return get_attr_key("GOOGLE_API_KEY")
+    if name == "DATA_PATH":
+        return DATA_PATH
 
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

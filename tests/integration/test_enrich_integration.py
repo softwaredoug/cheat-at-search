@@ -6,6 +6,13 @@ import tempfile
 from typing import Literal
 
 
+models_to_test = [
+    "openai/gpt-4.1-nano",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-4.1"
+]
+
+
 @pytest.fixture(scope="module")
 def mounted_data_dir():
     """
@@ -31,12 +38,13 @@ class ColorEnrichLiteral(BaseModel):
     )
 
 
+@pytest.mark.parametrize("model", models_to_test)
 @pytest.mark.parametrize("output_cls", [ColorEnrich, ColorEnrichLiteral])
-def test_simple_enrichment(mounted_data_dir, output_cls):
+def test_simple_enrichment(mounted_data_dir, output_cls, model):
 
     enricher = AutoEnricher(
-        model='gpt-4.1-nano',
-        system_prompt="You are a helpful AI assistant that very lightly spell-checks furniture e-commerce queries.",
+        model=model,
+        system_prompt="You are a helpful AI assistant that classifies e-commerce products",
         output_cls=output_cls,
     )
 
@@ -47,14 +55,15 @@ def test_simple_enrichment(mounted_data_dir, output_cls):
     """
 
     result = enricher.enrich(prompt)
-    assert result.color == "blue", f"Expected 'blue', got '{result.color}'"
+    assert result.color.lower() == "blue", f"Expected 'blue', got '{result.color}'"
 
 
-def test_simple_enrich_literal_respects_literals(mounted_data_dir):
+@pytest.mark.parametrize("model", models_to_test)
+def test_simple_enrich_literal_respects_literals(mounted_data_dir, model):
 
     enricher = AutoEnricher(
-        model='gpt-4.1-nano',
-        system_prompt="You are a helpful AI assistant that very lightly spell-checks furniture e-commerce queries.",
+        model=model,
+        system_prompt="You are a helpful AI assistant that classifies e-commerce products",
         output_cls=ColorEnrichLiteral
     )
 

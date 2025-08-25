@@ -1,6 +1,6 @@
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.cached_enrich_client import CachedEnrichClient
-from cheat_at_search.agent.openrouter_enrich_client import OpenRouterEnrichClient
+from cheat_at_search.agent.instructor_enrich_client import InstructorEnrichClient
 from typing import Optional
 from pydantic import BaseModel
 from typing import Tuple
@@ -21,7 +21,9 @@ class AutoEnricher:
                  reasoning_effort: Optional[str] = None,
                  verbosity: Optional[str] = None):
         self.system_prompt = system_prompt
-        self.enricher = OpenRouterEnrichClient(cls=output_cls, model=model, system_prompt=self.system_prompt,
+        self.enricher = InstructorEnrichClient(response_model=output_cls,
+                                               model=model,
+                                               system_prompt=self.system_prompt,
                                                temperature=temperature,
                                                verbosity=verbosity,
                                                reasoning_effort=reasoning_effort)

@@ -2,10 +2,10 @@ from cheat_at_search.agent.enrich_client import EnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
 import os
-import pickle
 from hashlib import md5
 from typing import Optional, Tuple
 from pydantic import BaseModel
+import json
 
 
 logger = log_to_stdout(logger_name="query_parser")
@@ -29,8 +29,8 @@ class CachedEnrichClient(EnrichClient):
         logger.info(f"Loading enrich cache from {self.cache_file}")
         if os.path.exists(self.cache_file):
             try:
-                with open(self.cache_file, 'rb') as f:
-                    self.cache = pickle.load(f)
+                with open(self.cache_file, 'r') as f:
+                    self.cache = json.load(f)
                     logger.info(f"Loaded {len(self.cache)} entries from cache.")
             except Exception as e:
                 logger.error(f"Error loading cache file {self.cache_file}: {str(e)}")
@@ -44,12 +44,12 @@ class CachedEnrichClient(EnrichClient):
 
     def save_cache(self):
         try:
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(self.cache, f)
+            with open(self.cache_file, 'w') as f:
+                json.dump(self.cache, f)
         except KeyboardInterrupt:
             logger.warning("Cache saving interrupted. Retrying save before raising exception.")
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(self.cache, f)
+            with open(self.cache_file, 'w') as f:
+                json.dump(self.cache, f)
             raise
 
     def prompt_key(self, prompt: str) -> str:
@@ -74,7 +74,7 @@ class CachedEnrichClient(EnrichClient):
         logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
         if enriched_data:
-            self.cache[prompt_key] = enriched_data
+            self.cache[prompt_key] = enriched_data.model_dump_json()
             self.save_cache()
         return enriched_data
 
