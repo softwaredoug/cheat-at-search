@@ -99,6 +99,7 @@ def key_for_provider(provider: str) -> str:
     keyname = provider.lower().strip()
     keyname_env = f"{keyname}_API_KEY".upper()
     logger.info(f"Looking for {keyname} in environment variables or globals...")
+    import pdb; pdb.set_trace()
     if os.getenv(keyname_env):
         openai_key = os.getenv(keyname_env)
         globals()[keyname] = openai_key
