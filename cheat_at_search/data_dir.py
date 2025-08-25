@@ -51,6 +51,7 @@ def mount_key(keyname):
             openai_key = key_json[keyname]
             globals()[keyname] = openai_key
             logger.info(f"{keyname} key loaded successfully.")
+            return openai_key
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
         key = getpass.getpass(f"Enter your {keyname}: ")
         key_json[keyname] = key
@@ -99,7 +100,6 @@ def key_for_provider(provider: str) -> str:
     keyname = provider.lower().strip()
     keyname_env = f"{keyname}_API_KEY".upper()
     logger.info(f"Looking for {keyname} in environment variables or globals...")
-    import pdb; pdb.set_trace()
     if os.getenv(keyname_env):
         openai_key = os.getenv(keyname_env)
         globals()[keyname] = openai_key
