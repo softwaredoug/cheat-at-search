@@ -2,7 +2,7 @@ import os
 import pathlib
 import getpass
 import json
-from cheat_at_search.logging_utils import log_to_stdout
+from cheat_at_search.logger import log_to_stdout
 
 
 logger = log_to_stdout(logger_name="data_dir")
