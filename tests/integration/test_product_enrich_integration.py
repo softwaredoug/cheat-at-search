@@ -1,6 +1,5 @@
 from cheat_at_search.wands_data import products
-from cheat_at_search.agent.enrich import AutoEnricher
-from cheat_at_search.agent.enrich import ProductEnricher
+from cheat_at_search.enrich import AutoEnricher, ProductEnricher
 import pytest
 import tempfile
 from cheat_at_search.data_dir import mount

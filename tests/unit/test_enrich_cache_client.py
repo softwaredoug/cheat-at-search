@@ -1,5 +1,4 @@
-from cheat_at_search.agent.cached_enrich_client import CachedEnrichClient
-from cheat_at_search.agent.enrich_client import EnrichClient, DebugMetaData
+from cheat_at_search.enrich import CachedEnrichClient, EnrichClient, DebugMetaData
 from pydantic import BaseModel
 from pydantic import Field
 import pytest

@@ -1,4 +1,4 @@
-from cheat_at_search.agent.enrich_client import EnrichClient, DebugMetaData
+from .enrich_client import EnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
 import os

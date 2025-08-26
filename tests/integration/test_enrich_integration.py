@@ -1,7 +1,7 @@
 from cheat_at_search.data_dir import mount
 import pytest
 from pydantic import BaseModel, Field
-from cheat_at_search.agent.enrich import AutoEnricher
+from cheat_at_search.enrich import AutoEnricher
 import tempfile
 from typing import Literal
 

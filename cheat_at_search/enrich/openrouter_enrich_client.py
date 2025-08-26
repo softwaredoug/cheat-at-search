@@ -1,5 +1,5 @@
 import requests
-from cheat_at_search.agent.enrich_client import EnrichClient, DebugMetaData
+from .enrich_client import EnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
 from typing import Optional, Tuple
 from pydantic import BaseModel
