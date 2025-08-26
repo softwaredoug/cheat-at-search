@@ -2,11 +2,11 @@ from cheat_at_search.strategy import BM25Search
 from cheat_at_search.wands_data import products, queries, ideal_top_10
 from cheat_at_search.eval import grade_results
 from cheat_at_search.data_dir import ensure_data_subdir
+from cheat_at_search.logger import log_to_stdout
 import pandas as pd
-import logging
 
 
-logger = logging.getLogger(__name__)
+logger = log_to_stdout(logger_name="search")
 
 
 def run_strategy(strategy):

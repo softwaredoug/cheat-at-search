@@ -2,6 +2,10 @@ from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.strategy.strategy import SearchStrategy
 import numpy as np
+from cheat_at_search.logger import log_to_stdout
+
+
+logger = log_to_stdout(logger_name="search")
 
 
 class BM25Search(SearchStrategy):

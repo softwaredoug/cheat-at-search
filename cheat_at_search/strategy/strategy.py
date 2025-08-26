@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from searcharray import SearchArray
+from tqdm import tqdm
 
 
 class SearchStrategy:
@@ -11,7 +12,7 @@ class SearchStrategy:
 
     def search_all(self, queries, k=10):
         all_results = []
-        for _, query_row in queries.iterrows():
+        for _, query_row in tqdm(queries.iterrows(), total=len(queries), desc="Searching"):
             top_k, scores = self.search(query_row['query'], k)
             query_id = query_row['query_id']
             ranks = np.arange(len(top_k)) + 1
