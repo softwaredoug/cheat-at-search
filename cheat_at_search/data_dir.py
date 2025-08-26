@@ -1,11 +1,11 @@
 import os
-import logging
 import pathlib
 import getpass
 import json
+from cheat_at_search.logging_utils import log_to_stdout
 
 
-logger = logging.getLogger(__name__)
+logger = log_to_stdout(logger_name="data_dir")
 
 
 def get_project_root():
