@@ -44,6 +44,17 @@ def _check_allowed_providers(provider: str):
         raise ValueError(f"Provider {provider} is not supported. Supported providers are: {allowed_providers}")
 
 
+def _best_mode(provider: str):
+    if provider == 'openai':
+        return instructor.Mode.JSON
+    elif provider == 'anthropic':
+        return None
+    elif provider == 'google':
+        return instructor.Mode.JSON
+    else:
+        raise ValueError(f"Provider {provider} is not supported for best mode selection.")
+
+
 class InstructorEnrichClient(EnrichClient):
     def __init__(self,
                  response_model: BaseModel,
@@ -60,7 +71,8 @@ class InstructorEnrichClient(EnrichClient):
         self.temperature = temperature
         self.verbosity = verbosity
         self.reasoning_effort = reasoning_effort
-        self.client = instructor.from_provider(model, api_key=self.api_key)
+        self.client = instructor.from_provider(model, api_key=self.api_key,
+                                               mode=_best_mode(self.provider))
 
     def str_hash(self):
         output_schema_hash = md5(json.dumps(self.response_model.model_json_schema(mode='serialization')).encode()).hexdigest()
@@ -76,7 +88,7 @@ class InstructorEnrichClient(EnrichClient):
 
             resp, completion = self.client.chat.completions.create_with_completion(
                 response_model=self.response_model,
-                messages=prompts
+                messages=prompts,
                 # response_format=type_to_response_format_param(self.response_model),
             )
             usage = normalize_usage(completion)
