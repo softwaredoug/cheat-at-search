@@ -62,6 +62,7 @@ def mount_key(keyname):
             json.dump(key_json, f)
             logger.info(f"Saving {keyname} key to {KEY_PATH}")
         globals()[keyname] = key
+        return key
 
 
 def mount(use_gdrive=True, manual_path=None, load_keys=True):
@@ -111,7 +112,7 @@ def key_for_provider(provider: str) -> str:
         logger.info(f"{keyname} available from previous mount.")
         return globals()[keyname]
     else:
-        mount_key(keyname_env)
+        return mount_key(keyname_env)
 
 
 def __getattr__(name):
