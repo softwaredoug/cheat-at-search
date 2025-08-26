@@ -53,6 +53,9 @@ def mount_key(keyname):
             logger.info(f"{keyname} key loaded successfully.")
             return openai_key
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        print("You're going to be prompted for your API key. This will be stored in a local file")
+        print("If you'd prefer to set it as an environment variable, set it as:")
+        print(f"    export {keyname.upper()}=your_api_key_here")
         key = getpass.getpass(f"Enter your {keyname}: ")
         key_json[keyname] = key
         with open(os.path.join(KEY_PATH), 'w') as f:
