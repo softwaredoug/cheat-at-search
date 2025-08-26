@@ -71,8 +71,10 @@ class InstructorEnrichClient(EnrichClient):
         self.temperature = temperature
         self.verbosity = verbosity
         self.reasoning_effort = reasoning_effort
+        mode = _best_mode(self.provider)
+        logger.info(f"Using provider: {self.provider}, model: {self.model}, mode: {mode}")
         self.client = instructor.from_provider(model, api_key=self.api_key,
-                                               mode=_best_mode(self.provider))
+                                               mode=mode)
 
     def str_hash(self):
         output_schema_hash = md5(json.dumps(self.response_model.model_json_schema(mode='serialization')).encode()).hexdigest()
