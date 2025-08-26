@@ -38,6 +38,12 @@ def normalize_usage(completion):
         return {}
 
 
+def _check_allowed_providers(provider: str):
+    allowed_providers = ['openai', 'anthropic', 'google']
+    if provider not in allowed_providers:
+        raise ValueError(f"Provider {provider} is not supported. Supported providers are: {allowed_providers}")
+
+
 class InstructorEnrichClient(EnrichClient):
     def __init__(self,
                  response_model: BaseModel,
