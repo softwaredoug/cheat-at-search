@@ -23,6 +23,10 @@ class DebugMetaData:
 
 
 class EnrichClient(ABC):
+
+    def __init__(self, response_model: BaseModel):
+        self.response_model = response_model
+
     @abstractmethod
     def enrich(self, prompt: str) -> Optional[BaseModel]:
         pass
@@ -33,8 +37,4 @@ class EnrichClient(ABC):
 
     @abstractmethod
     def str_hash(self) -> str:
-        pass
-
-    @property
-    def response_model(self):
         pass

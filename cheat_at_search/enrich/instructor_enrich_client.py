@@ -63,7 +63,7 @@ class InstructorEnrichClient(EnrichClient):
                  temperature: Optional[float] = None,
                  verbosity: Optional[str] = None,
                  reasoning_effort: Optional[str] = None):
-        self._response_model = response_model
+        super().__init__(response_model=response_model)
         self.model = model
         self.provider = model.split('/')[0]
         self.api_key = key_for_provider(self.provider)
@@ -115,7 +115,3 @@ class InstructorEnrichClient(EnrichClient):
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
         """Enrich a single prompt, now, and return debug metadata."""
         return self._enrich(prompt)[1]
-
-    @property
-    def response_model(self):
-        return self._response_model

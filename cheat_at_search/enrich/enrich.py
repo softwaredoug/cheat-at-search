@@ -2,6 +2,8 @@ from cheat_at_search.logger import log_to_stdout
 from .cached_enrich_client import CachedEnrichClient
 from .enrich_client import DebugMetaData
 from .instructor_enrich_client import InstructorEnrichClient
+from .openai_enrich_client import OpenAIEnricher
+from .google_enrich_client import GoogleEnrichClient
 from typing import Optional
 from pydantic import BaseModel
 from typing import Tuple
@@ -21,13 +23,25 @@ class AutoEnricher:
                  temperature: Optional[float] = None,
                  reasoning_effort: Optional[str] = None,
                  verbosity: Optional[str] = None):
+        self.provider = model.split('/')[0]
         self.system_prompt = system_prompt
-        self.enricher = InstructorEnrichClient(response_model=response_model,
+
+        if self.provider == 'openai':
+            self.enricher = OpenAIEnricher(response_model=response_model,
+                                           model=model,
+                                           system_prompt=self.system_prompt,
+                                           temperature=temperature if temperature is not None else 0.0)
+        elif self.provider == 'google':
+            self.enricher = GoogleEnrichClient(response_model=response_model,
                                                model=model,
-                                               system_prompt=self.system_prompt,
-                                               temperature=temperature,
-                                               verbosity=verbosity,
-                                               reasoning_effort=reasoning_effort)
+                                               system_prompt=self.system_prompt)
+        else:
+            self.enricher = InstructorEnrichClient(response_model=response_model,
+                                                   model=model,
+                                                   system_prompt=self.system_prompt,
+                                                   temperature=temperature,
+                                                   verbosity=verbosity,
+                                                   reasoning_effort=reasoning_effort)
         self.cached_enricher = CachedEnrichClient(self.enricher)
 
     def enrich(self, prompt: str) -> BaseModel:

@@ -8,8 +8,7 @@ from typing import Literal
 
 models_to_test = [
     "openai/gpt-4.1-nano",
-    "openai/gpt-4.1-mini",
-    "openai/gpt-4.1",
+    "openai/gpt-5-nano",
     "anthropic/claude-sonnet-4-20250514",
     "google/gemini-2.5-flash-lite",
 ]
@@ -29,7 +28,7 @@ def mounted_data_dir():
 class ColorEnrich(BaseModel):
     color: str = Field(
         ...,
-        description="The color to enrich",
+        description="The color of the product (ie red, blue, green, etc).",
     )
 
 
