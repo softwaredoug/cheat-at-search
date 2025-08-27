@@ -1,7 +1,6 @@
 from cheat_at_search.logger import log_to_stdout
 from .cached_enrich_client import CachedEnrichClient
 from .enrich_client import DebugMetaData
-from .instructor_enrich_client import InstructorEnrichClient
 from .openai_enrich_client import OpenAIEnricher
 from .google_enrich_client import GoogleEnrichClient
 from typing import Optional
@@ -36,12 +35,7 @@ class AutoEnricher:
                                                model=model,
                                                system_prompt=self.system_prompt)
         else:
-            self.enricher = InstructorEnrichClient(response_model=response_model,
-                                                   model=model,
-                                                   system_prompt=self.system_prompt,
-                                                   temperature=temperature,
-                                                   verbosity=verbosity,
-                                                   reasoning_effort=reasoning_effort)
+            raise ValueError(f"Provider {self.provider} is not supported. Supported providers are: ['openai', 'google']")
         self.cached_enricher = CachedEnrichClient(self.enricher)
 
     def enrich(self, prompt: str) -> BaseModel:
