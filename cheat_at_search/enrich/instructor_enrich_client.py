@@ -46,7 +46,7 @@ def _check_allowed_providers(provider: str):
 
 def _best_mode(provider: str):
     if provider == 'openai':
-        return instructor.Mode.JSON
+        return instructor.Mode.JSON_SCHEMA
     elif provider == 'anthropic':
         return None
     elif provider == 'google':
