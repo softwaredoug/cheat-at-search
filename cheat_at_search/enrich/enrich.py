@@ -42,17 +42,9 @@ class AutoEnricher:
         """Get the number of tokens for a prompt (runs directly, does not cache)."""
         return self.cached_enricher.enricher.get_num_tokens(prompt)
 
-    def batch(self, prompt: str, task_id) -> None:
-        """Add prompt to batch for processing."""
-        self.batch_enricher.enrich(prompt, task_id=task_id)
-
-    def submit_batch(self, entries_per_batch=1000):
-        """Submit the batch for enrichment."""
-        self.batch_enricher.submit(entries_per_batch=entries_per_batch)
-
-    def get_batch_output(self, prompt: str, task_id: str) -> Optional[BaseModel]:
-        """Get the output of a batch enrichment."""
-        return self.batch_enricher.get_output(task_id, prompt)
+    def delete_cache(self):
+        """Delete the cache."""
+        self.cached_enricher.delete_cache()
 
     @property
     def response_model(self):

@@ -52,6 +52,14 @@ class CachedEnrichClient(EnrichClient):
                 json.dump(self.cache, f)
             raise
 
+    def delete_cache(self):
+        """Delete the cache file and clear the in-memory cache."""
+        if os.path.exists(self.cache_file):
+            os.remove(self.cache_file)
+            logger.info(f"Deleted cache file {self.cache_file}.")
+        self.cache = {}
+        logger.info("Cleared in-memory cache.")
+
     def prompt_key(self, prompt: str) -> str:
         """Clean up the prompt to ensure it is suitable for caching."""
         # Remove all whitespace
