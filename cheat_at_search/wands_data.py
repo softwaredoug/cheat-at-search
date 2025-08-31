@@ -1,10 +1,9 @@
-import subprocess
 import logging
 from pathlib import Path
 import pandas as pd
 import numpy as np
 import sys
-from cheat_at_search.data_dir import DATA_PATH
+from cheat_at_search.data_dir import DATA_PATH, sync_git_repo
 
 
 logger = logging.getLogger(__name__)
@@ -26,50 +25,7 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/softwaredoug/W
     Returns:
         Path object pointing to the cloned repository
     """
-    # Convert to absolute path
-    data_path = Path(data_dir).absolute()
-
-    # Create directories if they don't exist
-    data_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Check if the directory already exists
-    if data_path.exists():
-        logger.info(f"Directory {data_path} already exists. Checking for updates...")
-        try:
-            subprocess.run(
-                ["git", "-C", str(data_path), "fetch", "origin"],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            subprocess.run(
-                ["git", "-C", str(data_path), "reset", "--hard", "origin/main"],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            logger.info(f"Updated WANDS dataset at {data_path}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to update WANDS dataset: {e.stderr}")
-            raise
-        return data_path
-
-    logger.info(f"Cloning WANDS dataset from {repo_url} to {data_path}")
-
-    try:
-        # Clone the repository
-        subprocess.run(
-            ["git", "clone", "--depth=1", repo_url, str(data_path)],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        logger.info(f"Successfully cloned WANDS dataset to {data_path}")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to clone WANDS dataset: {e.stderr}")
-        raise
-
-    return data_path
+    return sync_git_repo(data_dir, repo_url)
 
 
 def _products():

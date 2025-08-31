@@ -11,7 +11,7 @@ models_to_test = [
     "openai/gpt-4.1-nano",
     "openai/gpt-4.1-mini",
     "openai/gpt-4.1",
-    "anthropic/claude-sonnet-4-20250514"
+    "google/gemini-2.5-flash-lite",
 ]
 
 
@@ -43,10 +43,7 @@ rooms_as_list = list(get_args(Rooms))
 
 class Room(BaseModel):
     """
-    Represents a classification of a query.
-
-    In this case, hallucinated, something the model is making up that looks like one
-    of our classifications
+    Represents the room this furniture product goes in.
     """
     room: Literal[Rooms] = Field(
         description="The room this product belongs to"

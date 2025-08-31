@@ -3,6 +3,8 @@ import pathlib
 import getpass
 import json
 from cheat_at_search.logger import log_to_stdout
+import subprocess
+from pathlib import Path
 
 
 logger = log_to_stdout(logger_name="data_dir")
@@ -24,6 +26,53 @@ DATA_PATH = pathlib.Path(get_project_root()) / "data"
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
+
+
+def sync_git_repo(data_dir: str, repo_url: str):
+    # Convert to absolute path
+    data_path = Path(data_dir).absolute()
+
+    # Create directories if they don't exist
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Check if the directory already exists
+    if data_path.exists():
+        logger.info(f"Directory {data_path} already exists. Checking for updates...")
+        try:
+            subprocess.run(
+                ["git", "-C", str(data_path), "fetch", "origin"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            subprocess.run(
+                ["git", "-C", str(data_path), "reset", "--hard", "origin/main"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            logger.info(f"Updated {repo_url} dataset at {data_path}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to update {repo_url} dataset: {e.stderr}")
+            raise
+        return data_path
+
+    logger.info(f"Cloning dataset from {repo_url} to {data_path}")
+
+    try:
+        # Clone the repository
+        subprocess.run(
+            ["git", "clone", "--depth=1", repo_url, str(data_path)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        logger.info(f"Successfully cloned {repo_url} dataset to {data_path}")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to clone {repo_url} dataset: {e.stderr}")
+        raise
+
+    return data_path
 
 
 def ensure_data_subdir(subdir: str):
