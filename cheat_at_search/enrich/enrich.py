@@ -42,6 +42,34 @@ class AutoEnricher:
         """Enrich a single prompt, now, and cache the result."""
         return self.cached_enricher.enrich(prompt)
 
+    def enrich_all(self, prompts: list[str], workers=5, batch_size=100) -> list[BaseModel]:
+        """Enrich a list of prompts, using multiple threads, and cache the results."""
+        results = [None] * len(prompts)
+
+        def enrich_one(idx, prompt):
+            return idx, self.cached_enricher.enrich(prompt)
+
+        logger.info(f"Enriching {len(prompts)} prompts with {workers} workers and batch size {batch_size}")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            with tqdm(total=len(prompts), desc="Enriching prompts") as pbar:
+                for i in range(0, len(prompts), batch_size):
+                    batch_prompts = prompts[i:i + batch_size]
+
+                    futures = {
+                        executor.submit(enrich_one, idx + i, prompt): idx + i
+                        for idx, prompt in enumerate(batch_prompts)
+                    }
+
+                    for future in as_completed(futures):
+                        idx = futures[future]
+                        try:
+                            res_idx, enriched_data = future.result()
+                            results[res_idx] = enriched_data
+                        except Exception as e:
+                            logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
+                        pbar.update(1)
+        return results
+
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
         """Enrich a single prompt, now, and return debug metadata."""
         return self.cached_enricher.debug(prompt)

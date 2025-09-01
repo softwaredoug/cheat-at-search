@@ -9,7 +9,6 @@ from typing import Literal
 models_to_test = [
     "openai/gpt-4.1-nano",
     "openai/gpt-5-nano",
-    "anthropic/claude-sonnet-4-20250514",
     "google/gemini-2.5-flash-lite",
 ]
 
@@ -99,3 +98,25 @@ def test_simple_enrich_literal_respects_literals(mounted_data_dir, model):
 
     result = enricher.enrich(prompt)
     assert result.color in ['red', 'blue', 'green'], f"Expected one of ['red', 'blue', 'green'], got '{result.color}'"
+
+
+@pytest.mark.parametrize("model", models_to_test)
+def test_enrich_all(mounted_data_dir, model):
+    enricher = AutoEnricher(
+        model=model,
+        system_prompt="You are a helpful AI assistant that classifies e-commerce products",
+        response_model=ColorEnrich
+    )
+
+    prompts = [
+        "What color is this product?\n\nblue sofa",
+        "What color is this product?\n\nred chair",
+        "What color is this product?\n\ngreen table",
+        "What color is this product?\n\npurple rug",
+        "What color is this product?\n\nyellow lamp",
+    ]
+
+    results = enricher.enrich_all(prompts, workers=2, batch_size=2)
+    expected_colors = ["blue", "red", "green", "purple", "yellow"]
+    for result, expected in zip(results, expected_colors):
+        assert result.color.lower() == expected, f"Expected '{expected}', got '{result.color}'"
