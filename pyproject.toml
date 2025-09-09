@@ -14,7 +14,7 @@ dependencies = [
     "pystemmer (>=3.0.0,<4.0.0)",
     "openai (>=1.84.0,<2.0.0)",
     "google-genai (>=1.2.0,<2.0.0)",
-    "pyarrow (>=14.0.0,<20.0.0)",
+    "pyarrow (>=14.0.0,<22.0.0)",
 ]
 
 [tool.pylsp.plugins]
