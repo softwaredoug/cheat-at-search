@@ -1,6 +1,7 @@
 # server.py
 from typing import List, Dict
-from mcp.server.fastmcp import FastMCP, Tool
+from mcp.server.fastmcp import FastMCP
+from mcp.tools import Tool
 from cheat_at_search.wands_data import products
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
