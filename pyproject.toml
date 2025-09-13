@@ -16,6 +16,7 @@ dependencies = [
     "google-genai (>=1.2.0,<2.0.0)",
     "pyarrow (>=14.0.0,<22.0.0)",
     "fastmcp (>=2.12.3,<3.0.0)",
+    "pyngrok (>=7.3.0,<8.0.0)",
 ]
 
 [tool.pylsp.plugins]
