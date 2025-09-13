@@ -125,11 +125,15 @@ class ProductEnricher:
     def enrich_all(self, products: pd.DataFrame, workers=5, batch_size=100) -> pd.DataFrame:
         products = self._slice_out_searcharray_cols(products)
 
-        def enrich_one(product):
-            prompt = self.prompt_fn(product)
-            return self.enricher.enrich(prompt)
+        # Generate prompts for all products
+        prompts = [self.prompt_fn(row.to_dict()) for _, row in products.iterrows()]
 
-        def post_process(enriched_data):
+        # Use AutoEnricher's enrich_all method
+        enriched_results = self.enricher.enrich_all(prompts, workers=workers, batch_size=batch_size)
+
+        # Post-process results back into the dataframe
+        for idx, (_, row) in enumerate(products.iterrows()):
+            enriched_data = enriched_results[idx]
             if enriched_data:
                 for attr in self.attrs:
                     value = getattr(enriched_data, attr, None)
@@ -138,29 +142,10 @@ class ProductEnricher:
                         value = self.separator.join(map(str, value))
                     elif value is None:
                         value = ""
-                    products.at[idx, attr] = value if value is not None else ""
+                    products.at[row.name, attr] = value if value is not None else ""
             else:
-                logger.warning(f"Enrichment failed for product {products.get('product_id', 'unknown')}")
+                logger.warning(f"Enrichment failed for product {row.get('product_id', 'unknown')}")
                 for attr in self.attrs:
-                    products.at[idx, attr] = ""
+                    products.at[row.name, attr] = ""
 
-        logger.info(f"Enriching {len(products)} products immediately (non-batch)")
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            with tqdm(total=len(products), desc="Enriching products") as pbar:
-                for i in range(0, len(products), batch_size):
-                    batch_df = products.iloc[i:i + batch_size]
-
-                    futures = {
-                        executor.submit(enrich_one, row.to_dict()): idx
-                        for idx, row in batch_df.iterrows()
-                    }
-
-                    for future in as_completed(futures):
-                        idx = futures[future]
-                        try:
-                            enriched_data = future.result()
-                            post_process(enriched_data)
-                        except Exception as e:
-                            logger.error(f"Error enriching product at index {idx}: {str(e)}")
-                        pbar.update(1)
         return products

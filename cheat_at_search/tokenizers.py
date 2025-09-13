@@ -13,7 +13,7 @@ def stem_word(word):
 
 
 def snowball_tokenizer(text):
-    if type(text) == float:
+    if text is float:
         return ''
     if text is None:
         return ''
@@ -26,7 +26,7 @@ def snowball_tokenizer(text):
 def taxonomy_tokenizer(text):
     # Turn "/" into a special token that won't get stemmed
     text = text.replace('/', 'ddd')
-    if type(text) == float:
+    if text is float:
         return ''
     if text is None:
         return ''
@@ -37,7 +37,7 @@ def taxonomy_tokenizer(text):
 
 
 def ws_tokenizer(text):
-    if type(text) == float:
+    if text is float:
         return ''
     if text is None:
         return ''

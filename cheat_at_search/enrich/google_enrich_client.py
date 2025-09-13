@@ -11,6 +11,12 @@ from google import genai
 logger = log_to_stdout("google_enrich_client")
 
 
+def maybe_strip_markdown(text: str) -> str:
+    if text.startswith("```json") and text.endswith("```"):
+        return text[len("```json"): -len("```")].strip()
+    return text.strip()
+
+
 class GoogleEnrichClient(EnrichClient):
     def __init__(self, response_model: BaseModel, model: str, system_prompt: str = None,
                  temperature: float = 0.0):
@@ -53,7 +59,7 @@ class GoogleEnrichClient(EnrichClient):
                     temperature=self.temperature,
                 ),
             )
-            json_text = resp.text
+            json_text = maybe_strip_markdown(resp.text)
             usage = resp.usage_metadata
             obj = self.response_model.model_validate_json(json_text)
             debug = DebugMetaData(
