@@ -32,4 +32,4 @@ def serve_tool(fn, name: str = "search_products",
                                                       "host": "0.0.0.0",
                                                       "port": port}, daemon=True)
     thread.start()
-    return thread
+    return thread, public_url
