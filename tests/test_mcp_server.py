@@ -2,6 +2,7 @@ from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.wands_data import products
 from cheat_at_search.agent.mcp import serve_tool
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient
+from cheat_at_search.agent.search_client import ReasoningSearchStrategy
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict
 from openai import OpenAI
@@ -89,5 +90,32 @@ def test_calling_search_tool():
 
     """
     results = search_client.search(prompt)
-    import pdb; pdb.set_trace()
     assert len(results.results) > 0
+
+
+def test_reasoning_search_strategy():
+    thread, public_url = serve_tool(fn=search_products, name="search_products",
+                                    description="Search for products by product name and description",
+                                    port=8000)
+    time.sleep(1)
+
+    prompt = """
+        Reason carefully to find furniture products that match the following description, returning top 10 best results.
+
+        It's OK to repeatedly try different queries until you find the best ones.
+
+    """
+
+    search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5")
+    strategy = ReasoningSearchStrategy(products, search_client=search_client, prompt=prompt)
+    queries = [
+        "a couch for my really big butt",
+        "a small chair for my tiny apartment",
+        "a bed for a kid who loves space",
+        "a table for a fancy dinner party",
+        "a lamp for reading at night"
+    ]
+    for query in queries:
+        top_k, scores = strategy.search(query, k=5)
+        assert len(top_k) == 5
+        assert len(scores) == 5
