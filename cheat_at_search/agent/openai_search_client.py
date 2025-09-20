@@ -8,24 +8,31 @@ logger = log_to_stdout("openai_search_client")
 
 
 class OpenAISearchClient(SearchClient):
-    def __init__(self, mcp_url: str, model=str):
+    def __init__(self, mcp_url: str, model=str,
+                 system_prompt: str = "",
+                 response_model=SearchResults):
         self.mcp_url = mcp_url
         self.provider = model.split('/')[0]
         self.model = model.split('/')[-1]
         self.openai_key = key_for_provider("openai")
+        self.system_prompt = system_prompt
         if self.provider != 'openai':
             raise ValueError(f"Provider {self.provider} is not supported. This client only supports OpenAI.")
         if not self.mcp_url.endswith("/mcp"):
             self.mcp_url = self.mcp_url + "/mcp"
-        self.response_model = SearchResults
+        self.response_model = response_model
 
     def search(self, prompt: str) -> SearchResults:
         self.openai = OpenAI(api_key=self.openai_key)
-        logger.info(f"Calling MCP search tool at {self.mcp_url}")
+        logger.info(f"Calling MCP search tools at {self.mcp_url}")
+        input = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": prompt}
+        ]
         try:
             resp = self.openai.responses.parse(
                 model=self.model,
-                input=prompt,
+                input=input,
                 tools=[
                     {
                         "type": "mcp",

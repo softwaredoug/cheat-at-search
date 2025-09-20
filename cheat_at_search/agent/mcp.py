@@ -16,11 +16,13 @@ mcp = FastMCP("search-server",
               stateless_http=True)
 
 
-def serve_tool(fn, name: str = "search_products",
-               description: str = "Search for products by product name and description",
-               port=8000):
-    tool = Tool.from_function(fn, name=name, description=description)
-    mcp.add_tool(tool)
+def serve_tools(fns,
+                port=8000):
+    for fn in fns:
+        name = fn.__name__
+        description = fn.__doc__ or "No description provided"
+        tool = Tool.from_function(fn, name=name, description=description)
+        mcp.add_tool(tool)
     ngrok_key = key_for_provider('ngrok')
     ngrok.set_auth_token(ngrok_key)
     public_url = ngrok.connect(port, bind_tls=True).public_url
