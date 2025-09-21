@@ -1,7 +1,7 @@
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.wands_data import products
 from cheat_at_search.agent.mcp import serve_tools
-from cheat_at_search.agent.openai_search_client import OpenAISearchClient
+from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
 from cheat_at_search.agent.search_client import ReasoningSearchStrategy
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal
@@ -10,6 +10,7 @@ from searcharray import SearchArray
 import numpy as np
 from pydantic import BaseModel, Field
 import time
+import pytest
 
 
 openai_key = key_for_provider("openai")
@@ -27,7 +28,10 @@ products['description_snowball'] = SearchArray.index(products['product_descripti
 
 def search_products(query: str, top_k: int = 5) -> List[Dict]:
     """
-    Search for furniture products
+    Search for furniture products.
+
+    This is direct keyword search, no synonyms, only BM25 scoring on product name and description and
+    basic snowball tokenization of query and document.
 
     Args:
         query: The search query string.
@@ -199,3 +203,35 @@ def test_reasoning_search_strategy():
         top_k, scores = strategy.search(query, k=5)
         assert len(top_k) == 5
         assert len(scores) == 5
+
+
+# @pytest.mark.skip(reason="Interactive test")
+def test_interactive_chat():
+    thread, public_url = serve_tools(fns=[search_products, alt_search_products],
+                                     port=8000)
+    time.sleep(1)
+
+    system_prompt = """
+        You are an interactive chat client that can search furniture products for the user using the provided tools. You can also introspect
+        on the search backends answering any of the user's search queries.
+
+        Some messages will be short e-commerce search queries, so you'll need to reason about their intent and what might make them happy.
+
+        Other messages will be conversational messages about the search backends and how you used them.
+
+    """
+
+    search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5",
+                                       system_prompt=system_prompt)
+    chat_adapter = OpenAIChatAdapter(search_client)
+
+    while True:
+        message = input("User: ")
+        if message in ['reset']:
+            chat_adapter.reset()
+            print("Chat reset.")
+            continue
+        if message in ['exit', 'quit']:
+            break
+        response = chat_adapter.chat(message)
+        print("Assistant:", response)

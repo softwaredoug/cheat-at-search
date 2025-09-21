@@ -6,7 +6,7 @@ LogLevelType = Union[int, Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL
 
 def log_to_stdout(
     logger_name: Optional[str] = None,
-    level: LogLevelType = "INFO",
+    level: LogLevelType = "ERROR",
     format_string: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 ) -> logging.Logger:
     """

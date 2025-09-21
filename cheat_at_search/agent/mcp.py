@@ -35,3 +35,9 @@ def serve_tools(fns,
                                                       "port": port}, daemon=True)
     thread.start()
     return thread, public_url
+
+
+def stop_serving():
+    ngrok_process = ngrok.get_ngrok_process()
+    if ngrok_process:
+        ngrok.kill()
