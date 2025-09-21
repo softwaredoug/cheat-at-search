@@ -112,16 +112,52 @@ def alt_search_products(query: str, top_k: int = 5) -> List[Dict]:
         raise e
 
 
+class SearchInteraction(BaseModel):
+    user_query: str = Field(..., description="The original user search query")
+    search_tool_name: str = Field(..., description="The name of the search tool used")
+    search_tool_query: str = Field(..., description="The actual search query sent to the search tool")
+    quality: Literal['good', 'meh', 'bad'] = Field(..., description="The quality of the results returned by the search tool")
+    reasoning: str = Field(..., description="The reasoning for the quality rating")
+
+
+saved_search_interactions = {}
+
+
+def save_queries_used(search_interactions: List[SearchInteraction]) -> None:
+    """Store how you used tools and the quality of their results (so you can later retrieve for future occurrences of this user query)
+
+    Args:
+        search_interactions: A list of SearchInteraction objects representing the interactions to save.
+
+    """
+    saved_queries = list(saved_search_interactions.keys())
+    for interaction in search_interactions:
+        if interaction.user_query not in search_interactions:
+            saved_search_interactions[interaction.user_query] = []
+        saved_search_interactions[interaction.user_query].append(interaction)
+    print("Saved interactions for queries:", saved_queries)
+
+
+def get_past_queries(original_user_query: str) -> List[SearchInteraction]:
+    """Get the past queries used for a given user query.
+
+    Args:
+        original_user_query: The original user search query the user sent you.
+    """
+    if original_user_query in saved_search_interactions:
+        return saved_search_interactions[original_user_query]
+    return []
+
+
 def test_serving_search_tool():
-    thread, _ = serve_tools(fns=[search_products],
-                            port=8000)
+    thread, _ = serve_tools(fns=[search_products])
+
     time.sleep(1)
     thread.join(1)
 
 
 def test_calling_search_tool():
-    thread, public_url = serve_tools(fns=[search_products],
-                                     port=8000)
+    thread, public_url = serve_tools(fns=[search_products])
     time.sleep(1)
 
     search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5",
@@ -147,8 +183,7 @@ class PreferredSearchTool(BaseModel):
 
 
 def test_analyze_best_search_backend():
-    thread, public_url = serve_tools(fns=[search_products, alt_search_products],
-                                     port=8000)
+    thread, public_url = serve_tools(fns=[search_products, alt_search_products])
     time.sleep(1)
 
     system_prompt = """
@@ -174,8 +209,7 @@ def test_analyze_best_search_backend():
 
 
 def test_reasoning_search_strategy():
-    thread, public_url = serve_tools(fns=[search_products],
-                                     port=8000)
+    thread, public_url = serve_tools(fns=[search_products])
     time.sleep(1)
 
     system_prompt = """
@@ -207,8 +241,8 @@ def test_reasoning_search_strategy():
 
 # @pytest.mark.skip(reason="Interactive test")
 def test_interactive_chat():
-    thread, public_url = serve_tools(fns=[search_products, alt_search_products],
-                                     port=8000)
+    thread, public_url = serve_tools(fns=[search_products, alt_search_products,
+                                          save_queries_used, get_past_queries])
     time.sleep(1)
 
     system_prompt = """
@@ -217,7 +251,12 @@ def test_interactive_chat():
 
         Some messages will be short e-commerce search queries, so you'll need to reason about their intent and what might make them happy.
 
-        Other messages will be conversational messages about the search backends and how you used them.
+        Other messages will be conversational messages about the search backends and how you used them. You may be asked to execute tools directly
+        and report their results for diagnostic purposes.
+
+        As you search, record your evaluation of each query you used and the quality of the results, so you can use that with "save_queries_used" tool.
+
+        Before you search, retrieve any past queries used for this user query, and use that to inform your search with "get_past_queries" tool.
 
     """
 

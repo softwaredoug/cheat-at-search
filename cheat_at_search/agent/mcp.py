@@ -22,6 +22,8 @@ NEXT_PORT = 8000
 def serve_tools(fns):
     global NEXT_PORT
 
+    stop_serving()
+
     for fn in fns:
         name = fn.__name__
         description = fn.__doc__ or "No description provided"
