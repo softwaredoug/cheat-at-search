@@ -44,6 +44,8 @@ def serve_tools(fns):
 
 
 def stop_serving():
+    ngrok_key = key_for_provider('ngrok')
+    ngrok.set_auth_token(ngrok_key)
     ngrok_process = ngrok.get_ngrok_process()
     if ngrok_process:
         ngrok.kill()
