@@ -16,8 +16,12 @@ mcp = FastMCP("search-server",
               stateless_http=True)
 
 
-def serve_tools(fns,
-                port=8000):
+NEXT_PORT = 8000
+
+
+def serve_tools(fns):
+    global NEXT_PORT
+
     for fn in fns:
         name = fn.__name__
         description = fn.__doc__ or "No description provided"
@@ -25,6 +29,7 @@ def serve_tools(fns,
         mcp.add_tool(tool)
     ngrok_key = key_for_provider('ngrok')
     ngrok.set_auth_token(ngrok_key)
+    port = NEXT_PORT
     public_url = ngrok.connect(port, bind_tls=True).public_url
     print(" * Ngrok public URL:", public_url)
 
@@ -34,6 +39,7 @@ def serve_tools(fns,
                                                       "host": "0.0.0.0",
                                                       "port": port}, daemon=True)
     thread.start()
+    NEXT_PORT += 1
     return thread, public_url
 
 
