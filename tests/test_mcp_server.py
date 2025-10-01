@@ -1,16 +1,13 @@
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.wands_data import products
-from cheat_at_search.agent.mcp import serve_tools
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
-from cheat_at_search.agent.search_client import ReasoningSearchStrategy
+from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal
 from openai import OpenAI
 from searcharray import SearchArray
 import numpy as np
 from pydantic import BaseModel, Field
-import time
-import pytest
 
 
 openai_key = key_for_provider("openai")
@@ -149,18 +146,11 @@ def get_past_queries(original_user_query: str) -> List[SearchInteraction]:
     return []
 
 
-def test_serving_search_tool():
-    thread, _ = serve_tools(fns=[search_products])
-
-    time.sleep(1)
-    thread.join(1)
-
-
 def test_calling_search_tool():
-    thread, public_url = serve_tools(fns=[search_products])
-    time.sleep(1)
+    # thread, public_url = serve_tools(fns=[search_products])
+    # time.sleep(1)
 
-    search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5",
+    search_client = OpenAISearchClient(tools=[search_products], model="openai/gpt-5",
                                        system_prompt="You are a helpful assistant that helps people find furniture products.")
     prompt = """
         Reason carefully to find furniture products that match the following description, returning top 10 best results.
@@ -183,9 +173,6 @@ class PreferredSearchTool(BaseModel):
 
 
 def test_analyze_best_search_backend():
-    thread, public_url = serve_tools(fns=[search_products, alt_search_products])
-    time.sleep(1)
-
     system_prompt = """
         You are a helpful assistant that analyzes the best search tool for finding furniture products.
     """
@@ -201,7 +188,8 @@ def test_analyze_best_search_backend():
 
     """
 
-    search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5",
+    search_client = OpenAISearchClient(tools=[search_products, alt_search_products],
+                                       model="openai/gpt-5",
                                        system_prompt=system_prompt,
                                        response_model=PreferredSearchTool)
     preferred_tool = search_client.search(prompt)
@@ -209,9 +197,6 @@ def test_analyze_best_search_backend():
 
 
 def test_reasoning_search_strategy():
-    thread, public_url = serve_tools(fns=[search_products])
-    time.sleep(1)
-
     system_prompt = """
         You are a helpful assistant that helps people find furniture products.
     """
@@ -223,7 +208,8 @@ def test_reasoning_search_strategy():
 
     """
 
-    search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5",
+    search_client = OpenAISearchClient(tools=[search_products],
+                                       model="openai/gpt-5",
                                        system_prompt=system_prompt)
     strategy = ReasoningSearchStrategy(products, search_client=search_client, prompt=prompt)
     queries = [
@@ -237,40 +223,3 @@ def test_reasoning_search_strategy():
         top_k, scores = strategy.search(query, k=5)
         assert len(top_k) == 5
         assert len(scores) == 5
-
-
-# @pytest.mark.skip(reason="Interactive test")
-def test_interactive_chat():
-    thread, public_url = serve_tools(fns=[search_products, alt_search_products,
-                                          save_queries_used, get_past_queries])
-    time.sleep(1)
-
-    system_prompt = """
-        You are an interactive chat client that can search furniture products for the user using the provided tools. You can also introspect
-        on the search backends answering any of the user's search queries.
-
-        Some messages will be short e-commerce search queries, so you'll need to reason about their intent and what might make them happy.
-
-        Other messages will be conversational messages about the search backends and how you used them. You may be asked to execute tools directly
-        and report their results for diagnostic purposes.
-
-        As you search, record your evaluation of each query you used and the quality of the results, so you can use that with "save_queries_used" tool.
-
-        Before you search, retrieve any past queries used for this user query, and use that to inform your search with "get_past_queries" tool.
-
-    """
-
-    search_client = OpenAISearchClient(mcp_url=public_url, model="openai/gpt-5",
-                                       system_prompt=system_prompt)
-    chat_adapter = OpenAIChatAdapter(search_client)
-
-    while True:
-        message = input("User: ")
-        if message in ['reset']:
-            chat_adapter.reset()
-            print("Chat reset.")
-            continue
-        if message in ['exit', 'quit']:
-            break
-        response = chat_adapter.chat(message)
-        print("Assistant:", response)
