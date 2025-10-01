@@ -1,10 +1,10 @@
-from cheat_at_search.wands_data import products
+from cheat_at_search.wands_data import enriched_products
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.search import run_strategy
 from cheat_at_search.tokenizers import snowball_tokenizer
-from typing import List, Dict, Literal
+from typing import List, Dict, Literal, Optional
 from searcharray import SearchArray
 import numpy as np
 from pydantic import BaseModel, Field
@@ -18,7 +18,8 @@ from sentence_transformers import SentenceTransformer
 class SearchInteraction(BaseModel):
     user_query: str = Field(..., description="The original user search query")
     search_tool_name: str = Field(..., description="The name of the search tool used")
-    search_tool_query: str = Field(..., description="The actual search query sent to the search tool")
+    search_tool_query: str = Field(..., description="The actual search keywords sent to the search tool")
+    search_tool_category: Optional[str] = Field(None, description="The category filter sent to the search tool, if any")
     quality: Literal['good', 'meh', 'bad'] = Field(..., description="The quality of the results returned by the search tool")
     reasoning: str = Field(..., description="The reasoning for the quality rating")
 
@@ -95,6 +96,9 @@ def get_past_queries(original_user_query: str) -> List[PastQueriesResponse]:
     threshold = 0.8
     embedded = model.encode(original_user_query)
     embedded /= np.linalg.norm(embedded)
+    if embedded.shape != (query_embeddings.shape[1],):
+        print("Embedding shape mismatch, returning empty.")
+        return []
     sims = np.dot(query_embeddings, embedded)
     above_thresh = np.where(sims > threshold)[0]
     matched_queries = queries[above_thresh]
@@ -109,22 +113,52 @@ def get_past_queries(original_user_query: str) -> List[PastQueriesResponse]:
     return past_queries_resp
 
 
-products['product_name_snowball'] = SearchArray.index(products['product_name'],
-                                                      tokenizer=snowball_tokenizer)
+enriched_products['product_name_snowball'] = SearchArray.index(enriched_products['product_name'],
+                                                               tokenizer=snowball_tokenizer)
 
-products['description_snowball'] = SearchArray.index(products['product_description'],
-                                                     tokenizer=snowball_tokenizer)
+enriched_products['description_snowball'] = SearchArray.index(enriched_products['product_description'],
+                                                              tokenizer=snowball_tokenizer)
 
 
-def search_products(keywords: str, top_k: int = 5) -> List[Dict]:
+enriched_products['category_snowball'] = SearchArray.index(enriched_products['category'],
+                                                           tokenizer=snowball_tokenizer)
+
+
+Categories = Literal['Furniture', 'Kitchen & Tabletop', 'Browse By Brand',
+                     'Home Improvement', 'Décor & Pillows', 'Outdoor',
+                     'Storage & Organization', 'Bed & Bath', 'Baby & Kids',
+                     'Pet', 'Lighting', 'Rugs', 'School Furniture and Supplies',
+                     'Commercial Business Furniture', 'Holiday Décor', 'Fountains',
+                     'Contractor', 'Appliances', 'Sale', 'Reception Area',
+                     'Foodservice', 'Institutional Furniture Parts & Accessories',
+                     'Landscaping Screens & Bridges', 'Shop Product Type', 'Clips',
+                     'Slicers, Peelers And Graters', 'Bed Accessories',
+                     'Accommodations', 'Buffet Accessories', 'Specialty Serving',
+                     'Display Cases', 'Key Organizers', 'Ergonomic Accessories',
+                     'Slow Cookers', 'Bath Rugs & Mats', 'Furniture Cushions',
+                     'Early Education', 'Learning Resources',
+                     'Physical Education Equipment', 'Faux Plants and Trees',
+                     'Desk Parts', 'Serving Dishes & Platters', 'Water Filter Pitchers',
+                     'Shower Curtain Rods', 'Table Accessories',
+                     'Sandboxes & Sand Toys', 'Meeting & Collaborative Spaces',
+                     'Desktop Organizers & Desk Pads',
+                     'Napkin Rings, Place Card Holders & Food Markers',
+                     'Partition & Panel Hardware Accessories', 'Cash Handling', 'Hooks',
+                     'Novelty Lighting', 'Protection Plans',
+                     'Stages, Risers and Accessories']
+
+
+def search_products(keywords: str,
+                    category: Optional[Categories] = None,
+                    top_k: int = 5) -> List[Dict]:
     """
-    Search for furniture products with the given keywords.
+    Search for furniture products with the given keywords and filters
 
-    This is direct keyword search, no synonyms, only BM25 scoring on product name and description and
-    basic snowball tokenization of query and document.
+    This is direct keyword search along with optional category filtering.
 
     Args:
         keywords: The search query string.
+        category: category to filter products by.
         top_k: The number of top results to return.
 
     Returns:
@@ -133,14 +167,21 @@ def search_products(keywords: str, top_k: int = 5) -> List[Dict]:
     """
     print("Searching for:", keywords, "top_k:", top_k)
     query_tokens = snowball_tokenizer(keywords)
-    scores = np.zeros(len(products))
+    scores = np.zeros(len(enriched_products))
     for token in query_tokens:
-        scores += products['product_name_snowball'].array.score(token) * 10
-        scores += products['description_snowball'].array.score(token)
+        scores += enriched_products['product_name_snowball'].array.score(token) * 10
+        scores += enriched_products['description_snowball'].array.score(token)
+
+    # Filter by category
+    if category:
+        print("Filtering by category:", category)
+        cat_tokenized = snowball_tokenizer(category)
+        category_mask = enriched_products['category_snowball'].array.score(cat_tokenized) > 0
+        scores = scores * category_mask
 
     top_k_indices = np.argsort(scores)[-top_k:][::-1]
     scores = scores[top_k_indices]
-    top_products = products.iloc[top_k_indices].copy()
+    top_products = enriched_products.iloc[top_k_indices].copy()
     top_products.loc[:, 'score'] = scores
 
     results = []
@@ -150,6 +191,7 @@ def search_products(keywords: str, top_k: int = 5) -> List[Dict]:
             'id': id,
             'product_name': row['product_name'],
             'product_description': row['product_description'],
+            'category': row['category'],
             'score': row['score']
         })
     print(f"Keywords {keywords} -- Found {len(results)} results")
@@ -180,7 +222,7 @@ def chat():
         Outside of searches, respond to questions about your behavior (in these cases, you should not use a tool).
     """
 
-    search_client = OpenAISearchClient(search_tools=[search_products, save_queries, get_past_queries],
+    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries],
                                        model="openai/gpt-5",
                                        system_prompt=system_prompt,
                                        response_model=None)
@@ -216,11 +258,11 @@ def search_wands():
         Finally return results to the user per the SearchResults schema.
     """
 
-    search_client = OpenAISearchClient(search_tools=[search_products, save_queries, get_past_queries],
+    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries],
                                        model="openai/gpt-5",
                                        system_prompt=system_prompt,
                                        response_model=None)
-    strategy = ReasoningSearchStrategy(products, search_client,
+    strategy = ReasoningSearchStrategy(enriched_products, search_client,
                                        prompt="")
     graded_results = run_strategy(strategy)
     ndcg = graded_results['ndcg'].mean()
