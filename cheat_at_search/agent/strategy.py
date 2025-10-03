@@ -17,14 +17,16 @@ class ReasoningSearchStrategy(SearchStrategy):
         self.prompt = prompt
         self.cache = None
         if cache:
-            system_prompt = self.search_cliest.system_prompt
+            system_prompt = self.search_client.system_prompt
             self.prompt_hash = md5((prompt + system_prompt).encode('utf-8')).hexdigest()[:8]
             self.cache_path = cached_results_dir / f"reasoning_search_cache_{self.prompt_hash}.pkl"
             self.cache = {}
             try:
                 with open(self.cache_path, "rb") as f:
                     self.cache = pickle.load(f)
+                    print(f"Loaded {len(self.cache)} cached search results from", self.cache_path)
             except FileNotFoundError:
+                print("No existing cache found at", self.cache_path, "starting fresh.")
                 pass
 
     def search(self, query, k=10):
@@ -40,8 +42,11 @@ class ReasoningSearchStrategy(SearchStrategy):
         for result in search_results.results[:k]:
             top_k.append(int(result.id))
             scores.append(result.score)
+
         if self.cache is not None:
             self.cache[query] = (top_k, scores)
             with open(self.cache_path, "wb") as f:
                 pickle.dump(self.cache, f)
+        else:
+            print("Not caching")
         return top_k, scores

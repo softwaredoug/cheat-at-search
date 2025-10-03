@@ -2,8 +2,8 @@ from cheat_at_search.wands_data import enriched_products, queries as wands_queri
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
-from cheat_at_search.search import run_strategy
-from cheat_at_search.strategy import BM25Search
+from cheat_at_search.search import run_strategy, vs_ideal
+from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
 from cheat_at_search.agent.judgments import get_human_judgments
 from cheat_at_search.tokenizers import snowball_tokenizer
@@ -218,10 +218,54 @@ system_few_shot_prompt = """
 """
 
 
+system_few_shot_no_history_prompt = """
+    You take user search queries and use a search tool to find furniture products. Examples
+    of labeled query-product pairs are listed at the bottom of this prompt to help you
+    understand how we will evaluate your results.
+
+    Look at the search tools you have, their limitations, how they work, etc when forming your plan.
+
+    Finally return results to the user per the SearchResults schema, ranked best to worst.
+
+    Gather results until you have 10 best matches you can find. It's important to return at least 10.
+
+    It's very important you consider carefully the correct ranking as you'll be evaluated on
+    how close that is to the average furniture shoppers ideal ranking.
+
+    Finally, some examples:
+"""
+
+system_few_shot_judgmens_no_history_prompt = """
+    You take user search queries and use a search tool to find furniture products. Examples
+    of labeled query-product pairs are listed at the bottom of this prompt to help you
+    understand how we will evaluate your results.
+
+    Before searching you MUST use the "get_human_judgments" tool to get a few human evaluations
+    for this query. If any are found, use that to evaluate the relevance of results you find,
+    as user expectations and intent may be different than what you expect.
+
+    Look at the search tools you have, their limitations, how they work, etc when forming your plan.
+
+    Finally return results to the user per the SearchResults schema, ranked best to worst.
+
+    Gather results until you have 10 best matches you can find. It's important to return at least 10.
+
+    It's very important you consider carefully the correct ranking as you'll be evaluated on
+    how close that is to the average furniture shoppers ideal ranking.
+
+    It's very important to rank as close to the human judgments as possible, with those results labeled 'Exact'
+    should be ranked highest. Partial is a mediocre result. Irrelevant should be avoided.
+
+    Ordering Exact above Partial above Irrelevant is what you're evaluated against
+
+    Finally, some general examples:
+"""
+
+
 def agent_search_wands(use_old=True,
                        prompt=system_no_judgments_prompt,
                        iterations=5,
-                       num_queries=20,
+                       num_queries=5,
                        addl_tools=None,
                        seed=42):
     if not use_old:
@@ -235,13 +279,19 @@ def agent_search_wands(use_old=True,
     queries = shuffled_queries[:num_queries]
     print(f"QUERIES: {queries}")
 
+    # Get best possible
+    best_possible = BestPossibleResults(enriched_products)
+    graded_best_possible = run_strategy(best_possible, queries)
+    best_possible_ndcg = graded_best_possible['ndcg'].mean()
+    print(f"Best Possible NDCG: {best_possible_ndcg}")
+
     # Run BM25 baseline
     bm25 = BM25Search(enriched_products)
     graded_bm25 = run_strategy(bm25, queries)
     bm25_ndcg = graded_bm25['ndcg'].mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
 
-    tools = [search_products, save_queries, get_past_queries]
+    tools = [search_products]
     if addl_tools:
         tools.extend(addl_tools)
 
@@ -250,7 +300,7 @@ def agent_search_wands(use_old=True,
                                        system_prompt=prompt)
     strategy = ReasoningSearchStrategy(enriched_products, search_client,
                                        prompt="",
-                                       cache=False)
+                                       cache=iterations == 1)
     ndcgs = []
     for iter in range(iterations):
         print(f"--- Iteration {iter + 1} of {iterations} ---")
@@ -263,9 +313,20 @@ def agent_search_wands(use_old=True,
         # Now index past interactions to get the benefit on next iteration
         saved_queries, query_embeddings = index()
 
+    print(f"Ideal NDCG: {best_possible_ndcg}")
     print(f"Baseline NDCG: {bm25_ndcg}")
     for idx, ndcg in enumerate(ndcgs):
         print(f"Iteration {idx + 1}: NDCG {ndcg}")
+
+    vs_ideal_bm25_df = vs_ideal(graded_bm25)
+    vs_ideal_bm25_df = vs_ideal_bm25_df[vs_ideal_bm25_df['query'].isin(queries['query'])]
+    print("--- BM25 Vs Ideal Top 10 ---")
+    print(vs_ideal_bm25_df.head(20).to_string())
+
+    vs_ideal_df = vs_ideal(graded_results)
+    vs_ideal_df = vs_ideal_df[vs_ideal_df['query'].isin(queries['query'])]
+    print("--- Agent Vs Ideal Top 10 ---")
+    print(vs_ideal_df.head(20).to_string())
 
 
 class PostAgentStrategy(SearchStrategy):
@@ -287,7 +348,7 @@ class PostAgentStrategy(SearchStrategy):
                 all_results.extend(results)
 
 
-def build_few_shot_prompt(k=10) -> str:
+def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt) -> str:
     labeled_query_products.sample(5, random_state=42)
 
     labeled = labeled_query_products
@@ -305,7 +366,6 @@ def build_few_shot_prompt(k=10) -> str:
 
     # Format into prompt
     labeled = pd.concat([relevant, irrelevant, partial]).sample(frac=1, random_state=42)
-    prompt = system_few_shot_prompt
     for item in labeled.to_dict(orient='records'):
         print(item)
         prompt += f"""
@@ -324,27 +384,51 @@ def build_few_shot_prompt(k=10) -> str:
 
 if __name__ == "__main__":
     seed = 43
+    num_queries = 5
+    iterations = 1
+
     if sys.argv[-1] == "post_agent_search":
         strategy = PostAgentStrategy(enriched_products)
         graded_results = run_strategy(strategy, wands_queries[:20])
         ndcg = graded_results['ndcg'].mean()
         print(f"Overall NDCG: {ndcg}")
-    if sys.argv[-1] == "search_no_judgments":
-        agent_search_wands(use_old=False, iterations=3,
-                           num_queries=10,
+    if sys.argv[-1] == "search_hist_no_judgments":
+        agent_search_wands(use_old=False,
+                           iterations=iterations,
+                           num_queries=num_queries,
+                           addl_tools=[save_queries,
+                                       get_past_queries],
                            prompt=system_no_judgments_prompt,
                            seed=seed)
-    elif sys.argv[-1] == "search_with_judgments":
-        agent_search_wands(use_old=False, iterations=3,
-                           num_queries=10,
-                           addl_tools=[get_human_judgments],
+    elif sys.argv[-1] == "search_with_hist_judgments":
+        agent_search_wands(use_old=False,
+                           iterations=iterations,
+                           num_queries=num_queries,
+                           addl_tools=[get_human_judgments,
+                                       save_queries,
+                                       get_past_queries],
                            prompt=system_prompt_judgments,
+                           seed=seed)
+    elif sys.argv[-1] == "search_few_shot_hist":
+        agent_search_wands(use_old=False,
+                           iterations=iterations,
+                           num_queries=num_queries,
+                           addl_tools=[save_queries,
+                                       get_past_queries],
+                           prompt=build_few_shot_prompt(10, prompt=system_few_shot_prompt),
                            seed=seed)
     elif sys.argv[-1] == "search_few_shot":
         agent_search_wands(use_old=False,
-                           iterations=1,
-                           num_queries=30,
-                           prompt=build_few_shot_prompt(10),
+                           iterations=iterations,
+                           num_queries=num_queries,
+                           prompt=build_few_shot_prompt(10, prompt=system_few_shot_no_history_prompt),
+                           seed=seed)
+    elif sys.argv[-1] == "search_few_shot_judgments":
+        agent_search_wands(use_old=False,
+                           iterations=iterations,
+                           num_queries=num_queries,
+                           addl_tools=[get_human_judgments],
+                           prompt=build_few_shot_prompt(10, prompt=system_few_shot_judgmens_no_history_prompt),
                            seed=seed)
     else:
         chat()
