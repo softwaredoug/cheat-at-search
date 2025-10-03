@@ -1,14 +1,17 @@
-from cheat_at_search.wands_data import enriched_products
+from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
+from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.search import run_strategy
+from cheat_at_search.strategy import BM25Search
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal, Optional
 from searcharray import SearchArray
 import numpy as np
 from pydantic import BaseModel, Field
 import pickle
+import pandas as pd
 import sys
 from time import perf_counter
 
@@ -55,12 +58,12 @@ def _index_search_queries():
     return unique_queries, embeds
 
 
-queries = np.array([])
+saved_queries = np.array([])
 query_embeddings = np.array([])
 try:
     with open(cached_interactions_dir / "saved_search_interactions.pkl", "rb") as f:
         saved_search_interactions = pickle.load(f)
-        queries, query_embeddings = _index_search_queries()
+        saved_queries, query_embeddings = _index_search_queries()
 except FileNotFoundError:
     print("No saved interactions file found, starting fresh.")
 
@@ -83,6 +86,47 @@ def save_queries(search_tool_interactions: list[SearchInteraction]) -> None:
         pickle.dump(saved_search_interactions, f)
 
 
+class HumanEvaluation(BaseModel):
+    """A human judgment of a search result for a given user query."""
+    user_query: str = Field(..., description="The original user search query")
+    human_label: str = Field(..., description="The human judgment label for the search results")
+    product_name: str = Field(..., description="The name of the product judged")
+    product_description: str = Field(..., description="The description of the product judged")
+
+
+def get_human_judgments(user_query: str) -> List[HumanEvaluation]:
+    """Get a sample of human judgments for a given user query (the ground truth you're evaluated against).
+
+       It's ok to use this, its not cheating!
+
+       Returns list of human evaluations
+    """
+    K = 10
+    labeled = labeled_query_products.loc[labeled_query_products['query'] == user_query]
+    if len(labeled) == 0:
+        return []
+    relevant = labeled[labeled['label'] == 'Exact']
+    irrelevant = labeled[labeled['label'] == 'Irrelevant']
+    # Get 3 relevant
+    relevant = relevant.sample(min(3, len(relevant)), random_state=42)
+    # Get 3 irrelevant
+    irrelevant = irrelevant.sample(min(3, len(irrelevant)), random_state=42)
+    # Get the rest Partial
+    partial = labeled[labeled['label'] == 'Partial']
+    partial = partial.sample(min(K - len(relevant) - len(irrelevant), len(partial)), random_state=42)
+
+    labeled = pd.concat([relevant, irrelevant, partial]).sample(frac=1, random_state=42)
+
+    results: List[HumanEvaluation] = []
+    for item in labeled.to_dict(orient='records'):
+        results.append(HumanEvaluation(user_query=user_query,
+                                       human_label=item['label'],
+                                       product_name=item['product_name'],
+                                       product_description=item['product_description']))
+
+    return results
+
+
 def get_past_queries(original_user_query: str) -> List[PastQueriesResponse]:
     """Get the past queries used for a given user query.
 
@@ -96,12 +140,15 @@ def get_past_queries(original_user_query: str) -> List[PastQueriesResponse]:
     threshold = 0.8
     embedded = model.encode(original_user_query)
     embedded /= np.linalg.norm(embedded)
-    if embedded.shape != (query_embeddings.shape[1],):
-        print("Embedding shape mismatch, returning empty.")
+    try:
+        if embedded.shape != (query_embeddings.shape[1],):
+            print("Embedding shape mismatch, returning empty.")
+            return []
+    except IndexError:
         return []
     sims = np.dot(query_embeddings, embedded)
     above_thresh = np.where(sims > threshold)[0]
-    matched_queries = queries[above_thresh]
+    matched_queries = saved_queries[above_thresh]
     sims = sims[above_thresh]
 
     past_queries_resp: List[PastQueriesResponse] = []
@@ -206,7 +253,9 @@ def chat():
 
         1. Look at the search tool you have, its limitations, how it work, etc when forming your plan.
 
-        2. Before searching, use the "get_past_queries" to get similar, past queries the user has made to
+        2. Before searching, use the "get_human_judgments" tool to get the ground truth human judgments for this user query. If anything shows up, use that interpret user intent and evaluate relevance of results you find.
+
+        3. Before searching, use the "get_past_queries" to get similar, past queries the user has made to
         gain insight on how to best search for this user query using the available tool
 
         4. Issue searches in one call to "search_products" tool.
@@ -222,7 +271,8 @@ def chat():
         Outside of searches, respond to questions about your behavior (in these cases, you should not use a tool).
     """
 
-    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries],
+    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries,
+                                              get_human_judgments],
                                        model="openai/gpt-5",
                                        system_prompt=system_prompt,
                                        response_model=None)
@@ -243,34 +293,203 @@ def chat():
         print("Assistant:", response)
 
 
-def search_wands():
-    system_prompt = """
-        You take user search queries and use a search tool to find furniture products.
+system_no_judgments_prompt = """
+    You take user search queries and use a search tool to find furniture products.
 
-        Look at the search tools you have, their limitations, how they work, etc when forming your plan.
+    Look at the search tools you have, their limitations, how they work, etc when forming your plan.
 
-        Before searching you MUST use the "get_past_queries" to get similar, past queries
-        the user has made
+    Before searching you MUST use the "get_past_queries" to get similar, past queries
+    you have made to tools and whether they were successful. This should help you plan how to
+    use tools to satisfy user intent.
 
-        Remember every tool usage you make. After searching with a tool, evaluate the results,
-        then save the interaction (immediately after tool usage) with the "save_queries_used" tool
+    Remember every tool usage you make. After searching with a tool, evaluate the results,
+    then save the interaction (immediately after tool usage) with the "save_queries_used" tool
 
-        Finally return results to the user per the SearchResults schema.
-    """
+    Finally return results to the user per the SearchResults schema, ranked best to worst.
 
-    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries],
+    Gather results until you have 10 best matches you can find. It's important to return at least 10.
+
+    It's very important you consider carefully the correct ranking as you'll be evaluated on
+    how close that is to the average furniture shoppers ideal ranking.
+"""
+
+system_prompt_judgments = """
+    You take user search queries and use a search tool to find furniture products.
+
+    Look at the search tools you have, their limitations, how they work, etc when forming your plan.
+
+    Before searching you MUST use the "get_past_queries" to get similar, past queries
+    you have made to tools and whether they were successful. This should help you plan how to
+    use tools to satisfy user intent.
+
+    Before searching you MUST use the "get_human_judgments" tool to get a few human evaluations
+    for this query. If any are found, use that to evaluate the relevance of results you find,
+    as user expectations and intent may be different than what you expect.
+
+    Remember every tool usage you make. After searching with a tool, evaluate the results,
+    then save the interaction (immediately after tool usage) with the "save_queries_used" tool
+
+    Finally return results to the user per the SearchResults schema, ranked best to worst.
+
+    Gather results until you have 10 best matches you can find. It's important to return at least 10.
+
+    It's very important you consider carefully the correct ranking as you'll be evaluated on
+    how close that is to the average furniture shoppers ideal ranking.
+"""
+
+
+system_few_shot_prompt = """
+    You take user search queries and use a search tool to find furniture products. Examples
+    of labeled query-product pairs are listed at the bottom of this prompt to help you
+    understand how we will evaluate your results.
+
+    Look at the search tools you have, their limitations, how they work, etc when forming your plan.
+
+    Before searching you MUST use the "get_past_queries" to get similar, past queries
+    you have made to tools and whether they were successful. This should help you plan how to
+    use tools to satisfy user intent.
+
+    Remember every tool usage you make. After searching with a tool, evaluate the results,
+    then save the interaction (immediately after tool usage) with the "save_queries_used" tool
+
+    Finally return results to the user per the SearchResults schema, ranked best to worst.
+
+    Gather results until you have 10 best matches you can find. It's important to return at least 10.
+
+    It's very important you consider carefully the correct ranking as you'll be evaluated on
+    how close that is to the average furniture shoppers ideal ranking.
+
+    Finally, some examples:
+"""
+
+
+def agent_search_wands(use_old=True,
+                       prompt=system_no_judgments_prompt,
+                       iterations=5,
+                       num_queries=20,
+                       addl_tools=None,
+                       seed=42):
+    if not use_old:
+        global saved_search_interactions, saved_queries, query_embeddings
+        saved_search_interactions = {}
+        saved_queries = np.array([])
+        query_embeddings = np.array([])
+
+    shuffled_queries = wands_queries.sample(frac=1,
+                                            random_state=seed)
+    queries = shuffled_queries[:num_queries]
+    print(f"QUERIES: {queries}")
+
+    # Run BM25 baseline
+    bm25 = BM25Search(enriched_products)
+    graded_bm25 = run_strategy(bm25, queries)
+    bm25_ndcg = graded_bm25['ndcg'].mean()
+    print(f"Baseline NDCG: {bm25_ndcg}")
+
+    tools = [search_products, save_queries, get_past_queries]
+    if addl_tools:
+        tools.extend(addl_tools)
+
+    search_client = OpenAISearchClient(tools=tools,
                                        model="openai/gpt-5",
-                                       system_prompt=system_prompt,
-                                       response_model=None)
+                                       system_prompt=prompt)
     strategy = ReasoningSearchStrategy(enriched_products, search_client,
-                                       prompt="")
-    graded_results = run_strategy(strategy)
-    ndcg = graded_results['ndcg'].mean()
-    print(f"Overall NDCG: {ndcg}")
+                                       prompt="",
+                                       cache=False)
+    ndcgs = []
+    for iter in range(iterations):
+        print(f"--- Iteration {iter + 1} of {iterations} ---")
+        graded_results = run_strategy(strategy, queries)
+        ndcg = graded_results['ndcg'].mean()
+        print(f"BM25 Baseline NDCG: {bm25_ndcg}")
+        print(f"Overall NDCG: {ndcg}")
+        ndcgs.append(ndcg)
+
+        # Now index past interactions to get the benefit on next iteration
+        saved_queries, query_embeddings = _index_search_queries()
+
+    print(f"Baseline NDCG: {bm25_ndcg}")
+    for idx, ndcg in enumerate(ndcgs):
+        print(f"Iteration {idx + 1}: NDCG {ndcg}")
+
+
+class PostAgentStrategy(SearchStrategy):
+    """Use what worked well in the past for tools to retrieve relevant results."""
+    def __init__(self, products):
+        super().__init__(products)
+
+    def search(self, query, k=10):
+        past_queries = get_past_queries(query)
+
+        all_results = []
+
+        for past_query in past_queries:
+            tool_query = past_query.interaction.search_tool_query
+            tool_category = past_query.interaction.search_tool_category
+            if past_query.interaction.quality == 'good':
+                print(f"Reusing good query: {tool_query}, category: {tool_category}")
+                results = search_products(tool_query, category=tool_category, top_k=k)
+                all_results.extend(results)
+
+
+def build_few_shot_prompt(k=10) -> str:
+    labeled_query_products.sample(5, random_state=42)
+
+    labeled = labeled_query_products
+    if len(labeled) == 0:
+        return []
+    relevant = labeled[labeled['label'] == 'Exact']
+    irrelevant = labeled[labeled['label'] == 'Irrelevant']
+    # Get 3 relevant
+    relevant = relevant.sample(min(k // 3, len(relevant)), random_state=42)
+    # Get 3 irrelevant
+    irrelevant = irrelevant.sample(min(k // 3, len(irrelevant)), random_state=42)
+    # Get the rest Partial
+    partial = labeled[labeled['label'] == 'Partial']
+    partial = partial.sample(min(k - len(relevant) - len(irrelevant), len(partial)), random_state=42)
+
+    # Format into prompt
+    labeled = pd.concat([relevant, irrelevant, partial]).sample(frac=1, random_state=42)
+    prompt = system_few_shot_prompt
+    for item in labeled.to_dict(orient='records'):
+        print(item)
+        prompt += f"""
+
+        User Query: {item['query']}
+        Product Name: {item['product_name']}
+        Product Description: {item['product_description']}
+        Product Category: {item['category']}
+        Human Label: {item['label']}
+
+        """
+    print("Prompt is:")
+    print(prompt)
+    return prompt
 
 
 if __name__ == "__main__":
-    if sys.argv[-1] == "search_wands":
-        search_wands()
+    seed = 43
+    if sys.argv[-1] == "post_agent_search":
+        strategy = PostAgentStrategy(enriched_products)
+        graded_results = run_strategy(strategy, wands_queries[:20])
+        ndcg = graded_results['ndcg'].mean()
+        print(f"Overall NDCG: {ndcg}")
+    if sys.argv[-1] == "search_no_judgments":
+        agent_search_wands(use_old=False, iterations=3,
+                           num_queries=10,
+                           prompt=system_no_judgments_prompt,
+                           seed=seed)
+    elif sys.argv[-1] == "search_with_judgments":
+        agent_search_wands(use_old=False, iterations=3,
+                           num_queries=10,
+                           addl_tools=[get_human_judgments],
+                           prompt=system_prompt_judgments,
+                           seed=seed)
+    elif sys.argv[-1] == "search_few_shot":
+        agent_search_wands(use_old=False,
+                           iterations=1,
+                           num_queries=30,
+                           prompt=build_few_shot_prompt(10),
+                           seed=seed)
     else:
         chat()

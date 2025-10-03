@@ -9,7 +9,7 @@ import pandas as pd
 logger = log_to_stdout(logger_name="search")
 
 
-def run_strategy(strategy):
+def run_strategy(strategy, queries=queries):
 
     results = strategy.search_all(queries)
     graded = grade_results(

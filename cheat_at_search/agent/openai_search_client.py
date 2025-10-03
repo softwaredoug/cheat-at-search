@@ -40,7 +40,6 @@ class OpenAISearchClient(SearchClient):
         try:
             tool_calls_found = True
             while tool_calls_found:
-                print("Calling model...")
                 if self.response_model:
                     resp = self.openai.responses.parse(
                         model=self.model,
@@ -59,12 +58,10 @@ class OpenAISearchClient(SearchClient):
 
                 tool_calls_found = False
 
-                print("Calling tools...")
                 for item in resp.output:
                     if item.type == "function_call":
                         tool_calls_found = True
                         tool_name = item.name
-                        print("Tool call found:", tool_name, item)
                         if tool_name not in self.search_tools:
                             raise ValueError(f"Tool {tool_name} not found in registered tools.")
                         tool_calls_found = True
@@ -73,7 +70,6 @@ class OpenAISearchClient(SearchClient):
                         tool_fn = tool[2]
 
                         fn_args: ToolArgsModel = ToolArgsModel.model_validate_json(item.arguments)
-                        print("Calling tool:", tool_name, fn_args)
                         py_resp, json_resp = tool_fn(fn_args)
                         # 4. Provide function call results to the model
                         inputs.append({
@@ -88,6 +84,7 @@ class OpenAISearchClient(SearchClient):
 
     def search(self, prompt: str):
         """Issue a 'search' and expect structured output response."""
+        assert self.response_model is not None, "response_model must be set for structured search results."
         resp, _ = self.chat(prompt)
         return resp.output_parsed
 

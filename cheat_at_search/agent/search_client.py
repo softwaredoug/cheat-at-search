@@ -9,6 +9,10 @@ class SearchPlan(BaseModel):
         ..., description="The actual query string you used to search (may be different from the original user query if reformulated)"
     )
 
+    category: str | None = Field(
+        None, description="The category filter you applied to the search (if any)"
+    )
+
     effectiveness: Literal['high', 'medium', 'low'] = Field(
         ..., description="How effective was this search plan in retrieving relevant results?"
     )
@@ -40,6 +44,11 @@ class SearchResult(BaseModel):
         ..., description="The relevance of this document to the search query"
     )
 
+    @property
+    def score(self) -> float:
+        """A numeric score for the relevance of this result."""
+        return 1 / self.rank
+
 
 class SearchResults(BaseModel):
     """The results of a search query, ordered by relevance."""
@@ -49,6 +58,10 @@ class SearchResults(BaseModel):
 
     search_plans: list[SearchPlan] = Field(
         ..., description="The list of search plans used to retrieve results"
+    )
+
+    intent_explained: str = Field(
+        ..., description="A summary of the user's intent based on the search query (especially as it relates to human judgments if available)"
     )
 
     results: list[SearchResult] = Field(
