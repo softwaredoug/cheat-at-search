@@ -384,7 +384,7 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt) -> str:
 
 if __name__ == "__main__":
     seed = 43
-    num_queries = 5
+    num_queries = 100
     iterations = 1
 
     if sys.argv[-1] == "post_agent_search":
