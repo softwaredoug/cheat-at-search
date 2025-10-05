@@ -17,7 +17,7 @@ class BestPossibleResults(SearchStrategy):
         query_labels = labeled_queries[labeled_queries['query'] == query].copy()
         sorted = query_labels.sort_values('grade', ascending=False).head(k)
 
-        top_k = sorted['product_id'].tolist()
+        top_k = sorted['doc_id'].tolist()
         scores = sorted['grade'].values.tolist()
 
         return top_k, scores

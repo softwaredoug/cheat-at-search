@@ -16,18 +16,18 @@ class BM25Search(SearchStrategy):
         self.index = products
         self.name_boost = name_boost
         self.description_boost = description_boost
-        self.index['product_name_snowball'] = SearchArray.index(
-            products['product_name'], snowball_tokenizer)
-        self.index['product_description_snowball'] = SearchArray.index(
-            products['product_description'], snowball_tokenizer)
+        self.index['title_snowball'] = SearchArray.index(
+            products['title'], snowball_tokenizer)
+        self.index['description_snowball'] = SearchArray.index(
+            products['description'], snowball_tokenizer)
 
     def search(self, query, k=10):
         """Dumb baseline lexical search"""
         tokenized = snowball_tokenizer(query)
         bm25_scores = np.zeros(len(self.index))
         for token in tokenized:
-            bm25_scores += self.index['product_name_snowball'].array.score(token) * self.name_boost
-            bm25_scores += self.index['product_description_snowball'].array.score(
+            bm25_scores += self.index['title_snowball'].array.score(token) * self.name_boost
+            bm25_scores += self.index['description_snowball'].array.score(
                 token) * self.description_boost
         top_k = np.argsort(-bm25_scores)[:k]
         scores = bm25_scores[top_k]

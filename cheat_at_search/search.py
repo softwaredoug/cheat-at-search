@@ -1,5 +1,4 @@
 from cheat_at_search.strategy import BM25Search
-from cheat_at_search.wands_data import products, queries, ideal_top_10
 from cheat_at_search.eval import grade_results
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.logger import log_to_stdout
@@ -9,7 +8,7 @@ import pandas as pd
 logger = log_to_stdout(logger_name="search")
 
 
-def run_strategy(strategy, queries=queries):
+def run_strategy(strategy, queries):
 
     results = strategy.search_all(queries)
     graded = grade_results(
@@ -41,20 +40,7 @@ def ndcg_delta(variant_graded, baseline_graded):
     return delta.sort_values(ascending=False)
 
 
-def vs_ideal(graded):
-    cols = ['query_id', 'query', 'rank', 'product_id', 'product_name', 'grade', 'dcg', 'ndcg']
-    graded_view = graded[cols].rename(
-        columns={'product_id': 'product_id_actual', 'product_name': 'product_name_actual'}
-    )
-
-    sxs = ideal_top_10.merge(graded_view,
-                             how='left',
-                             left_on=['query_id', 'query', 'ideal_rank'],
-                             right_on=['query_id', 'query', 'rank'])
-    return sxs
-
-
-def run_bm25():
+def run_bm25(corpus):
     try:
         bm25_results_path = ensure_data_subdir('bm25_results')
         graded_bm25 = pd.read_pickle(bm25_results_path / 'graded_bm25.pkl')
@@ -62,10 +48,7 @@ def run_bm25():
     except Exception:
         logger.warning("BM25 results not found, running BM25 search strategy.")
         bm25_results_path = ensure_data_subdir('bm25_results')
-        bm25 = BM25Search(products)
+        bm25 = BM25Search(corpus)
         graded_bm25 = run_strategy(bm25)
         graded_bm25.to_pickle(bm25_results_path / 'graded_bm25.pkl')
         return graded_bm25
-
-
-graded_bm25 = run_bm25()

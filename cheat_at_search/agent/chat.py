@@ -2,7 +2,7 @@ from cheat_at_search.wands_data import enriched_products, queries as wands_queri
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
-from cheat_at_search.search import run_strategy, vs_ideal
+from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
 from cheat_at_search.agent.judgments import get_human_judgments
@@ -317,16 +317,6 @@ def agent_search_wands(use_old=True,
     print(f"Baseline NDCG: {bm25_ndcg}")
     for idx, ndcg in enumerate(ndcgs):
         print(f"Iteration {idx + 1}: NDCG {ndcg}")
-
-    vs_ideal_bm25_df = vs_ideal(graded_bm25)
-    vs_ideal_bm25_df = vs_ideal_bm25_df[vs_ideal_bm25_df['query'].isin(queries['query'])]
-    print("--- BM25 Vs Ideal Top 10 ---")
-    print(vs_ideal_bm25_df.head(20).to_string())
-
-    vs_ideal_df = vs_ideal(graded_results)
-    vs_ideal_df = vs_ideal_df[vs_ideal_df['query'].isin(queries['query'])]
-    print("--- Agent Vs Ideal Top 10 ---")
-    print(vs_ideal_df.head(20).to_string())
 
 
 class PostAgentStrategy(SearchStrategy):
