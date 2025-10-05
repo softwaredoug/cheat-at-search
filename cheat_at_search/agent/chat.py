@@ -5,7 +5,7 @@ from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenA
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
-from cheat_at_search.agent.judgments import get_human_judgments
+from cheat_at_search.agent.judgments import make_judgments_tool
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal, Optional
 from searcharray import SearchArray
@@ -126,8 +126,7 @@ def chat():
         Outside of searches, respond to questions about your behavior (in these cases, you should not use a tool).
     """
 
-    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries,
-                                              get_human_judgments],
+    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries],
                                        model="openai/gpt-5",
                                        system_prompt=system_prompt,
                                        response_model=None)
@@ -394,7 +393,7 @@ if __name__ == "__main__":
         agent_search_wands(use_old=False,
                            iterations=iterations,
                            num_queries=num_queries,
-                           addl_tools=[get_human_judgments,
+                           addl_tools=[make_judgments_tool(labeled_query_products),
                                        save_queries,
                                        get_past_queries],
                            prompt=system_prompt_judgments,
@@ -417,7 +416,7 @@ if __name__ == "__main__":
         agent_search_wands(use_old=False,
                            iterations=iterations,
                            num_queries=num_queries,
-                           addl_tools=[get_human_judgments],
+                           addl_tools=[make_judgments_tool(labeled_query_products)],
                            prompt=build_few_shot_prompt(10, prompt=system_few_shot_judgmens_no_history_prompt),
                            seed=seed)
     else:
