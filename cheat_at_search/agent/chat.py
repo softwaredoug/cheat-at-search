@@ -15,10 +15,10 @@ import sys
 from time import perf_counter
 
 
-enriched_products['product_name_snowball'] = SearchArray.index(enriched_products['product_name'],
-                                                               tokenizer=snowball_tokenizer)
+enriched_products['title_snowball'] = SearchArray.index(enriched_products['title'],
+                                                        tokenizer=snowball_tokenizer)
 
-enriched_products['description_snowball'] = SearchArray.index(enriched_products['product_description'],
+enriched_products['description_snowball'] = SearchArray.index(enriched_products['description'],
                                                               tokenizer=snowball_tokenizer)
 
 
@@ -64,14 +64,14 @@ def search_products(keywords: str,
         top_k: The number of top results to return.
 
     Returns:
-        Search results as a list of dictionaries with 'id', 'product_name', 'product_description', and 'score' keys.
+        Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
 
     """
     print("Searching for:", keywords, "top_k:", top_k)
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(enriched_products))
     for token in query_tokens:
-        scores += enriched_products['product_name_snowball'].array.score(token) * 10
+        scores += enriched_products['title_snowball'].array.score(token) * 10
         scores += enriched_products['description_snowball'].array.score(token)
 
     # Filter by category
@@ -91,8 +91,8 @@ def search_products(keywords: str,
     for id, row in top_products.iterrows():
         results.append({
             'id': id,
-            'product_name': row['product_name'],
-            'product_description': row['product_description'],
+            'title': row['title'],
+            'description': row['description'],
             'category': row['category'],
             'score': row['score']
         })
@@ -360,8 +360,8 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt) -> str:
         prompt += f"""
 
         User Query: {item['query']}
-        Product Name: {item['product_name']}
-        Product Description: {item['product_description']}
+        Product Name: {item['title']}
+        Product Description: {item['description']}
         Product Category: {item['category']}
         Human Label: {item['label']}
 

@@ -8,12 +8,20 @@ import pandas as pd
 logger = log_to_stdout(logger_name="search")
 
 
-def run_strategy(strategy, queries):
+def run_strategy(strategy, judgments, num_queries=None):
+
+    queries = judgments[['query', 'query_id']].drop_duplicates()
+    max_grade = judgments['grade'].max()
+
+    if num_queries:
+        queries = queries.sample(num_queries, random_state=42)
+        judgments = judgments[judgments['query_id'].isin(queries['query_id'])]
 
     results = strategy.search_all(queries)
     graded = grade_results(
+        judgments,
         results,
-        max_grade=2,
+        max_grade=max_grade,
         k=10,
     )
 
