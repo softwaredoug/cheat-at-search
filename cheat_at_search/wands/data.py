@@ -60,6 +60,10 @@ def _products():
     df['features'] = split_features
     df['product_description'] = df['product_description'].fillna('')
     df['product_name'] = df['product_name'].fillna('')
+    # Normalized columns
+    df['title'] = df['product_name']
+    df['description'] = df['product_description']
+    df['doc_id'] = df['product_id']
 
     # Parse category and subcategory from 'category hierarchy'
     cat_as_list = df['category hierarchy'].fillna('').str.split('/')

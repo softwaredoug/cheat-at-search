@@ -1,11 +1,7 @@
+from cheat_at_search.strategy.strategy import SearchStrategy
 from searcharray import SearchArray
 from cheat_at_search.tokenizers import snowball_tokenizer
-from cheat_at_search.strategy.strategy import SearchStrategy
 import numpy as np
-from cheat_at_search.logger import log_to_stdout
-
-
-logger = log_to_stdout(logger_name="search")
 
 
 class BM25Search(SearchStrategy):
@@ -16,8 +12,8 @@ class BM25Search(SearchStrategy):
         self.index = products
         self.name_boost = name_boost
         self.description_boost = description_boost
-        self.index['product_name_snowball'] = SearchArray.index(
-            products['product_name'], snowball_tokenizer)
+        self.index['product_title_snowball'] = SearchArray.index(
+            products['product_title'], snowball_tokenizer)
         self.index['product_description_snowball'] = SearchArray.index(
             products['product_description'], snowball_tokenizer)
 
@@ -26,7 +22,7 @@ class BM25Search(SearchStrategy):
         tokenized = snowball_tokenizer(query)
         bm25_scores = np.zeros(len(self.index))
         for token in tokenized:
-            bm25_scores += self.index['product_name_snowball'].array.score(token) * self.name_boost
+            bm25_scores += self.index['product_title_snowball'].array.score(token) * self.name_boost
             bm25_scores += self.index['product_description_snowball'].array.score(
                 token) * self.description_boost
         top_k = np.argsort(-bm25_scores)[:k]
