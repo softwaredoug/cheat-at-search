@@ -17,13 +17,13 @@ class SearchStrategy:
         all_results = []
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             futures = {}
-            for _, query_row in tqdm(queries.iterrows(), total=len(queries), desc="Searching"):
+            for _, query_row in queries.iterrows():
                 future = executor.submit(self.search, query_row['query'], k)
                 futures[future] = query_row
 
-            for future in as_completed(futures):
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Searching"):
                 query_row = futures[future]
-                scores, top_k = future.result()
+                top_k, scores = future.result()
                 query_id = query_row['query_id']
                 ranks = np.arange(len(top_k)) + 1
                 search_array_cols = [
