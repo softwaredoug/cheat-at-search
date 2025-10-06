@@ -277,8 +277,9 @@ def __getattr__(name):
     logging.info(f"Loading dataset: {name} for the first time")
 
     if name == 'judgments':
-        ds = _labels()
-    elif name == 'queries':
+        name = 'labeled_queries'
+
+    if name == 'queries':
         ds = _queries()
     elif name == 'corpus':
         ds = _corpus()

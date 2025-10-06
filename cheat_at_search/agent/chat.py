@@ -1,4 +1,4 @@
-from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products
+from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products, judgments
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
@@ -279,14 +279,14 @@ def agent_search_wands(use_old=True,
     print(f"QUERIES: {queries}")
 
     # Get best possible
-    best_possible = BestPossibleResults(enriched_products)
-    graded_best_possible = run_strategy(best_possible, queries)
+    best_possible = BestPossibleResults(enriched_products, judgments)
+    graded_best_possible = run_strategy(best_possible, judgments, num_queries=num_queries, seed=seed)
     best_possible_ndcg = graded_best_possible['ndcg'].mean()
     print(f"Best Possible NDCG: {best_possible_ndcg}")
 
     # Run BM25 baseline
     bm25 = BM25Search(enriched_products)
-    graded_bm25 = run_strategy(bm25, queries)
+    graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries, seed=seed)
     bm25_ndcg = graded_bm25['ndcg'].mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
 
@@ -303,7 +303,9 @@ def agent_search_wands(use_old=True,
     ndcgs = []
     for iter in range(iterations):
         print(f"--- Iteration {iter + 1} of {iterations} ---")
-        graded_results = run_strategy(strategy, queries)
+        graded_results = run_strategy(strategy, judgments,
+                                      num_queries=num_queries,
+                                      seed=seed)
         ndcg = graded_results['ndcg'].mean()
         print(f"BM25 Baseline NDCG: {bm25_ndcg}")
         print(f"Overall NDCG: {ndcg}")

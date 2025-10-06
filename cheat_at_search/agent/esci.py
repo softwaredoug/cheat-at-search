@@ -30,7 +30,6 @@ def search_esci(keywords: str,
         Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
 
     """
-    print("Searching for:", keywords, "top_k:", top_k)
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(corpus))
     for token in query_tokens:
@@ -49,7 +48,6 @@ def search_esci(keywords: str,
             'id': id,
             'title': row['title'],
             'description': row['description'],
-            'category': row['category'],
             'score': row['score']
         })
     print(f"Keywords {keywords} -- Found {len(results)} results")
@@ -107,7 +105,7 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
 
 if __name__ == "__main__":
     prompt = build_few_shot_prompt(k=10)
-    num_queries = 10
+    num_queries = 100
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25['ndcg'].mean()
@@ -123,6 +121,7 @@ if __name__ == "__main__":
                                        system_prompt=prompt)
     strategy = ReasoningSearchStrategy(corpus, search_client,
                                        prompt="",
-                                       cache=True)
+                                       cache=True,
+                                       workers=4)
     graded_agent = run_strategy(strategy, judgments, num_queries=num_queries)
     print(f"Agent NDCG: {graded_agent['ndcg'].mean()}")
