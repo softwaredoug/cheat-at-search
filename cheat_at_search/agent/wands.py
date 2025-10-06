@@ -251,7 +251,8 @@ def agent_search_wands(use_old=True,
                                        system_prompt=prompt)
     strategy = ReasoningSearchStrategy(enriched_products, search_client,
                                        prompt="",
-                                       cache=iterations == 1)
+                                       cache=iterations == 1,
+                                       workers=4)
     ndcgs = []
     for iter in range(iterations):
         print(f"--- Iteration {iter + 1} of {iterations} ---")

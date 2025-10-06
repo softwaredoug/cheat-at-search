@@ -17,13 +17,15 @@ corpus['description_snowball'] = SearchArray.index(corpus['description'], snowba
 def search_esci(keywords: str,
                 top_k: int = 5) -> List[Dict]:
     """
-    Search for furniture products with the given keywords and filters
+    Search amazon products with the given keywords and filters
 
-    This is direct keyword search along with optional category filtering.
+    This is direct / naive BM25 keyword search with simple snowball stemming and whitespace tokenization.
+    Do not expect synonyms, compounting, decompounding, query understanding, or other NLP tricks.
+
+    Instead YOU need to reason about the user's intent and reformulate the query given the constraints.
 
     Args:
         keywords: The search query string.
-        category: category to filter products by.
         top_k: The number of top results to return.
 
     Returns:
@@ -33,7 +35,7 @@ def search_esci(keywords: str,
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(corpus))
     for token in query_tokens:
-        scores += corpus['title_snowball'].array.score(token) * 10
+        scores += corpus['title_snowball'].array.score(token) * 2
         scores += corpus['description_snowball'].array.score(token)
 
     top_k_indices = np.argsort(scores)[-top_k:][::-1]
@@ -55,7 +57,7 @@ def search_esci(keywords: str,
 
 
 system_few_shot_prompt = """
-    You take user search queries and use a search tool to find products onthe Amazon online store. Examples
+    You take user search queries and use a search tool to find products on the Amazon online store. Examples
     of labeled query-product pairs are listed at the bottom of this prompt to help you
     understand how we will evaluate your results.
 
@@ -66,7 +68,7 @@ system_few_shot_prompt = """
     Gather results until you have 10 best matches you can find. It's important to return at least 10.
 
     It's very important you consider carefully the correct ranking as you'll be evaluated on
-    how close that is to the average furniture shoppers ideal ranking.
+    how close that is to the average shoppers ideal ranking.
 
     Finally, some examples:
 """

@@ -10,11 +10,11 @@ logger = log_to_stdout(logger_name="search")
 
 class BM25Search(SearchStrategy):
     def __init__(self, corpus,
-                 name_boost=9.3,
+                 title_boost=9.3,
                  description_boost=4.1):
         super().__init__(corpus)
         self.index = corpus
-        self.name_boost = name_boost
+        self.title_boost = title_boost
         self.description_boost = description_boost
 
         if 'title_snowball' not in self.index and 'title' in corpus:
@@ -29,7 +29,7 @@ class BM25Search(SearchStrategy):
         tokenized = snowball_tokenizer(query)
         bm25_scores = np.zeros(len(self.index))
         for token in tokenized:
-            bm25_scores += self.index['title_snowball'].array.score(token) * self.name_boost
+            bm25_scores += self.index['title_snowball'].array.score(token) * self.title_boost
             bm25_scores += self.index['description_snowball'].array.score(
                 token) * self.description_boost
         top_k = np.argsort(-bm25_scores)[:k]
