@@ -8,13 +8,13 @@ import pandas as pd
 logger = log_to_stdout(logger_name="search")
 
 
-def run_strategy(strategy, judgments, num_queries=None):
+def run_strategy(strategy, judgments, num_queries=None, seed=42):
 
     queries = judgments[['query', 'query_id']].drop_duplicates()
     max_grade = judgments['grade'].max()
 
     if num_queries:
-        queries = queries.sample(num_queries, random_state=42)
+        queries = queries.sample(num_queries, random_state=seed)
         judgments = judgments[judgments['query_id'].isin(queries['query_id'])]
 
     results = strategy.search_all(queries)
@@ -25,13 +25,17 @@ def run_strategy(strategy, judgments, num_queries=None):
         k=10,
     )
 
-    idcg = graded['idcg'].iloc[0]
-    dcgs = graded.groupby(["query", 'query_id'])["discounted_gain"].sum().sort_values(ascending=False).rename('dcg')
-    ndcgs = dcgs / idcg
-    ndcgs = ndcgs.rename('ndcg')
+    if len(graded):
+        idcg = graded['idcg'].iloc[0]
+        dcgs = graded.groupby(["query", 'query_id'])["discounted_gain"].sum().sort_values(ascending=False).rename('dcg')
+        ndcgs = dcgs / idcg
+        ndcgs = ndcgs.rename('ndcg')
 
-    graded = graded.merge(dcgs, on=['query', 'query_id'])
-    graded = graded.merge(ndcgs, on=['query', 'query_id'])
+        graded = graded.merge(dcgs, on=['query', 'query_id'])
+        graded = graded.merge(ndcgs, on=['query', 'query_id'])
+    else:
+        graded['dcg'] = 0
+        graded['ndcg'] = 0
 
     return graded
 

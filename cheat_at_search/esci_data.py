@@ -33,6 +33,10 @@ def _judgments():
                                                       'S': 2,
                                                       'C': 1,
                                                       'I': 0})
+    judgments['label'] = judgments['esci_label'].map({'E': 'Exact',
+                                                      'S': 'Satisfactory',
+                                                      'C': 'Complimentary',
+                                                      'I': 'Irrelevant'})
     judgments['doc_id'] = judgments['product_id']
     return judgments
 

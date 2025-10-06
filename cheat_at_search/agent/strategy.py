@@ -19,8 +19,11 @@ class ReasoningSearchStrategy(SearchStrategy):
         self.cache = None
         if cache:
             system_prompt = self.search_client.system_prompt
-            self.prompt_hash = md5((prompt + system_prompt).encode('utf-8')).hexdigest()[:8]
-            self.cache_path = cached_results_dir / f"reasoning_search_cache_{self.prompt_hash}.pkl"
+            prompt_hash = md5((prompt + system_prompt).encode('utf-8')).hexdigest()[:8]
+            corpus_hash = md5(corpus.columns.to_series().astype(str).sum().encode('utf-8')).hexdigest()[:8]
+            length = len(corpus)
+            self.hash = prompt_hash + "_" + corpus_hash + "_" + str(length)
+            self.cache_path = cached_results_dir / f"reasoning_search_cache_{self.hash}.pkl"
             self.cache = {}
             try:
                 with open(self.cache_path, "rb") as f:

@@ -9,17 +9,20 @@ logger = log_to_stdout(logger_name="search")
 
 
 class BM25Search(SearchStrategy):
-    def __init__(self, products,
+    def __init__(self, corpus,
                  name_boost=9.3,
                  description_boost=4.1):
-        super().__init__(products)
-        self.index = products
+        super().__init__(corpus)
+        self.index = corpus
         self.name_boost = name_boost
         self.description_boost = description_boost
-        self.index['title_snowball'] = SearchArray.index(
-            products['title'], snowball_tokenizer)
-        self.index['description_snowball'] = SearchArray.index(
-            products['description'], snowball_tokenizer)
+
+        if 'title_snowball' not in self.index and 'title' in corpus:
+            self.index['title_snowball'] = SearchArray.index(
+                corpus['title'], snowball_tokenizer)
+        if 'description_snowball' not in self.index and 'description' in corpus:
+            self.index['description_snowball'] = SearchArray.index(
+                corpus['description'], snowball_tokenizer)
 
     def search(self, query, k=10):
         """Dumb baseline lexical search"""
