@@ -1,7 +1,7 @@
 from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products, judgments
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
+from cheat_at_search.agent.openai_search_client import OpenAISearchClient
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
@@ -12,7 +12,6 @@ from searcharray import SearchArray
 import numpy as np
 import pandas as pd
 import sys
-from time import perf_counter
 
 
 enriched_products['title_snowball'] = SearchArray.index(enriched_products['title'],
@@ -98,53 +97,6 @@ def search_products(keywords: str,
         })
     print(f"Keywords {keywords} -- Found {len(results)} results")
     return results
-
-
-def chat():
-    system_prompt = """
-        You take user's search query, think of different queries, and use batch search tool to find furniture products.
-
-        Search for furniture products using the following steps:
-
-        1. Look at the search tool you have, its limitations, how it work, etc when forming your plan.
-
-        2. Before searching, use the "get_human_judgments" tool to get the ground truth human judgments for this user query. If anything shows up, use that interpret user intent and evaluate relevance of results you find.
-
-        3. Before searching, use the "get_past_queries" to get similar, past queries the user has made to
-        gain insight on how to best search for this user query using the available tool
-
-        4. Issue searches in one call to "search_products" tool.
-
-        5. Evaluate the results you get back from the search tool.
-
-        6. Save the results quality of each query (immediately after "search_products" usage) with the "save_queries" tool
-
-        7. Iterate as needed, reformulating queries, until you have enough good results to present to the user.
-
-        8. Present the best results to the user, citing the product name and description.
-
-        Outside of searches, respond to questions about your behavior (in these cases, you should not use a tool).
-    """
-
-    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries],
-                                       model="openai/gpt-5",
-                                       system_prompt=system_prompt,
-                                       response_model=None)
-    chat_adapter = OpenAIChatAdapter(search_client)
-
-    while True:
-        message = input("User: ")
-        if message in ['reset']:
-            chat_adapter.reset()
-            print("Chat reset.")
-            continue
-        if message in ['exit', 'quit']:
-            break
-        begin = perf_counter()
-        response = chat_adapter.chat(message)
-        took = perf_counter() - begin
-        print(f"(took {took:.2f}s)")
-        print("Assistant:", response)
 
 
 system_no_judgments_prompt = """
@@ -421,5 +373,3 @@ if __name__ == "__main__":
                            addl_tools=[make_judgments_tool(labeled_query_products)],
                            prompt=build_few_shot_prompt(10, prompt=system_few_shot_judgmens_no_history_prompt),
                            seed=seed)
-    else:
-        chat()
