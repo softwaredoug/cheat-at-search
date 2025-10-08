@@ -20,7 +20,8 @@ def grade_results(judgments: pd.DataFrame,
     assert 'doc_id' in search_results.columns, "search_results must have a 'doc_id' column"
     if not max_grade:
         max_grade = judgments['grade'].max()
-    graded_results = search_results.merge(judgments, on=['query_id', 'query', 'doc_id'], how='left')
+    graded_results = search_results.merge(judgments[['query_id', 'query', 'doc_id', 'grade']]
+                                          , on=['query_id', 'query', 'doc_id'], how='left')
     graded_results['grade'] = graded_results['grade'].fillna(0)
     rank_discounts = 1 / np.log2(2 ** graded_results['rank'])
     graded_results['discounted_gain'] = ((2 ** graded_results['grade']) - 1) * rank_discounts

@@ -2,19 +2,67 @@ from cheat_at_search.esci_data import corpus, judgments
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient
 from cheat_at_search.search import run_strategy
+from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.tokenizers import snowball_tokenizer
-from typing import List, Dict
+from typing import List, Dict, Optional, Literal
 from searcharray import SearchArray
 import numpy as np
 import pandas as pd
 
+from sentence_transformers import SentenceTransformer
 
-corpus['title_snowball'] = SearchArray.index(corpus['title'], snowball_tokenizer)
-corpus['description_snowball'] = SearchArray.index(corpus['description'], snowball_tokenizer)
+
+corpus_dir = ensure_data_subdir("esci_indexed_corpus")
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+unique_colors, color_counts = np.unique(corpus['product_color'].str.lower().dropna(), return_counts=True)
+color_embeddings = model.encode(unique_colors)
+
+unique_brands, brand_counts = np.unique(corpus['product_brand'].str.lower().dropna(), return_counts=True)
+brand_embeddings = model.encode(unique_brands)
+
+
+def resolve(query_item: str, embeddings_to_search, names_lookup, k=5) -> str:
+    query_embedding = model.encode([query_item])[0]
+    similarities = np.dot(embeddings_to_search, query_embedding) / (
+        np.linalg.norm(query_embedding) * np.linalg.norm(embeddings_to_search, axis=1) + 1e-10)
+    top_k = np.argsort(-similarities)[:k]
+    return names_lookup[top_k], similarities[top_k]
+
+
+names, _ = resolve("nike", brand_embeddings, unique_brands, k=3)
+colors, _ = resolve("red", color_embeddings, unique_colors, k=3)
+
+print(names, colors)
+
+
+def resolve_then_filter(query_item: str, embeddings_to_search,
+                        names_lookup, corpus, field_name, k=5) -> List[str]:
+    resolved_items, similarities = resolve(query_item, embeddings_to_search, names_lookup, k=k)
+    matches = np.zeros(len(corpus), dtype=bool)
+    for resolved_item in resolved_items:
+        tokenized = snowball_tokenizer(resolved_item)
+        matches |= (corpus[field_name].array.score(tokenized) > 0)
+    return matches
+
+
+try:
+    corpus = pd.read_pickle(corpus_dir / "corpus.pkl")
+except FileNotFoundError:
+    corpus['brand_snowball'] = SearchArray.index(corpus['product_brand'].fillna(''), snowball_tokenizer)
+    corpus['product_color_snowball'] = SearchArray.index(corpus['product_color'].fillna(''), snowball_tokenizer)
+    corpus['title_snowball'] = SearchArray.index(corpus['title'], snowball_tokenizer)
+    corpus['description_snowball'] = SearchArray.index(corpus['description'], snowball_tokenizer)
+    corpus.to_pickle(corpus_dir / "corpus.pkl")
 
 
 def search_esci(keywords: str,
+                required: list[str] = None,
+                excluded: list[str] = None,
+                product_color: Optional[str] = None,
+                brand_name: Optional[str] = None,
+                locale: Literal['es', 'us', 'jp'] = 'us',
                 top_k: int = 5) -> List[Dict]:
     """
     Search amazon products with the given keywords and filters
@@ -24,8 +72,17 @@ def search_esci(keywords: str,
 
     Instead YOU need to reason about the user's intent and reformulate the query given the constraints.
 
+    The tool is imperfect, so don't trust it blindly. Use your reasoning to analyze how well the parameters
+    work to produce the best results.
+
     Args:
         keywords: The search query string.
+        required: Optional; must include items matching these phrases
+        excluded: Optional; dont include items matching these phrases
+        product_color: Optional; filter results by product color (use the right name for the color in the locale's language)
+        brand_name: Optional; filter results by brand name.
+        locale: The locale to search in. Default is 'us'. Other options are 'es' and 'jp'.
+                Consider the language of the query when choosing the locale.
         top_k: The number of top results to return.
 
     Returns:
@@ -37,6 +94,41 @@ def search_esci(keywords: str,
     for token in query_tokens:
         scores += corpus['title_snowball'].array.score(token) * 2
         scores += corpus['description_snowball'].array.score(token)
+
+    if excluded is None:
+        excluded = []
+
+    if required is None:
+        required = []
+
+    for phrase in excluded:
+        exclude_tokens = snowball_tokenizer(phrase)
+        exclude_mask = (corpus['title_snowball'].array.score(exclude_tokens) > 0) | \
+                       (corpus['description_snowball'].array.score(exclude_tokens) > 0)
+        scores = scores * (~exclude_mask)
+
+    for phrase in required:
+        require_tokens = snowball_tokenizer(phrase)
+        require_mask = (corpus['title_snowball'].array.score(require_tokens) > 0) | \
+                       (corpus['description_snowball'].array.score(require_tokens) > 0)
+        scores = scores * require_mask
+
+    if product_color:
+        matches = resolve_then_filter(product_color, color_embeddings,
+                                      unique_colors, corpus,
+                                      'product_color_snowball', k=20)
+
+        scores *= matches
+
+    if brand_name:
+        matches = resolve_then_filter(brand_name, brand_embeddings,
+                                      unique_brands, corpus,
+                                      'brand_snowball', k=20)
+        scores *= matches
+
+    if locale:
+        locale_filter = (corpus['product_locale'] == locale)
+        scores = scores * locale_filter
 
     top_k_indices = np.argsort(scores)[-top_k:][::-1]
     scores = scores[top_k_indices]
@@ -50,9 +142,12 @@ def search_esci(keywords: str,
             'id': id,
             'title': row['title'],
             'description': row['description'],
+            'brand_name': row['product_brand'],
+            'color': row['product_color'],
+            'locale': row['product_locale'],
             'score': row['score']
         })
-    print(f"Keywords {keywords} -- Found {len(results)} results")
+    print(f"Keywords {keywords} required: {required} excluded: {excluded} color:{product_color} brand:{brand_name} locale:{locale}-- Found {len(results)} results")
     return results
 
 
@@ -61,7 +156,8 @@ system_few_shot_prompt = """
     of labeled query-product pairs are listed at the bottom of this prompt to help you
     understand how we will evaluate your results.
 
-    Look at the search tools you have, their limitations, how they work, etc when forming your plan.
+    Look at the search tools you have, their limitations, how they work, etc when forming your plan. Exercise the different
+    parameters of the search tools, review how well they worked, and iterate to improve.
 
     Finally return results to the user per the SearchResults schema, ranked best to worst.
 
@@ -97,6 +193,9 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
         User Query: {item['query']}
         Product Name: {item['title']}
         Product Description: {item['description']}
+        Product Color: {item['product_color']}
+        Brand Name: {item['product_brand']}
+        Locale: {item['product_locale']}
         Human Label: {item['label']}
 
         """
@@ -107,15 +206,15 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
 
 if __name__ == "__main__":
     prompt = build_few_shot_prompt(k=10)
-    num_queries = 100
+    num_queries = 10
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25['ndcg'].mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
     best = BestPossibleResults(corpus, judgments)
     graded_best = run_strategy(best, judgments, num_queries=num_queries)
-    best_ndcg = graded_best['ndcg'].mean()
-    print(f"Best Possible NDCG: {best_ndcg}")
+    # best_ndcg = graded_best['ndcg'].mean()
+    # print(f"Best Possible NDCG: {best_ndcg}")
     tools = [search_esci]
 
     search_client = OpenAISearchClient(tools=tools,
@@ -124,6 +223,21 @@ if __name__ == "__main__":
     strategy = ReasoningSearchStrategy(corpus, search_client,
                                        prompt="",
                                        cache=True,
-                                       workers=4)
+                                       workers=1)
     graded_agent = run_strategy(strategy, judgments, num_queries=num_queries)
     print(f"Agent NDCG: {graded_agent['ndcg'].mean()}")
+
+    sxs = graded_best.merge(
+        graded_agent,
+        on=['query', 'query_id', 'rank'],
+        how='left',
+        suffixes=('_best', '_agent')
+    )
+    sxs = sxs[['query', 'product_id_best', 'product_title_best',
+               'product_color_best', 'product_brand_best',
+               'grade_best',
+               'product_id_agent',
+               'product_color_agent', 'product_brand_agent',
+               'ndcg_agent', 'product_title_agent', 'grade_agent']][sxs['ndcg_agent'] < 0.1]
+    print(sxs)
+    import pdb; pdb.set_trace()

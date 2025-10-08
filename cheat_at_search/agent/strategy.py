@@ -53,4 +53,6 @@ class ReasoningSearchStrategy(SearchStrategy):
                 pickle.dump(self.cache, f)
         else:
             print("Not caching")
+        print(query, search_results.self_evaluation, search_results.evaluation_explained)
+        print(search_results.tool_evaluated)
         return top_k, scores

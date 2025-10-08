@@ -68,6 +68,18 @@ class SearchResults(BaseModel):
         ..., description="The list of search results"
     )
 
+    self_evaluation: Literal['🤩', '😁', '🙂', '😐', '☹️', '😭'] = Field(
+        ..., description="A self-evaluation of the quality of the search results"
+    )
+
+    evaluation_explained: str = Field(
+        ..., description="An explanation of the self-evaluation"
+    )
+
+    tool_evaluated: str = Field(
+        ..., description="An evaluation of what parts of the tool were most useful to get good results"
+    )
+
 
 class SearchClient(ABC):
     """Use an MCP server to search for products"""
