@@ -58,10 +58,6 @@ except FileNotFoundError:
 
 
 def search_esci(keywords: str,
-                required: list[str] = None,
-                excluded: list[str] = None,
-                product_color: Optional[str] = None,
-                brand_name: Optional[str] = None,
                 locale: Literal['es', 'us', 'jp'] = 'us',
                 top_k: int = 5) -> List[Dict]:
     """
@@ -72,15 +68,8 @@ def search_esci(keywords: str,
 
     Instead YOU need to reason about the user's intent and reformulate the query given the constraints.
 
-    The tool is imperfect, so don't trust it blindly. Use your reasoning to analyze how well the parameters
-    work to produce the best results.
-
     Args:
         keywords: The search query string.
-        required: Optional; must include items matching these phrases
-        excluded: Optional; dont include items matching these phrases
-        product_color: Optional; filter results by product color (use the right name for the color in the locale's language)
-        brand_name: Optional; filter results by brand name.
         locale: The locale to search in. Default is 'us'. Other options are 'es' and 'jp'.
                 Consider the language of the query when choosing the locale.
         top_k: The number of top results to return.
@@ -89,6 +78,11 @@ def search_esci(keywords: str,
         Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
 
     """
+    excluded = None
+    required = None
+    product_color = None
+    brand_name = None
+
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(corpus))
     for token in query_tokens:
@@ -206,7 +200,7 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
 
 if __name__ == "__main__":
     prompt = build_few_shot_prompt(k=10)
-    num_queries = 10
+    num_queries = 100
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25['ndcg'].mean()
@@ -223,7 +217,7 @@ if __name__ == "__main__":
     strategy = ReasoningSearchStrategy(corpus, search_client,
                                        prompt="",
                                        cache=True,
-                                       workers=1)
+                                       workers=16)
     graded_agent = run_strategy(strategy, judgments, num_queries=num_queries)
     print(f"Agent NDCG: {graded_agent['ndcg'].mean()}")
 
@@ -240,4 +234,3 @@ if __name__ == "__main__":
                'product_color_agent', 'product_brand_agent',
                'ndcg_agent', 'product_title_agent', 'grade_agent']][sxs['ndcg_agent'] < 0.1]
     print(sxs)
-    import pdb; pdb.set_trace()
