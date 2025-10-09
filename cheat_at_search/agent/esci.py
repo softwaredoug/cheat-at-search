@@ -16,12 +16,6 @@ from sentence_transformers import SentenceTransformer
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-unique_colors, color_counts = np.unique(corpus['product_color'].str.lower().dropna(), return_counts=True)
-color_embeddings = model.encode(unique_colors)
-
-unique_brands, brand_counts = np.unique(corpus['product_brand'].str.lower().dropna(), return_counts=True)
-brand_embeddings = model.encode(unique_brands)
-
 
 def resolve(query_item: str, embeddings_to_search, names_lookup, k=5) -> str:
     query_embedding = model.encode([query_item])[0]
@@ -29,12 +23,6 @@ def resolve(query_item: str, embeddings_to_search, names_lookup, k=5) -> str:
         np.linalg.norm(query_embedding) * np.linalg.norm(embeddings_to_search, axis=1) + 1e-10)
     top_k = np.argsort(-similarities)[:k]
     return names_lookup[top_k], similarities[top_k]
-
-
-names, _ = resolve("nike", brand_embeddings, unique_brands, k=3)
-colors, _ = resolve("red", color_embeddings, unique_colors, k=3)
-
-print(names, colors)
 
 
 def resolve_then_filter(query_item: str, embeddings_to_search,
@@ -106,19 +94,6 @@ def search_esci(keywords: str,
         require_mask = (corpus['title_snowball'].array.score(require_tokens) > 0) | \
                        (corpus['description_snowball'].array.score(require_tokens) > 0)
         scores = scores * require_mask
-
-    if product_color:
-        matches = resolve_then_filter(product_color, color_embeddings,
-                                      unique_colors, corpus,
-                                      'product_color_snowball', k=20)
-
-        scores *= matches
-
-    if brand_name:
-        matches = resolve_then_filter(brand_name, brand_embeddings,
-                                      unique_brands, corpus,
-                                      'brand_snowball', k=20)
-        scores *= matches
 
     if locale:
         locale_filter = (corpus['product_locale'] == locale)
