@@ -178,7 +178,7 @@ if __name__ == "__main__":
     num_queries = 100
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
-    bm25_ndcg = graded_bm25['ndcg'].mean()
+    bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
     best = BestPossibleResults(corpus, judgments)
     graded_best = run_strategy(best, judgments, num_queries=num_queries)
@@ -194,7 +194,7 @@ if __name__ == "__main__":
                                        cache=True,
                                        workers=16)
     graded_agent = run_strategy(strategy, judgments, num_queries=num_queries)
-    print(f"Agent NDCG: {graded_agent['ndcg'].mean()}")
+    print(f"Agent NDCG: {graded_agent.groupby('query')['ndcg'].mean().mean()}")
 
     sxs = graded_best.merge(
         graded_agent,
