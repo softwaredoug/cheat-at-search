@@ -24,19 +24,23 @@ class OpenAISearchClient(SearchClient):
             raise ValueError(f"Provider {self.provider} is not supported. This client only supports OpenAI.")
         self.response_model = response_model
         self.openai = OpenAI(api_key=self.openai_key)
+        self.last_usage = None
 
-    def chat(self, prompt: str, inputs=None) -> SearchResults:
+    def chat(self, prompt: str, inputs=None, return_usage=False) -> SearchResults:
         """Chat, handle any response."""
         if not inputs:
             inputs = [
                 {"role": "system", "content": self.system_prompt},
             ]
+        next_msg = {"role": "user", "content": " Tokens used so far: 0"}
+        inputs.append(next_msg)
         next_msg = {"role": "user", "content": prompt}
         inputs.append(next_msg)
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
             tools.append(tool_spec)
+        total_tokens = 0
         try:
             tool_calls_found = True
             while tool_calls_found:
@@ -55,6 +59,23 @@ class OpenAISearchClient(SearchClient):
                     )
                 # Iterate over tool calls
                 inputs += resp.output
+
+                total_tokens += resp.usage.total_tokens
+                # Find first user call and update token usage
+                for i in range(len(inputs)):
+                    if inputs[i]['role'] == 'user':
+                        inputs[i]['content'] = f" Tokens used so far: {total_tokens}"
+                        break
+
+                if total_tokens > 20000:
+                    token_warning = {"role": "system", "content": f"Warning: token limit approaching, {total_tokens} tokens used so far. Finish now."}
+                    inputs.append(token_warning)
+                    import pdb; pdb.set_trace()
+
+                print("Usage")
+                print(resp.usage)
+                print("---")
+                print(f"Total tokens so far: {total_tokens}")
 
                 tool_calls_found = False
 
@@ -77,15 +98,20 @@ class OpenAISearchClient(SearchClient):
                             "call_id": item.call_id,
                             "output": json_resp,
                         })
-            return resp, inputs
+            if return_usage:
+                resp.usage = resp.usage
+            return resp, inputs, total_tokens
         except Exception as e:
             print("Error calling MCP search tool:", e)
             raise e
 
-    def search(self, prompt: str):
+    def search(self, prompt: str, return_usage=False) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, "response_model must be set for structured search results."
-        resp, _ = self.chat(prompt)
+        resp, _, total_tokens = self.chat(prompt)
+        self.last_usage = resp.usage
+        if return_usage:
+            return resp.output_parsed, total_tokens
         return resp.output_parsed
 
 

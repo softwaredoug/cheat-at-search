@@ -17,6 +17,7 @@ class ReasoningSearchStrategy(SearchStrategy):
         self.search_client = search_client
         self.prompt = prompt
         self.cache = None
+        self.total_tokens = 0
         if cache:
             system_prompt = self.search_client.system_prompt
             prompt_hash = md5((prompt + system_prompt).encode('utf-8')).hexdigest()[:8]
@@ -40,7 +41,8 @@ class ReasoningSearchStrategy(SearchStrategy):
         print(f"Searching for: {query}")
         print("----")
         prompt = self.prompt + f"\nSearch query: {query}"
-        search_results = self.search_client.search(prompt)
+        search_results, total_tokens = self.search_client.search(prompt, return_usage=True)
+        self.total_tokens += total_tokens
         top_k = []
         scores = []
         for result in search_results.results[:k]:
@@ -53,6 +55,4 @@ class ReasoningSearchStrategy(SearchStrategy):
                 pickle.dump(self.cache, f)
         else:
             print("Not caching")
-        print(query, search_results.self_evaluation, search_results.evaluation_explained)
-        print(search_results.tool_evaluated)
         return top_k, scores

@@ -36,7 +36,7 @@ def resolve_then_filter(query_item: str, embeddings_to_search,
 
 
 try:
-    corpus = pd.read_pickle(corpus_dir / "corpus.pkl")
+    corpus = pd.read_pickle(corpus_dir / "corpus.pkl")  # noqa
 except FileNotFoundError:
     corpus['brand_snowball'] = SearchArray.index(corpus['product_brand'].fillna(''), snowball_tokenizer)
     corpus['product_color_snowball'] = SearchArray.index(corpus['product_color'].fillna(''), snowball_tokenizer)
@@ -111,13 +111,39 @@ def search_esci(keywords: str,
             'id': id,
             'title': row['title'],
             'description': row['description'],
-            'brand_name': row['product_brand'],
-            'color': row['product_color'],
-            'locale': row['product_locale'],
-            'score': row['score']
         })
     print(f"Keywords {keywords} required: {required} excluded: {excluded} color:{product_color} brand:{brand_name} locale:{locale}-- Found {len(results)} results")
     return results
+
+
+def multi_search_esci_results(keywords: list[str],
+                              locale: Literal['es', 'us', 'jp'] = 'us',
+                              top_k: int = 5) -> List[Dict]:
+    """Gather search results for multiple keywords."""
+    all_results = []
+    for keyword in keywords:
+        results = search_esci(keyword, locale=locale, top_k=top_k)
+        for result in results:
+            result['query'] = keyword
+        all_results.extend(results)
+    return all_results
+
+
+def inspect_product(product_id: str) -> Optional[Dict]:
+    """Inspect a product by its ID."""
+    print(f"Inspecting product {product_id}")
+    product = corpus[corpus['product_id'] == product_id]
+    if len(product) == 0:
+        return None
+    product = product.iloc[0]
+    return {
+        'id': product['product_id'],
+        'title': product['title'],
+        'description': product['description'],
+        'color': product['product_color'],
+        'brand': product['product_brand'],
+        'locale': product['product_locale']
+    }
 
 
 system_few_shot_prompt = """
@@ -127,6 +153,8 @@ system_few_shot_prompt = """
 
     Look at the search tools you have, their limitations, how they work, etc when forming your plan. Exercise the different
     parameters of the search tools, review how well they worked, and iterate to improve.
+
+    If you get "token alert!" in a user message, that's a sign to wrap up tool calling and return results.
 
     Finally return results to the user per the SearchResults schema, ranked best to worst.
 
@@ -160,11 +188,7 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
         prompt += f"""
 
         User Query: {item['query']}
-        Product Name: {item['title']}
-        Product Description: {item['description']}
-        Product Color: {item['product_color']}
-        Brand Name: {item['product_brand']}
-        Locale: {item['product_locale']}
+        Title: {item['title']}
         Human Label: {item['label']}
 
         """
@@ -175,7 +199,7 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
 
 if __name__ == "__main__":
     prompt = build_few_shot_prompt(k=10)
-    num_queries = 100
+    num_queries = 10
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
@@ -184,15 +208,16 @@ if __name__ == "__main__":
     graded_best = run_strategy(best, judgments, num_queries=num_queries)
     # best_ndcg = graded_best['ndcg'].mean()
     # print(f"Best Possible NDCG: {best_ndcg}")
-    tools = [search_esci]
+    tools = [multi_search_esci_results]
 
     search_client = OpenAISearchClient(tools=tools,
                                        model="openai/gpt-5",
                                        system_prompt=prompt)
     strategy = ReasoningSearchStrategy(corpus, search_client,
                                        prompt="",
-                                       cache=True,
-                                       workers=16)
+                                       cache=False,
+                                       workers=1)
+    print(f"Avg tokens per query: {strategy.total_tokens / num_queries}")
     graded_agent = run_strategy(strategy, judgments, num_queries=num_queries)
     print(f"Agent NDCG: {graded_agent.groupby('query')['ndcg'].mean().mean()}")
 

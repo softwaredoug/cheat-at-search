@@ -29,14 +29,15 @@ def fetch_esci(data_dir=esci_path, repo_url="https://github.com/softwaredoug/esc
 def _judgments():
     esci_queries_path = fetch_esci() / "shopping_queries_dataset" / "shopping_queries_dataset_examples.parquet"
     judgments = pd.read_parquet(esci_queries_path)
+    #  RelevanceLevels = Literal['🤩', '🙂', '😐', '😭']
     judgments['grade'] = judgments['esci_label'].map({'E': 3,
                                                       'S': 2,
                                                       'C': 1,
                                                       'I': 0})
-    judgments['label'] = judgments['esci_label'].map({'E': 'Exact',
-                                                      'S': 'Substitute (almost exact)',
-                                                      'C': 'Complimentary',
-                                                      'I': 'Irrelevant'})
+    judgments['label'] = judgments['esci_label'].map({'E': '🤩',
+                                                      'S': '🙂',
+                                                      'C': '😐',
+                                                      'I': '😭'})
     judgments['doc_id'] = judgments['product_id']
     return judgments
 
