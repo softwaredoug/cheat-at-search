@@ -32,10 +32,9 @@ class OpenAISearchClient(SearchClient):
             inputs = [
                 {"role": "system", "content": self.system_prompt},
             ]
-        next_msg = {"role": "user", "content": " Tokens used so far: 0"}
-        inputs.append(next_msg)
-        next_msg = {"role": "user", "content": prompt}
-        inputs.append(next_msg)
+        if prompt:
+            next_msg = {"role": "user", "content": prompt}
+            inputs.append(next_msg)
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
@@ -61,16 +60,6 @@ class OpenAISearchClient(SearchClient):
                 inputs += resp.output
 
                 total_tokens += resp.usage.total_tokens
-                # Find first user call and update token usage
-                for i in range(len(inputs)):
-                    if inputs[i]['role'] == 'user':
-                        inputs[i]['content'] = f" Tokens used so far: {total_tokens}"
-                        break
-
-                if total_tokens > 20000:
-                    token_warning = {"role": "system", "content": f"Warning: token limit approaching, {total_tokens} tokens used so far. Finish now."}
-                    inputs.append(token_warning)
-                    import pdb; pdb.set_trace()
 
                 print("Usage")
                 print(resp.usage)

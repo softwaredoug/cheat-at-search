@@ -1,4 +1,5 @@
 from cheat_at_search.esci_data import corpus, judgments
+from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.openai_search_client import OpenAISearchClient
 from cheat_at_search.search import run_strategy
@@ -7,6 +8,7 @@ from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Optional, Literal
 from searcharray import SearchArray
+from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
 
@@ -46,10 +48,12 @@ except FileNotFoundError:
 
 
 def search_esci(keywords: str,
+                field_to_search: Literal['product_name', 'product_description'],
+                operator: Literal['and', 'or'],
                 locale: Literal['es', 'us', 'jp'] = 'us',
                 top_k: int = 5) -> List[Dict]:
     """
-    Search amazon products with the given keywords and filters
+    Retrieve a BM25 score for Amazon search results by searching the specific field with the given keywords
 
     This is direct / naive BM25 keyword search with simple snowball stemming and whitespace tokenization.
     Do not expect synonyms, compounting, decompounding, query understanding, or other NLP tricks.
@@ -58,6 +62,8 @@ def search_esci(keywords: str,
 
     Args:
         keywords: The search query string.
+        field_to_search: The field to search in. Options are 'product_name' and 'product_description'.
+        operator: The logical operator to combine search terms. Options are 'and' and 'or'. Use and to require all terms.
         locale: The locale to search in. Default is 'us'. Other options are 'es' and 'jp'.
                 Consider the language of the query when choosing the locale.
         top_k: The number of top results to return.
@@ -66,34 +72,22 @@ def search_esci(keywords: str,
         Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
 
     """
-    excluded = None
-    required = None
-    product_color = None
-    brand_name = None
-
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(corpus))
+    if field_to_search == 'product_name':
+        field_name = 'title_snowball'
+    elif field_to_search == 'product_description':
+        field_name = 'description_snowball'
+    else:
+        raise ValueError("field_to_search must be 'product_name' or 'product_description'")
+
     for token in query_tokens:
-        scores += corpus['title_snowball'].array.score(token) * 2
-        scores += corpus['description_snowball'].array.score(token)
+        scores += corpus[field_name].array.score(token)
 
-    if excluded is None:
-        excluded = []
-
-    if required is None:
-        required = []
-
-    for phrase in excluded:
-        exclude_tokens = snowball_tokenizer(phrase)
-        exclude_mask = (corpus['title_snowball'].array.score(exclude_tokens) > 0) | \
-                       (corpus['description_snowball'].array.score(exclude_tokens) > 0)
-        scores = scores * (~exclude_mask)
-
-    for phrase in required:
-        require_tokens = snowball_tokenizer(phrase)
-        require_mask = (corpus['title_snowball'].array.score(require_tokens) > 0) | \
-                       (corpus['description_snowball'].array.score(require_tokens) > 0)
-        scores = scores * require_mask
+    if operator == 'and':
+        for token in query_tokens:
+            require_mask = (corpus[field_name].array.score(token) > 0)
+            scores = scores * require_mask
 
     if locale:
         locale_filter = (corpus['product_locale'] == locale)
@@ -112,21 +106,8 @@ def search_esci(keywords: str,
             'title': row['title'],
             'description': row['description'],
         })
-    print(f"Keywords {keywords} required: {required} excluded: {excluded} color:{product_color} brand:{brand_name} locale:{locale}-- Found {len(results)} results")
+    print(f"Keywords {keywords} field: {field_to_search} operator: {operator} locale: {locale} -> {len(results)} results")
     return results
-
-
-def multi_search_esci_results(keywords: list[str],
-                              locale: Literal['es', 'us', 'jp'] = 'us',
-                              top_k: int = 5) -> List[Dict]:
-    """Gather search results for multiple keywords."""
-    all_results = []
-    for keyword in keywords:
-        results = search_esci(keyword, locale=locale, top_k=top_k)
-        for result in results:
-            result['query'] = keyword
-        all_results.extend(results)
-    return all_results
 
 
 def inspect_product(product_id: str) -> Optional[Dict]:
@@ -147,90 +128,117 @@ def inspect_product(product_id: str) -> Optional[Dict]:
 
 
 system_few_shot_prompt = """
-    You take user search queries and use a search tool to find products on the Amazon online store. Examples
-    of labeled query-product pairs are listed at the bottom of this prompt to help you
-    understand how we will evaluate your results.
+    Generate python code using 'search_esci' as a function (the tool here). Assume search_esci has the python
+    signature as defined in tools.
 
-    Look at the search tools you have, their limitations, how they work, etc when forming your plan. Exercise the different
-    parameters of the search tools, review how well they worked, and iterate to improve.
+    Issue test queries using search_esci to see how it works, what its limitations are, etc before formulating
+    your plan. Create novel queries to test the tool, see how well it works, and iterate to improve your code and
+    reranker.
 
-    If you get "token alert!" in a user message, that's a sign to wrap up tool calling and return results.
-
-    Finally return results to the user per the SearchResults schema, ranked best to worst.
-
-    Gather results until you have 10 best matches you can find. It's important to return at least 10.
+    Then generate a *generalized* reranker as a function of search_esci, call this function 'rerank_esci', it should
+    return a list of product IDs in the order you think best matches the query. It should take as a parameter the 'search_esci'
+    tool to help (as the tool will be injected from outside).
 
     It's very important you consider carefully the correct ranking as you'll be evaluated on
     how close that is to the average shoppers ideal ranking.
+
+    Examples of labeled query-product pairs are listed at the bottom of this prompt to help you
+    understand how we will evaluate your results.
+
+    Your goal is to generate a ranker that doesn't need to have specific query terms mentioned in the code,
+    but can figure out the intent of the query and use the search tool to find the best products. You can use general, broad categories,
+    stopwords, concepts, etc, but think beyond the queries you're presented
+
+    In other words, overfitting is bad!!!
+
+    Generate valid python. Double check your code.
 
     Finally, some examples:
 """
 
 
-def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt,
+class GeneratedRerankerCode(BaseModel):
+    """Python code that would best rerank search results."""
+    query: str = Field(..., description="The original user search query")
+    code: str = Field(..., description="Python code that would best rerank search results")
+    code_explanation: str = Field(..., description="Explanation of why the code will generalize beyond the examples")
+
+
+def build_few_shot_prompt(num_queries=10, num_per_query=10,
+                          prompt=system_few_shot_prompt,
                           seed=42) -> str:
     if len(judgments) == 0:
         return []
-    relevant = judgments[judgments['grade'] == 3]
-    irrelevant = judgments[judgments['grade'] == 0]
-    # Get 3 relevant
-    relevant = relevant.sample(min(k // 3, len(relevant)), random_state=seed)
-    # Get 3 irrelevant
-    irrelevant = irrelevant.sample(min(k // 3, len(irrelevant)), random_state=seed)
-    # Get the rest Partial
-    partial = judgments[judgments['grade'].isin([1, 2])]
-    partial = partial.sample(min(k - len(relevant) - len(irrelevant), len(partial)), random_state=seed)
+    queries = judgments[['query', 'query_id']].drop_duplicates()
+    queries = queries.sample(num_queries, random_state=seed)
+    for query in queries['query']:
+        query_judgments = judgments[judgments['query'] == query]
+        relevant = query_judgments[query_judgments['grade'] == 3]
+        irrelevant = query_judgments[query_judgments['grade'] == 0]
+        # Get 3 relevant
+        relevant = relevant.sample(min(num_per_query // 3, len(relevant)), random_state=seed)
+        # Get 3 irrelevant
+        irrelevant = irrelevant.sample(min(num_per_query // 3, len(irrelevant)), random_state=seed)
+        # Get the rest Partial
+        partial = judgments[judgments['grade'].isin([1, 2])]
+        partial = partial.sample(min(num_per_query - len(relevant) - len(irrelevant), len(partial)), random_state=seed)
 
-    # Format into prompt
-    labeled = pd.concat([relevant, irrelevant, partial]).sample(frac=1, random_state=seed)
-    labeled = labeled.merge(corpus, on='product_id', how='left', suffixes=('', '_y'))
-    for item in labeled.to_dict(orient='records'):
-        prompt += f"""
+        # Format into prompt
+        labeled = pd.concat([relevant, irrelevant, partial]).sample(frac=1, random_state=seed)
+        labeled = labeled.merge(corpus, on='product_id', how='left', suffixes=('', '_y'))
+        for item in labeled.to_dict(orient='records'):
+            prompt += f"""
 
-        User Query: {item['query']}
-        Title: {item['title']}
-        Human Label: {item['label']}
+            User Query: {item['query']}
+            Title: {item['title']}
+            Human Label: {item['label']}
 
-        """
+            """
     print("Prompt is:")
     print(prompt)
     return prompt
 
 
+class CodeGenSearchStrategy(SearchStrategy):
+    def __init__(self, corpus, cache=True,
+                 workers=1):
+        super().__init__(corpus, workers=workers)
+        self.index = corpus
+
+    def search(self, query, k=10):
+
+        from rerank_esci import rerank_esci
+        product_ids = rerank_esci(search_esci, query)
+        scores = np.arange(len(product_ids), 0, -1)
+        top_k = product_ids[:k]
+        scores = scores[:k]
+        return top_k, scores
+
+
 if __name__ == "__main__":
-    prompt = build_few_shot_prompt(k=10)
-    num_queries = 10
+    prompt = build_few_shot_prompt()
+    num_queries = 100
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
-    best = BestPossibleResults(corpus, judgments)
-    graded_best = run_strategy(best, judgments, num_queries=num_queries)
+    # best = BestPossibleResults(corpus, judgments)
+    # graded_best = run_strategy(best, judgments, num_queries=num_queries)
     # best_ndcg = graded_best['ndcg'].mean()
     # print(f"Best Possible NDCG: {best_ndcg}")
-    tools = [multi_search_esci_results]
+    tools = [search_esci]
 
     search_client = OpenAISearchClient(tools=tools,
                                        model="openai/gpt-5",
-                                       system_prompt=prompt)
-    strategy = ReasoningSearchStrategy(corpus, search_client,
-                                       prompt="",
-                                       cache=False,
-                                       workers=1)
-    print(f"Avg tokens per query: {strategy.total_tokens / num_queries}")
-    graded_agent = run_strategy(strategy, judgments, num_queries=num_queries)
-    print(f"Agent NDCG: {graded_agent.groupby('query')['ndcg'].mean().mean()}")
+                                       system_prompt=prompt,
+                                       response_model=GeneratedRerankerCode)
+    resp = search_client.search(prompt="")
+    code = resp.code
+    with open("rerank_esci.py", "w") as f:
+        f.write(code)
 
-    sxs = graded_best.merge(
-        graded_agent,
-        on=['query', 'query_id', 'rank'],
-        how='left',
-        suffixes=('_best', '_agent')
-    )
-    sxs = sxs[['query', 'product_id_best', 'product_title_best',
-               'product_color_best', 'product_brand_best',
-               'grade_best',
-               'product_id_agent',
-               'product_color_agent', 'product_brand_agent',
-               'ndcg_agent', 'product_title_agent', 'grade_agent']][sxs['ndcg_agent'] < 0.1]
-    print(sxs)
+    codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
+    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries)
+    ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
+    print(f"Baseline NDCG: {bm25_ndcg}")
+    print(f"Codegen NDCG: {ndcg}")
