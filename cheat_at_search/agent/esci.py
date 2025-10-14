@@ -6,11 +6,12 @@ from cheat_at_search.search import run_strategy
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.tokenizers import snowball_tokenizer
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional, Literal, Union
 from searcharray import SearchArray
 from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
+import importlib
 
 from sentence_transformers import SentenceTransformer
 
@@ -58,8 +59,6 @@ def search_esci(keywords: str,
     This is direct / naive BM25 keyword search with simple snowball stemming and whitespace tokenization.
     Do not expect synonyms, compounting, decompounding, query understanding, or other NLP tricks.
 
-    Instead YOU need to reason about the user's intent and reformulate the query given the constraints.
-
     Args:
         keywords: The search query string.
         field_to_search: The field to search in. Options are 'product_name' and 'product_description'.
@@ -102,12 +101,133 @@ def search_esci(keywords: str,
 
     for id, row in top_products.iterrows():
         results.append({
-            'id': id,
+            'id': row['product_id'],
             'title': row['title'],
             'description': row['description'],
         })
     print(f"Keywords {keywords} field: {field_to_search} operator: {operator} locale: {locale} -> {len(results)} results")
     return results
+
+
+class Edit(BaseModel):
+    """A single edit to apply to the reranker code."""
+    anchor: str = Field(..., description="The anchor text to identify where the patch should be applied.")
+    block_until: str = Field(..., description="The end of the block of text which the patch should be applied. Do not leave blank.")
+    action: Literal['insert_after', 'replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
+    text: str = Field(..., description="The text to insert or replace with. Ignored for delete action.")
+
+
+class Edits(BaseModel):
+    """A set of edits to apply to the reranker code and test queries to validate."""
+    edits: List[Edit] = Field(..., description="A list of edits to apply to the reranker code.")
+    test_queries: List[str] = Field(..., description="A list of test queries to validate the reranker after applying edits.")
+
+
+class EditResult(BaseModel):
+    """The result of applying edits to the reranker code."""
+    success: bool = Field(..., description="Whether the edits were applied successfully and the reranker passed tests.")
+    error_message: Optional[str] = Field(None, description="An error message if the edits failed to apply or tests failed.")
+    query_results: Dict[str, Union[List[Dict], str]] = Field(..., description="The results of running the reranker on the test queries after applying edits.")
+
+
+def apply_patch(patch: Edits) -> EditResult:
+    """Apply an edit to reranker code."""
+    try:
+        print("Applying patch with edits:")
+        with open("rerank_esci.py", "r") as f:
+            code = f.read()
+
+            for edit in patch.edits:
+                anchor_index = code.find(edit.anchor)
+                if anchor_index == -1:
+                    raise ValueError(f"Anchor '{edit.anchor}' not found in code.")
+                block_index = code.find(edit.block_until, anchor_index)
+                if block_index == -1:
+                    raise ValueError(f"Block until '{edit.block_until}' not found after anchor in code.")
+
+                if edit.action == 'insert_after':
+                    insertion_point = block_index + len(edit.block_until)
+                    code = code[:insertion_point] + '\n' + edit.text + '\n' + code[insertion_point:]
+                elif edit.action == 'replace':
+                    code = code[:anchor_index] + edit.text + code[block_index + len(edit.block_until):]
+                elif edit.action == 'delete':
+                    code = code[:anchor_index] + code[block_index + len(edit.block_until):]
+                else:
+                    raise ValueError(f"Unknown action '{edit.action}'.")
+        # Attempt to eval the code
+        local_vars = {}
+        exec(code, {}, local_vars)
+        if 'rerank_esci' not in local_vars:
+            print("Edited code does not define 'rerank_esci'")
+            raise ValueError("The edited code does not define 'rerank_esci'.")
+        # Test that rerank_esci is callable
+        if not callable(local_vars['rerank_esci']):
+            print("'rerank_esci' is not callable.")
+            raise ValueError("'rerank_esci' is not callable.")
+        # Call with test_queries
+        edit_result = EditResult(success=True, error_message=None, query_results={})
+        for query in patch.test_queries:
+            try:
+                results = local_vars['rerank_esci'](search_esci, query)[:10]
+            except Exception as e:
+                print(f"Error calling 'rerank_esci' with query '{query}': {e}")
+                print("---")
+                print(code)
+                raise ValueError(f"Error calling 'rerank_esci' with query '{query}': {e}")
+
+            try:
+                if not isinstance(results, list):
+                    print(f"'rerank_esci' did not return a list for query '{query}'.")
+                    raise ValueError(f"'rerank_esci' did not return a list for query '{query}'.")
+                dict_results = []
+                for result in results:
+                    product = corpus[corpus['product_id'] == result]
+                    if len(product) == 0:
+                        continue
+                    product = product.iloc[0]
+                    dict_results.append({
+                        'id': product['product_id'],
+                        'title': product['title'],
+                        'description': product['description'],
+                    })
+                edit_result.query_results[query] = dict_results
+            except Exception as e:
+                print(f"Error collecting results with query '{query}': {e}")
+                raise ValueError(f"Error calling 'rerank_esci' with query '{query}': {e}")
+
+        with open("rerank_esci.py", "w") as f:
+            f.write(code)
+            print("Patched rerank_esci.py successfully.")
+            return edit_result
+    except Exception as e:
+        print("Error applying patch:", e)
+        return EditResult(success=False, error_message=str(e), query_results={})
+
+
+class EvalResults(BaseModel):
+    """The result of evaluating the reranker on ground truth judgments."""
+    query_ndcgs: List[Dict] = Field(..., description="A list of dictionaries with 'query' and 'ndcg' keys.")
+    mean_ndcg: float = Field(..., description="The mean NDCG across all queries.")
+
+
+def run_evals() -> EvalResults:
+    """Evaluate the current reranker on random sample of query document ground truth."""
+    print("Running evals on all judgments")
+    codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
+    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=20)
+    ndcgs = results_codegen.groupby('query')['ndcg'].mean()
+    result = []
+    for query, ndcg in ndcgs.items():
+        result.append({'query': query, 'ndcg': ndcg})
+        print(f"Query: {query} NDCG: {ndcg}")
+
+    eval_result = EvalResults(
+        query_ndcgs=result,
+        mean_ndcg=ndcgs.mean()
+    )
+    print(f"Mean NDCG: {eval_result.mean_ndcg}")
+
+    return eval_result
 
 
 def inspect_product(product_id: str) -> Optional[Dict]:
@@ -128,40 +248,24 @@ def inspect_product(product_id: str) -> Optional[Dict]:
 
 
 system_few_shot_prompt = """
-    Generate python code using 'search_esci' as a function (the tool here). Assume search_esci has the python
-    signature as defined in tools.
+    Your task is to look at the data and improve the reranker code so that it returns more relevant results
 
-    Issue test queries using search_esci to see how it works, what its limitations are, etc before formulating
-    your plan. Create novel queries to test the tool, see how well it works, and iterate to improve your code and
-    reranker.
+    Edit the reranker python module using apply_patch method.
 
-    Then generate a *generalized* reranker as a function of search_esci, call this function 'rerank_esci', it should
-    return a list of product IDs in the order you think best matches the query. It should take as a parameter the 'search_esci'
-    tool to help (as the tool will be injected from outside).
+    You can run the reranker using the 'run_reranker' function, which takes a query and returns ranked, matching
+    products.
 
-    It's very important you consider carefully the correct ranking as you'll be evaluated on
-    how close that is to the average shoppers ideal ranking.
+    You can evaluate the reranker using the 'run_evals' function, which returns NDCG scores for all queries and mean NDCG. Your goal is to
+    increase mean NDCG.
 
-    Examples of labeled query-product pairs are listed at the bottom of this prompt to help you
-    understand how we will evaluate your results.
+    Experiment with the current reranker by calling it with test queries. Improve the reranker based on the behavior you observe. Make edits and test while you edit.
 
-    Your goal is to generate a ranker that doesn't need to have specific query terms mentioned in the code,
-    but can figure out the intent of the query and use the search tool to find the best products. You can use general, broad categories,
-    stopwords, concepts, etc, but think beyond the queries you're presented
+    Your code MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
+    returns a list of product IDs in the order you think best matches the query.
 
-    In other words, overfitting is bad!!!
-
-    Generate valid python. Double check your code.
-
-    Finally, some examples:
+    Here are some examples of user queries, product titles, and human labels (Relevant, Partially Relevant, Irrelevant) that
+    you are ranking:
 """
-
-
-class GeneratedRerankerCode(BaseModel):
-    """Python code that would best rerank search results."""
-    query: str = Field(..., description="The original user search query")
-    code: str = Field(..., description="Python code that would best rerank search results")
-    code_explanation: str = Field(..., description="Explanation of why the code will generalize beyond the examples")
 
 
 def build_few_shot_prompt(num_queries=10, num_per_query=10,
@@ -180,22 +284,30 @@ def build_few_shot_prompt(num_queries=10, num_per_query=10,
         # Get 3 irrelevant
         irrelevant = irrelevant.sample(min(num_per_query // 3, len(irrelevant)), random_state=seed)
         # Get the rest Partial
-        partial = judgments[judgments['grade'].isin([1, 2])]
+        partial = query_judgments[query_judgments['grade'].isin([1, 2])]
+
         partial = partial.sample(min(num_per_query - len(relevant) - len(irrelevant), len(partial)), random_state=seed)
 
+        if len(irrelevant) == 0:
+            # Sample random docs
+            irrelevant = corpus.sample(num_per_query // 3, random_state=seed).copy()[['product_id']]
+            irrelevant['grade'] = 0
+            irrelevant['label'] = '😭'
+            irrelevant['query'] = query
+
         # Format into prompt
-        labeled = pd.concat([relevant, irrelevant, partial]).sample(frac=1, random_state=seed)
+        labeled = pd.concat([relevant, partial, irrelevant]).sample(frac=1, random_state=seed)
+        labeled = labeled.sort_values(by='grade', ascending=False).head(num_per_query)
         labeled = labeled.merge(corpus, on='product_id', how='left', suffixes=('', '_y'))
         for item in labeled.to_dict(orient='records'):
             prompt += f"""
 
             User Query: {item['query']}
             Title: {item['title']}
-            Human Label: {item['label']}
+            Description: {item['description']}
+            Human Label: {item['label']} (grade: {item['grade']})
 
             """
-    print("Prompt is:")
-    print(prompt)
     return prompt
 
 
@@ -208,16 +320,73 @@ class CodeGenSearchStrategy(SearchStrategy):
     def search(self, query, k=10):
 
         from rerank_esci import rerank_esci
+        importlib.reload(importlib.import_module("rerank_esci"))
+
+        product_ids = rerank_esci(search_esci, query)[:k]
+        scores = np.arange(len(product_ids), 0, -1)
+        top_k_ilocs = []
+        for product_id in product_ids:
+            iloc = self.index.index[self.index['product_id'] == product_id].tolist()
+            if len(iloc):
+                top_k_ilocs.append(iloc[0])
+            else:
+                print(f"Product ID {product_id} not found in corpus")
+                continue
+        scores = scores[:k]
+        return top_k_ilocs, scores
+
+
+def run_reranker(query, label=False) -> Union[List[Dict], str]:
+    """Run the reranker. Returns a list of products or an error message.
+
+    Set label=True to return human labels with product details (only use if query is from judgments).
+
+    """
+    query_judgments = None
+    if label:
+        query_judgments = judgments[judgments['query'] == query]
+        if len(query_judgments) == 0:
+            return "No judgments found for query: " + query
+    try:
+        print(f"Running reranker for query: {query}")
+        from rerank_esci import rerank_esci
+        importlib.reload(importlib.import_module("rerank_esci"))
+
+        k = 10
         product_ids = rerank_esci(search_esci, query)
         scores = np.arange(len(product_ids), 0, -1)
         top_k = product_ids[:k]
         scores = scores[:k]
-        return top_k, scores
+
+        products = corpus[corpus['product_id'].isin(top_k)]
+
+        results = []
+        for id, row in products.iterrows():
+            grade = None
+            results.append({
+                'id': row['product_id'],
+                'title': row['title'],
+                'description': row['description'],
+                'score': scores[np.where(top_k == row['product_id'])[0][0]]
+            })
+            if label:
+                grade = query_judgments[query_judgments['product_id'] == row['product_id']]['grade'].values
+                import pdb; pdb.set_trace()
+                results[-1]['grade'] = int(grade[0]) if len(grade) > 0 else None
+
+        return results
+    except Exception as e:
+        print("Error running reranker:", e)
+        return "Error running reranker: " + str(e)
+
+
+class FinalMessage(BaseModel):
+    """Final message indicating completion of the reranker improvement process."""
+    message: str = Field(..., description="A message indicating that the reranker improvement process is complete.")
 
 
 if __name__ == "__main__":
-    prompt = build_few_shot_prompt()
-    num_queries = 100
+    num_queries = 20
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
@@ -226,19 +395,53 @@ if __name__ == "__main__":
     # graded_best = run_strategy(best, judgments, num_queries=num_queries)
     # best_ndcg = graded_best['ndcg'].mean()
     # print(f"Best Possible NDCG: {best_ndcg}")
-    tools = [search_esci]
+    tools = [search_esci, apply_patch, inspect_product, run_reranker, run_evals]
 
-    search_client = OpenAISearchClient(tools=tools,
-                                       model="openai/gpt-5",
-                                       system_prompt=prompt,
-                                       response_model=GeneratedRerankerCode)
-    resp = search_client.search(prompt="")
-    code = resp.code
+    start_code = ""
+    with open("cheat_at_search/start_rerank_esci.py", "r") as f:
+        code = f.read()
+
     with open("rerank_esci.py", "w") as f:
         f.write(code)
 
-    codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
-    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries)
-    ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
+    ndcgs = []
+    for rounds in range(3):
+        print(f"=== Generating Reranker Code Round {rounds} ===")
+
+        prompt = build_few_shot_prompt(seed=42 + rounds * 100, num_queries=4, num_per_query=4)
+
+        prompt += f"""
+
+        Reranker code to improve:
+
+        ```python
+        {code}
+        ```
+
+        """
+        print("Prompt is:")
+        print(prompt)
+
+        search_client = OpenAISearchClient(tools=tools,
+                                           model="openai/gpt-5",
+                                           system_prompt=prompt,
+                                           response_model=FinalMessage)
+        resp: FinalMessage = search_client.search(prompt="")
+        print("Final message from agent:")
+        print(resp.message)
+
+        ndcg = 0
+        try:
+            codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
+            results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries)
+            ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
+        except Exception as e:
+            print("Error running codegen strategy:", e)
+            ndcg = 0
+        print("=== End of Round ===")
+        print(f"Round {rounds} complete.")
+        print(f"Codegen NDCG: {ndcg}")
+        ndcgs.append(ndcg)
     print(f"Baseline NDCG: {bm25_ndcg}")
-    print(f"Codegen NDCG: {ndcg}")
+    for i, ndcg in enumerate(ndcgs):
+        print(f"Round {i} NDCG: {ndcg}")
