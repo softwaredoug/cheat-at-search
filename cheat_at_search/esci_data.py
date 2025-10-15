@@ -72,7 +72,6 @@ def _docs():
 def __getattr__(name):
     """Load dataset lazily."""
     ds = None
-    print(name)
     if name in globals():
         return globals()[name]
     if name == "judgments" or name == "queries":

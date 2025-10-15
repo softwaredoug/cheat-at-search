@@ -61,10 +61,8 @@ class OpenAISearchClient(SearchClient):
 
                 total_tokens += resp.usage.total_tokens
 
-                print("Usage")
-                print(resp.usage)
-                print("---")
-                print(f"Total tokens so far: {total_tokens}")
+                logger.debug("Usage: ", resp.usage)
+                logger.info(f"Total tokens so far: {total_tokens}")
 
                 tool_calls_found = False
 
@@ -91,7 +89,7 @@ class OpenAISearchClient(SearchClient):
                 resp.usage = resp.usage
             return resp, inputs, total_tokens
         except Exception as e:
-            print("Error calling MCP search tool:", e)
+            logger.error("Error calling MCP search tool:", e)
             raise e
 
     def search(self, prompt: str, return_usage=False) -> SearchResults:
@@ -115,7 +113,7 @@ class OpenAIChatAdapter:
             self.inputs = inputs
             return resp.output[-1].content[-1].text
         except Exception as e:
-            print("Error calling OpenAI chat:", e)
+            logger.error("Error calling OpenAI chat:", e)
             raise e
 
     def reset(self, system=None):

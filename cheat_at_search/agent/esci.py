@@ -213,8 +213,12 @@ class EvalResults(BaseModel):
 def run_evals() -> EvalResults:
     """Evaluate the current reranker on random sample of query document ground truth."""
     print("Running evals on all judgments")
+    if hasattr(run_evals, "seed"):
+        run_evals.seed += 1
+    else:
+        run_evals.seed = 50
     codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
-    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=20)
+    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=20, seed=run_evals.seed)
     ndcgs = results_codegen.groupby('query')['ndcg'].mean()
     result = []
     for query, ndcg in ndcgs.items():
@@ -371,7 +375,6 @@ def run_reranker(query, label=False) -> Union[List[Dict], str]:
             })
             if label:
                 grade = query_judgments[query_judgments['product_id'] == row['product_id']]['grade'].values
-                import pdb; pdb.set_trace()
                 results[-1]['grade'] = int(grade[0]) if len(grade) > 0 else None
 
         return results
