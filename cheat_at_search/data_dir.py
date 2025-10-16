@@ -62,6 +62,7 @@ def sync_git_repo(data_dir: str, repo_url: str):
 
     try:
         # Clone the repository
+        logger.info(f"Cloning {repo_url} into {data_path}")
         subprocess.run(
             ["git", "clone", "--depth=1", repo_url, str(data_path)],
             check=True,
