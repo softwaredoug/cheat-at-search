@@ -8,7 +8,8 @@ import pandas as pd
 logger = log_to_stdout(logger_name="search")
 
 
-def run_strategy(strategy, judgments, num_queries=None, seed=42):
+def run_strategy(strategy, judgments, num_queries=None, seed=42,
+                 sub_sample_n=None, sub_sample_seed=42):
 
     queries = judgments[['query', 'query_id']].drop_duplicates()
     max_grade = judgments['grade'].max()
@@ -16,6 +17,12 @@ def run_strategy(strategy, judgments, num_queries=None, seed=42):
     if num_queries:
         queries = queries.sample(num_queries, random_state=seed)
         judgments = judgments[judgments['query_id'].isin(queries['query_id'])]
+
+        if sub_sample_n:
+            if sub_sample_n >= len(queries):
+                raise ValueError("sub_sample_n must be less than the number of queries after num_queries filtering.")
+            queries = queries.sample(sub_sample_n, random_state=sub_sample_seed)
+            judgments = judgments[judgments['query_id'].isin(queries['query_id'])]
 
     results = strategy.search_all(queries)
     graded = grade_results(
