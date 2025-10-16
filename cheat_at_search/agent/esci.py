@@ -1,7 +1,7 @@
 from cheat_at_search.esci_data import corpus, judgments
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
-from cheat_at_search.agent.openai_search_client import OpenAISearchClient
+from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.search import run_strategy
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
@@ -425,11 +425,11 @@ if __name__ == "__main__":
         print("Prompt is:")
         print(prompt)
 
-        search_client = OpenAISearchClient(tools=tools,
-                                           model="openai/gpt-5",
-                                           system_prompt=prompt,
-                                           response_model=FinalMessage)
-        resp: FinalMessage = search_client.search(prompt="")
+        search_client = OpenAIAgent(tools=tools,
+                                    model="openai/gpt-5",
+                                    system_prompt=prompt,
+                                    response_model=FinalMessage)
+        resp: FinalMessage = search_client.loop(prompt="")
         print("Final message from agent:")
         print(resp.message)
 

@@ -49,9 +49,9 @@ class SearchResults(BaseModel):
     )
 
 
-class SearchClient(ABC):
+class Agent(ABC):
     """Use an MCP server to search for products"""
 
     @abstractmethod
-    def search(self, prompt: str) -> SearchResults:
+    def loop(self, prompt: str) -> SearchResults:
         pass

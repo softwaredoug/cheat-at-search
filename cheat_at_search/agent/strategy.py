@@ -1,5 +1,5 @@
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.search_client import SearchClient
+from cheat_at_search.agent.search_client import Agent
 from cheat_at_search.data_dir import ensure_data_subdir
 import pickle
 from hashlib import md5
@@ -11,7 +11,7 @@ cached_results_dir = ensure_data_subdir("cached_agent_search_results")
 class ReasoningSearchStrategy(SearchStrategy):
     """A search strategy that uses reasoning to improve search results."""
 
-    def __init__(self, corpus, search_client: SearchClient, prompt: str, cache=True,
+    def __init__(self, corpus, search_client: Agent, prompt: str, cache=True,
                  workers=1):
         super().__init__(corpus, workers=workers)
         self.search_client = search_client

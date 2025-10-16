@@ -1,4 +1,4 @@
-from cheat_at_search.agent.search_client import SearchClient, SearchResults
+from cheat_at_search.agent.search_client import Agent, SearchResults
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.pydantize import make_tool_adapter
@@ -8,7 +8,7 @@ from openai import OpenAI
 logger = log_to_stdout("openai_search_client")
 
 
-class OpenAISearchClient(SearchClient):
+class OpenAIAgent(Agent):
     def __init__(self,
                  tools,
                  model: str,
@@ -92,7 +92,7 @@ class OpenAISearchClient(SearchClient):
             logger.error("Error calling MCP search tool:", e)
             raise e
 
-    def search(self, prompt: str, return_usage=False) -> SearchResults:
+    def loop(self, prompt: str, return_usage=False) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, "response_model must be set for structured search results."
         resp, _, total_tokens = self.chat(prompt)
@@ -103,7 +103,7 @@ class OpenAISearchClient(SearchClient):
 
 
 class OpenAIChatAdapter:
-    def __init__(self, client: OpenAISearchClient):
+    def __init__(self, client: OpenAIAgent):
         self.client = client
         self.reset()
 
