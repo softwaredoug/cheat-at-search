@@ -26,14 +26,14 @@ class OpenAIAgent(Agent):
         self.openai = OpenAI(api_key=self.openai_key)
         self.last_usage = None
 
-    def chat(self, prompt: str, inputs=None, return_usage=False) -> SearchResults:
+    def chat(self, user_prompt: str = None, inputs=None, return_usage=False) -> SearchResults:
         """Chat, handle any response."""
         if not inputs:
             inputs = [
                 {"role": "system", "content": self.system_prompt},
             ]
-        if prompt:
-            next_msg = {"role": "user", "content": prompt}
+        if user_prompt:
+            next_msg = {"role": "user", "content": user_prompt}
             inputs.append(next_msg)
         tools = []
         for tool in self.search_tools.values():
@@ -92,10 +92,10 @@ class OpenAIAgent(Agent):
             logger.error("Error calling MCP search tool:", e)
             raise e
 
-    def loop(self, prompt: str, return_usage=False) -> SearchResults:
+    def loop(self, user_prompt: str = None, return_usage=False) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, "response_model must be set for structured search results."
-        resp, _, total_tokens = self.chat(prompt)
+        resp, _, total_tokens = self.chat(user_prompt)
         self.last_usage = resp.usage
         if return_usage:
             return resp.output_parsed, total_tokens
