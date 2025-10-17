@@ -3,6 +3,7 @@ from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.search import run_strategy
+from cheat_at_search.logger import log_at
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.tokenizers import snowball_tokenizer
@@ -18,6 +19,9 @@ from sentence_transformers import SentenceTransformer
 
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
 model = SentenceTransformer('all-MiniLM-L6-v2')
+
+
+log_at("INFO")
 
 
 def resolve(query_item: str, embeddings_to_search, names_lookup, k=5) -> str:
@@ -213,22 +217,21 @@ class EvalResults(BaseModel):
 def run_evals() -> EvalResults:
     """Evaluate the current reranker on random sample of query document ground truth."""
     print("Running evals on all judgments")
-    if hasattr(run_evals, "seed"):
-        run_evals.seed += 1
-    else:
-        run_evals.seed = 50
     codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
-    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=20, seed=run_evals.seed)
+    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=20,
+                                   seed=42)
     ndcgs = results_codegen.groupby('query')['ndcg'].mean()
     result = []
     for query, ndcg in ndcgs.items():
         result.append({'query': query, 'ndcg': ndcg})
-        print(f"Query: {query} NDCG: {ndcg}")
+        print(f"Query: {query} NDCG: {ndcg:.4f}")
 
     eval_result = EvalResults(
         query_ndcgs=result,
         mean_ndcg=ndcgs.mean()
     )
+    print("------")
+    print("------")
     print(f"Mean NDCG: {eval_result.mean_ndcg}")
 
     return eval_result
@@ -420,7 +423,6 @@ if __name__ == "__main__":
         ```python
         {code}
         ```
-
         """
         print("Prompt is:")
         print(prompt)
@@ -429,7 +431,7 @@ if __name__ == "__main__":
                                     model="openai/gpt-5",
                                     system_prompt=prompt,
                                     response_model=FinalMessage)
-        resp: FinalMessage = search_client.loop(prompt="")
+        resp: FinalMessage = search_client.loop()
         print("Final message from agent:")
         print(resp.message)
 

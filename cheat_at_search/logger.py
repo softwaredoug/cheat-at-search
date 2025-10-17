@@ -4,6 +4,21 @@ from typing import Optional, Union, Literal
 
 LogLevelType = Union[int, Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]]
 
+
+def log_at(level):
+    """Enable INFO level logging for the cheat_at_search package."""
+    logger = logging.getLogger("cheat_at_search")
+    logger.setLevel(level)
+    if not logger.hasHandlers():
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
+
+
 def log_to_stdout(
     logger_name: Optional[str] = None,
     level: LogLevelType = "ERROR",
