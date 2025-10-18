@@ -1,18 +1,17 @@
 from cheat_at_search.esci_data import corpus, judgments
-from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.search import run_strategy
 from cheat_at_search.logger import log_at
 from cheat_at_search.data_dir import ensure_data_subdir
-from cheat_at_search.strategy import BM25Search, BestPossibleResults
+from cheat_at_search.strategy import BM25Search
 from cheat_at_search.tokenizers import snowball_tokenizer
-from typing import List, Dict, Optional, Literal, Union
+from cheat_at_search.tools.code import make_patch_fn
+from cheat_at_search.tools.eval import make_eval_fn, CodeGenSearchStrategy
+from typing import List, Dict, Optional, Literal
 from searcharray import SearchArray
 from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
-import importlib
 
 from sentence_transformers import SentenceTransformer
 
@@ -22,24 +21,6 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 log_at("INFO")
-
-
-def resolve(query_item: str, embeddings_to_search, names_lookup, k=5) -> str:
-    query_embedding = model.encode([query_item])[0]
-    similarities = np.dot(embeddings_to_search, query_embedding) / (
-        np.linalg.norm(query_embedding) * np.linalg.norm(embeddings_to_search, axis=1) + 1e-10)
-    top_k = np.argsort(-similarities)[:k]
-    return names_lookup[top_k], similarities[top_k]
-
-
-def resolve_then_filter(query_item: str, embeddings_to_search,
-                        names_lookup, corpus, field_name, k=5) -> List[str]:
-    resolved_items, similarities = resolve(query_item, embeddings_to_search, names_lookup, k=k)
-    matches = np.zeros(len(corpus), dtype=bool)
-    for resolved_item in resolved_items:
-        tokenized = snowball_tokenizer(resolved_item)
-        matches |= (corpus[field_name].array.score(tokenized) > 0)
-    return matches
 
 
 try:
@@ -87,13 +68,10 @@ def search_esci(keywords: str,
     for token in query_tokens:
         scores += corpus[field_name].array.score(token)
 
-    try:
-        if operator == 'and':
-            for token in query_tokens:
-                require_mask = (corpus[field_name].array.score(token) > 0)
-                scores = scores * require_mask
-    except Exception as e:
-        import pdb; pdb.set_trace()
+    if operator == 'and':
+        for token in query_tokens:
+            require_mask = (corpus[field_name].array.score(token) > 0)
+            scores = scores * require_mask
 
     if locale:
         locale_filter = (corpus['product_locale'] == locale)
@@ -115,152 +93,6 @@ def search_esci(keywords: str,
         })
     print(f"Keywords {keywords} field: {field_to_search} operator: {operator} locale: {locale} -> {len(results)} results")
     return results
-
-
-def revert_changes() -> str:
-    """Undo the last patch to rerank_esci.py by restoring from backup."""
-    with open("rerank_esci_backup.py", "r") as backup:
-        with open("rerank_esci.py", "w") as f:
-            print("Reverted rerank_esci.py to backup.")
-            code = backup.read()
-            f.write(code)
-            print("Reverted changes successfully.")
-            return code
-    return "Error reverting changes."
-
-
-class Edit(BaseModel):
-    """A single edit to apply to the reranker code."""
-    anchor: str = Field(..., description="The anchor text to identify where the patch should be applied.")
-    block_until: str = Field(..., description="The end of the block of text which the patch should be applied. Do not leave blank.")
-    action: Literal['insert_after', 'replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
-    text: str = Field(..., description="The text to insert or replace with. Ignored for delete action.")
-    test_queries: List[str] = Field(..., description="A list of test queries to validate the reranker after applying edits.")
-
-
-class EditResult(BaseModel):
-    """The result of applying edits to the reranker code."""
-    success: bool = Field(..., description="Whether the edits were applied successfully and the reranker passed tests.")
-    error_message: Optional[str] = Field(None, description="An error message if the edits failed to apply or tests failed.")
-    query_results: Dict[str, Union[List[Dict], str]] = Field(..., description="The results of running the reranker on the test queries after applying edits.")
-    current_code: str = Field(None, description="The current reranker code after this call.")
-
-
-def apply_patch(edit: Edit) -> EditResult:
-    """Apply an incremental edit to reranker code.
-
-    Edits more than 10 lines will be rejected
-
-    """
-    try:
-        print("Applying patch with edits:")
-        existing_code = ""
-        with open("rerank_esci.py", "r") as f:
-            code = f.read()
-            existing_code = code
-
-            anchor_index = code.find(edit.anchor)
-            if anchor_index == -1:
-                raise ValueError(f"Anchor '{edit.anchor}' not found in code.")
-            block_index = code.find(edit.block_until, anchor_index)
-            if block_index == -1:
-                raise ValueError(f"Block until '{edit.block_until}' not found after anchor in code.")
-            if edit.text.count('\n') > 11:
-                raise ValueError("Edit text exceeds 10 lines limit. Please keep it incremental.")
-
-            if edit.action == 'insert_after':
-                insertion_point = block_index + len(edit.block_until)
-                code = code[:insertion_point] + '\n' + edit.text + '\n' + code[insertion_point:]
-            elif edit.action == 'replace':
-                code = code[:anchor_index] + edit.text + code[block_index + len(edit.block_until):]
-            elif edit.action == 'delete':
-                code = code[:anchor_index] + code[block_index + len(edit.block_until):]
-            else:
-                raise ValueError(f"Unknown action '{edit.action}'.")
-        # Attempt to eval the code
-        local_vars = {}
-        exec(code, {}, local_vars)
-        if 'rerank_esci' not in local_vars:
-            print("Edited code does not define 'rerank_esci'")
-            raise ValueError("The edited code does not define 'rerank_esci'.")
-        # Test that rerank_esci is callable
-        if not callable(local_vars['rerank_esci']):
-            print("'rerank_esci' is not callable.")
-            raise ValueError("'rerank_esci' is not callable.")
-        # Call with test_queries
-        edit_result = EditResult(success=True, error_message=None, query_results={})
-        for query in edit.test_queries:
-            try:
-                results = local_vars['rerank_esci'](search_esci, query)[:10]
-            except Exception as e:
-                print(f"Error calling 'rerank_esci' with query '{query}': {e}")
-                print("---")
-                print(code)
-                raise ValueError(f"Error calling 'rerank_esci' with query '{query}': {e}")
-
-            try:
-                if not isinstance(results, list):
-                    print(f"'rerank_esci' did not return a list for query '{query}'.")
-                    raise ValueError(f"'rerank_esci' did not return a list for query '{query}'.")
-                dict_results = []
-                for result in results:
-                    product = corpus[corpus['product_id'] == result]
-                    if len(product) == 0:
-                        continue
-                    product = product.iloc[0]
-                    dict_results.append({
-                        'id': product['product_id'],
-                        'title': product['title'],
-                        'description': product['description'],
-                    })
-                edit_result.query_results[query] = dict_results
-            except Exception as e:
-                print(f"Error collecting results with query '{query}': {e}")
-                raise ValueError(f"Error calling 'rerank_esci' with query '{query}': {e}")
-
-        with open("rerank_esci.py", "r") as f:
-            with open("rerank_esci_backup.py", "w") as backup:
-                print("Backed up previous rerank_esci.py to rerank_esci_backup.py")
-                backup.write(f.read())
-
-        with open("rerank_esci.py", "w") as f:
-            f.write(code)
-            edit_result.current_code = code
-            print("Patched rerank_esci.py successfully.")
-            return edit_result
-    except Exception as e:
-        print("Error applying patch:", e)
-        return EditResult(success=False, error_message=str(e), query_results={},
-                          current_code=existing_code)
-
-
-class EvalResults(BaseModel):
-    """The result of evaluating the reranker on ground truth judgments."""
-    query_ndcgs: List[Dict] = Field(..., description="A list of dictionaries with 'query' and 'ndcg' keys.")
-    mean_ndcg: float = Field(..., description="The mean NDCG across all queries.")
-
-
-def run_evals() -> EvalResults:
-    """Evaluate the current reranker on random sample of query document ground truth."""
-    print("Running evals on all judgments")
-    codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
-    results_codegen = run_strategy(codegen_strategy, judgments, num_queries=20,
-                                   seed=42)
-    ndcgs = results_codegen.groupby('query')['ndcg'].mean()
-    result = []
-    for query, ndcg in ndcgs.items():
-        result.append({'query': query, 'ndcg': ndcg})
-        print(f"Query: {query} NDCG: {ndcg:.4f}")
-
-    eval_result = EvalResults(
-        query_ndcgs=result,
-        mean_ndcg=ndcgs.mean()
-    )
-    print("------")
-    print("------")
-    print(f"Mean NDCG: {eval_result.mean_ndcg}")
-
-    return eval_result
 
 
 def inspect_product(product_id: str) -> Optional[Dict]:
@@ -346,91 +178,6 @@ def build_few_shot_prompt(num_queries=10, num_per_query=10,
     return prompt
 
 
-class CodeGenSearchStrategy(SearchStrategy):
-    def __init__(self, corpus, cache=True,
-                 workers=1):
-        super().__init__(corpus, workers=workers)
-        self.index = corpus
-
-    def search(self, query, k=10):
-
-        from rerank_esci import rerank_esci
-        importlib.reload(importlib.import_module("rerank_esci"))
-
-        product_ids = rerank_esci(search_esci, query)[:k]
-        scores = np.arange(len(product_ids), 0, -1)
-        top_k_ilocs = []
-        for product_id in product_ids:
-            iloc = self.index.index[self.index['product_id'] == product_id].tolist()
-            if len(iloc):
-                top_k_ilocs.append(iloc[0])
-            else:
-                print(f"Product ID {product_id} not found in corpus")
-                continue
-        scores = scores[:k]
-        return top_k_ilocs, scores
-
-
-def grade_to_emoji(grade):
-    if grade == 3:
-        return '🤩'
-    elif grade == 2:
-        return '🙂'
-    elif grade == 1:
-        return '😐'
-    elif grade == 0:
-        return '😭'
-
-
-def run_reranker(query, label=False) -> Union[List[Dict], str]:
-    """Run the reranker. Returns a list of products or an error message.
-
-    Set label=True to return human labels with product details (only use if query is from judgments).
-
-    """
-    query_judgments = None
-    if label:
-        query_judgments = judgments[judgments['query'] == query]
-        if len(query_judgments) == 0:
-            return "No judgments found for query: " + query
-    try:
-        print(f"Running reranker for query: {query} (label={label})")
-        from rerank_esci import rerank_esci
-        importlib.reload(importlib.import_module("rerank_esci"))
-
-        k = 10
-        product_ids = rerank_esci(search_esci, query)
-        scores = np.arange(len(product_ids), 0, -1)
-        scores = scores[:k]
-
-        results = []
-        for product_id, score in zip(product_ids, scores):
-            grade = None
-            corpus_row = corpus[corpus['product_id'] == product_id]
-            results.append({
-                'id': product_id,
-                'title': corpus_row['title'].iloc[0],
-                'description': corpus_row['description'].iloc[0],
-                'score': int(score)
-            })
-            if label:
-                grade = query_judgments[query_judgments['product_id'] == product_id]['grade'].values
-                if len(grade) == 0:
-                    grade = None
-                else:
-                    grade = grade[0]
-                    grade = int(grade)
-                    grade_emoji = grade_to_emoji(grade)
-                    if grade:
-                        results[-1]['grade'] = int(grade)
-                        results[-1]['label'] = grade_emoji
-
-        return results
-    except Exception as e:
-        print("Error running reranker:", e)
-        return "Error running reranker: " + str(e)
-
-
 class FinalMessage(BaseModel):
     """Final message indicating completion of the reranker improvement process."""
     message: str = Field(..., description="A message indicating that the reranker improvement process is complete.")
@@ -446,6 +193,21 @@ if __name__ == "__main__":
     # graded_best = run_strategy(best, judgments, num_queries=num_queries)
     # best_ndcg = graded_best['ndcg'].mean()
     # print(f"Best Possible NDCG: {best_ndcg}")
+    apply_patch, revert_changes = make_patch_fn(
+        search_fn=search_esci,
+        corpus=corpus,
+        module_name="rerank_esci"
+    )
+    run_evals, run_reranker = make_eval_fn(
+        corpus=corpus,
+        judgments=judgments,
+        module_name="rerank_esci",
+        search_fn=search_esci,
+        workers=16,
+        num_queries=num_queries,
+        seed=42
+    )
+
     tools = [search_esci, apply_patch, run_reranker, run_evals,
              revert_changes]
 
