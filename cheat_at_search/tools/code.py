@@ -121,7 +121,7 @@ def make_patch_fn(search_fn, corpus, module_name: str):
                 logger.info(f"Patched {filepath} successfully.")
                 return edit_result
         except Exception as e:
-            logger.info("Error applying patch:", e)
+            logger.info(f"Error applying patch: {e}")
             return EditResult(success=False, error_message=str(e), query_results={},
                               current_code=existing_code)
     return apply_patch, revert_changes
