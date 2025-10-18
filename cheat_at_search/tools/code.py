@@ -1,6 +1,7 @@
 from typing import List, Dict, Union, Optional, Literal
 from pydantic import BaseModel, Field
 from cheat_at_search.logger import log_to_stdout
+from cheat_at_search.agent.openai_agent import OpenAIAgent
 
 
 logger = log_to_stdout(logger_name="cheat_at_search.code")
@@ -23,7 +24,38 @@ class EditResult(BaseModel):
     current_code: str = Field(None, description="The current reranker code after this call.")
 
 
-def make_patch_fn(search_fn, corpus, module_name: str):
+def length_validation(code: str, max_lines: int = 10, max_cols=120) -> Optional[str]:
+    """Validate that the code does not exceed max_lines."""
+
+    if code.count('\n') > max_lines:
+        return f"Code exceeds maximum length of {max_lines} lines."
+
+    for line in code.split('\n'):
+        if len(line) > max_cols:
+            return f"Line exceeds maximum length of {max_cols} characters: {line}"
+    return None
+
+
+class GuardrailResponse(BaseModel):
+    """The response from the guardrail checker."""
+    compliant: bool = Field(..., description="Whether the code complies with the guardrails.")
+    issues: Optional[List[str]] = Field(None, description="A list of issues found in the code, if any.")
+
+
+def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
+    agent = OpenAIAgent(tools=[],
+                        model=model,
+                        system_prompt=prompt,
+                        response_model=GuardrailResponse)
+
+    def code_guardrails(code: str) -> Optional[str]:
+        response = agent.loop(user_prompt=f"Please evaluate the following code for compliance:\n```python\n{code}\n```")
+        if not response.compliant:
+            issues = "\n".join(response.issues) if response.issues else "No specific issues provided."
+            return f"Code does not comply with guardrails:\n{issues}"
+
+
+def make_patch_fn(search_fn, corpus, module_name: str, validation_fns: List = []):
     """Returns a function that applies patches to the reranker code."""
 
     def revert_changes() -> str:
@@ -57,8 +89,12 @@ def make_patch_fn(search_fn, corpus, module_name: str):
                 block_index = code.find(edit.block_until, anchor_index)
                 if block_index == -1:
                     raise ValueError(f"Block until '{edit.block_until}' not found after anchor in code.")
-                if edit.text.count('\n') > 11:
-                    raise ValueError("Edit text exceeds 10 lines limit. Please keep it incremental.")
+
+                # Validate code
+                for validation_fn in validation_fns:
+                    error_message = validation_fn(edit.text)
+                    if error_message is not None:
+                        raise ValueError(error_message)
 
                 if edit.action == 'insert_after':
                     insertion_point = block_index + len(edit.block_until)

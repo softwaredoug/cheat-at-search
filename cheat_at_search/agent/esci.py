@@ -5,7 +5,7 @@ from cheat_at_search.logger import log_at
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search
 from cheat_at_search.tokenizers import snowball_tokenizer
-from cheat_at_search.tools.code import make_patch_fn
+from cheat_at_search.tools.code import make_patch_fn, length_validation, make_guardrail_checker
 from cheat_at_search.tools.eval import make_eval_fn, CodeGenSearchStrategy
 from typing import List, Dict, Optional, Literal
 from searcharray import SearchArray
@@ -17,7 +17,6 @@ from sentence_transformers import SentenceTransformer
 
 
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 log_at("INFO")
@@ -130,6 +129,10 @@ system_few_shot_prompt = """
     Your code MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
     returns a list of product IDs in the order you think best matches the query.
 
+    Your code change will not be accepted if:
+    1. The proposed change is more than 10 lines of code or 120 columns
+    2. The proposed change appears to overfit to the specific queries and does not generalize to other queries outside what you've tried
+
     Here are some examples of user queries, product titles, and human labels (Relevant, Partially Relevant, Irrelevant) that
     you are ranking:
 """
@@ -184,7 +187,7 @@ class FinalMessage(BaseModel):
 
 
 if __name__ == "__main__":
-    num_queries = 20
+    num_queries = 100
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
@@ -193,10 +196,20 @@ if __name__ == "__main__":
     # graded_best = run_strategy(best, judgments, num_queries=num_queries)
     # best_ndcg = graded_best['ndcg'].mean()
     # print(f"Best Possible NDCG: {best_ndcg}")
+    overfit_to_queries_guardrail = make_guardrail_checker(prompt="""
+
+        Return 'true' if the reranker code you wrote is overfitting to the specific queries and
+        does not appear to generalize to other queries. Otherwise return false.
+
+        List the issues you see.
+    """
+    )
+
     apply_patch, revert_changes = make_patch_fn(
         search_fn=search_esci,
         corpus=corpus,
-        module_name="rerank_esci"
+        module_name="rerank_esci",
+        validation_fns=[length_validation(max_lines=10), overfit_to_queries_guardrail]
     )
     run_evals, run_reranker = make_eval_fn(
         corpus=corpus,
@@ -246,7 +259,9 @@ if __name__ == "__main__":
 
         ndcg = 0
         try:
-            codegen_strategy = CodeGenSearchStrategy(corpus, workers=16)
+            codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
+                                                     search_fn=search_esci,
+                                                     module_name="rerank_esci")
             results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries)
             ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
         except Exception as e:
