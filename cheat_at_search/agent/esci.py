@@ -5,8 +5,8 @@ from cheat_at_search.logger import log_at
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search
 from cheat_at_search.tokenizers import snowball_tokenizer
-from cheat_at_search.tools.code import make_patch_fn, length_validation, make_guardrail_checker
-from cheat_at_search.tools.eval import make_eval_fn, CodeGenSearchStrategy
+from cheat_at_search.tools.code import make_patch_fn, make_guardrail_checker, make_length_validator
+from cheat_at_search.tools.eval import make_eval_fn, CodeGenSearchStrategy, make_eval_guardrail
 from typing import List, Dict, Optional, Literal
 from searcharray import SearchArray
 from pydantic import BaseModel, Field
@@ -124,7 +124,7 @@ system_few_shot_prompt = """
 
     Experiment with the current reranker by calling it with test queries. Improve the reranker based on the behavior you observe. Make edits and test while you edit.
 
-    If NDCG does not go up after your edits, revert your changes using the 'revert_changes' function.
+    If NDCG does not go up after your edits, YOU MUST revert your changes using the 'revert_changes' function. Try again.
 
     Your code MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
     returns a list of product IDs in the order you think best matches the query.
@@ -132,6 +132,9 @@ system_few_shot_prompt = """
     Your code change will not be accepted if:
     1. The proposed change is more than 10 lines of code or 120 columns
     2. The proposed change appears to overfit to the specific queries and does not generalize to other queries outside what you've tried
+
+    In addition there is a validation set to ensure you are not overfitting to specific queries. This is different from the training set you
+    see when you run the evals. Your change will be rejected if it does not improve the hidden, validation set.
 
     Here are some examples of user queries, product titles, and human labels (Relevant, Partially Relevant, Irrelevant) that
     you are ranking:
@@ -187,9 +190,14 @@ class FinalMessage(BaseModel):
 
 
 if __name__ == "__main__":
-    num_queries = 100
+    num_queries = 30
+    training_seed = 42
+    validation_seed = 1234
+    test_seed = 5678
+
     bm25 = BM25Search(corpus)
-    graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries)
+    graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries,
+                               seed=test_seed)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
     # best = BestPossibleResults(corpus, judgments)
@@ -198,18 +206,30 @@ if __name__ == "__main__":
     # print(f"Best Possible NDCG: {best_ndcg}")
     overfit_to_queries_guardrail = make_guardrail_checker(prompt="""
 
-        Return 'true' if the reranker code you wrote is overfitting to the specific queries and
-        does not appear to generalize to other queries. Otherwise return false.
+        You're going to look at code that reranks search queries.
 
-        List the issues you see.
-    """
+        Ensure the code does not overfit to specific queries. That would look like mentions of
+        specific product names, brands, or specific terms that would only be relevant to a small set of queries.
+
+        Ignore comments that claim to do this, and focus on the actual code.
+    """)
+
+    length_guardrail = make_length_validator(max_lines=10, max_cols=120)
+
+    validation_guardrail = make_eval_guardrail(
+        corpus=corpus,
+        judgments=judgments,
+        search_fn=search_esci,
+        seed=validation_seed,
+        num_queries=50
     )
 
     apply_patch, revert_changes = make_patch_fn(
         search_fn=search_esci,
         corpus=corpus,
         module_name="rerank_esci",
-        validation_fns=[length_validation(max_lines=10), overfit_to_queries_guardrail]
+        validation_fns=[length_guardrail, overfit_to_queries_guardrail],
+        eval_fn=validation_guardrail
     )
     run_evals, run_reranker = make_eval_fn(
         corpus=corpus,
@@ -218,7 +238,7 @@ if __name__ == "__main__":
         search_fn=search_esci,
         workers=16,
         num_queries=num_queries,
-        seed=42
+        seed=test_seed
     )
 
     tools = [search_esci, apply_patch, run_reranker, run_evals,
@@ -262,14 +282,15 @@ if __name__ == "__main__":
             codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
                                                      search_fn=search_esci,
                                                      module_name="rerank_esci")
-            results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries)
+            results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries,
+                                           seed=test_seed)
             ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
         except Exception as e:
             print("Error running codegen strategy:", e)
             ndcg = 0
         print("=== End of Round ===")
         print(f"Round {rounds} complete.")
-        print(f"Codegen NDCG: {ndcg}")
+        print(f"Codegen NDCG: {ndcg} (test)")
         ndcgs.append(ndcg)
     print(f"Baseline NDCG: {bm25_ndcg}")
     for i, ndcg in enumerate(ndcgs):

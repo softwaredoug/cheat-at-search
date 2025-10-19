@@ -1,4 +1,4 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 from pydantic import BaseModel, Field
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import SearchStrategy
@@ -22,19 +22,37 @@ def _get_rerank_fn(module_name: str):
     return rerank_fn
 
 
+def _rerank_fn_from_code(code: str):
+    exec_globals = {}
+    exec(code, exec_globals)
+    rerank_fn = None
+    for name, obj in exec_globals.items():
+        if name.startswith("rerank_"):
+            rerank_fn = obj
+            break
+    return rerank_fn
+
+
 class CodeGenSearchStrategy(SearchStrategy):
     def __init__(self, corpus,
-                 module_name: str,
                  search_fn,
+                 module_name: Optional[str] = None,
+                 code: Optional[str] = None,
                  cache=True,
                  workers=1):
         super().__init__(corpus, workers=workers)
         self.index = corpus
         self.module_name = module_name
         self.search_fn = search_fn
+        self.code = code
+        if not module_name and not code:
+            raise ValueError("Either module_name or code must be provided.")
 
     def search(self, query, k=10):
-        rerank_fn = _get_rerank_fn(self.module_name)
+        if self.code:
+            rerank_fn = _rerank_fn_from_code(self.code)
+        elif self.module_name:
+            rerank_fn = _get_rerank_fn(self.module_name)
 
         product_ids = rerank_fn(self.search_fn, query)[:k]
         scores = np.arange(len(product_ids), 0, -1)
@@ -141,3 +159,17 @@ def make_eval_fn(corpus, judgments, module_name: str, search_fn,
             return "Error running reranker: " + str(e)
 
     return run_evals, run_reranker
+
+
+def make_eval_guardrail(corpus, judgments, search_fn, seed=1234, num_queries=100):
+
+    def eval_guardrail(code: str) -> float:
+        """Evaluate on validation set to avoid overfitting. Returns mean NDCG."""
+        strategy = CodeGenSearchStrategy(corpus,
+                                         search_fn=search_fn,
+                                         code=code,
+                                         workers=16)
+        results = run_strategy(strategy, judgments, num_queries=num_queries,
+                               seed=seed)
+        ndcg = results.groupby('query')['ndcg'].mean().mean()
+        return ndcg

@@ -1,4 +1,4 @@
-from typing import List, Dict, Union, Optional, Literal
+from typing import List, Dict, Union, Optional, Literal, Callable
 from pydantic import BaseModel, Field
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.openai_agent import OpenAIAgent
@@ -24,16 +24,19 @@ class EditResult(BaseModel):
     current_code: str = Field(None, description="The current reranker code after this call.")
 
 
-def length_validation(code: str, max_lines: int = 10, max_cols=120) -> Optional[str]:
-    """Validate that the code does not exceed max_lines."""
+def make_length_validator(max_lines: int = 10, max_cols=120) -> Callable[[str], Optional[str]]:
 
-    if code.count('\n') > max_lines:
-        return f"Code exceeds maximum length of {max_lines} lines."
+    def length_validation(code: str) -> Optional[str]:
+        """Validate that the code does not exceed max_lines."""
 
-    for line in code.split('\n'):
-        if len(line) > max_cols:
-            return f"Line exceeds maximum length of {max_cols} characters: {line}"
-    return None
+        if code.count('\n') > max_lines:
+            return f"Code exceeds maximum length of {max_lines} lines."
+
+        for line in code.split('\n'):
+            if len(line) > max_cols:
+                return f"Line exceeds maximum length of {max_cols} characters: {line}"
+        return None
+    return length_validation
 
 
 class GuardrailResponse(BaseModel):
@@ -53,9 +56,12 @@ def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
         if not response.compliant:
             issues = "\n".join(response.issues) if response.issues else "No specific issues provided."
             return f"Code does not comply with guardrails:\n{issues}"
+    return code_guardrails
 
 
-def make_patch_fn(search_fn, corpus, module_name: str, validation_fns: List = []):
+def make_patch_fn(search_fn, corpus, module_name: str,
+                  validation_fns: List = [],
+                  eval_fn: Optional[Callable] = None) -> callable:
     """Returns a function that applies patches to the reranker code."""
 
     def revert_changes() -> str:
@@ -72,7 +78,11 @@ def make_patch_fn(search_fn, corpus, module_name: str, validation_fns: List = []
     def apply_patch(edit: Edit) -> EditResult:
         """Apply an incremental edit to reranker code.
 
-        Edits more than 10 lines will be rejected
+        Edits more than 10 lines will be rejected.
+        Edits with lines longer than 120 characters will be rejected.
+        Edits that fail to compile / eval will be rejected
+        Edits where the code appears to be overfit to training queries will be rejected
+        Edits that reduce validation NDCG will be rejected as overfitting
 
         """
         try:
@@ -144,6 +154,13 @@ def make_patch_fn(search_fn, corpus, module_name: str, validation_fns: List = []
                 except Exception as e:
                     logger.error(f"Error collecting results with query '{query}': {e}")
                     raise ValueError(f"Error calling 'rerank_esci' with query '{query}': {e}")
+            # Compare NDCG before and after
+            if eval_fn:
+                ndcg_before = eval_fn(existing_code)
+                ndcg_after = eval_fn(code)
+                if ndcg_after < ndcg_before:
+                    logger.warning(f"Rejecting Change: Validation NDCG decreased after applying patch: before={ndcg_before}, after={ndcg_after}")
+                    raise ValueError(f"Rejecting change as overfit: Validation NDCG decreased on test set after applying patch: before={ndcg_before}, after={ndcg_after}")
 
             backup_path = f"{module_name}_backup.py"
             with open(filepath, "r") as f:
