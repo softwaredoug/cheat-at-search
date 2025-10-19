@@ -4,6 +4,32 @@ from typing import Optional, Union, Literal
 
 LogLevelType = Union[int, Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]]
 
+
+def log_at(level: LogLevelType = logging.INFO) -> logging.Logger:
+    """Enable INFO level logging for the cheat_at_search package."""
+    logger = logging.getLogger("cheat_at_search")
+    logger.setLevel(level)
+    if not logger.hasHandlers():
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
+    base_name = "cheat_at_search"
+    for name, logger in logging.root.manager.loggerDict.items():
+        if name.startswith(base_name + "."):
+            logger.setLevel(level)
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+    return logger
+
+
 def log_to_stdout(
     logger_name: Optional[str] = None,
     level: LogLevelType = "ERROR",
@@ -21,6 +47,8 @@ def log_to_stdout(
     Returns:
         The configured logger instance.
     """
+    if logger_name and not logger_name.startswith("cheat_at_search"):
+        logger_name = f"cheat_at_search.{logger_name}" if logger_name else "cheat_at_search"
     # Convert string level to int if needed
     if isinstance(level, str):
         level = getattr(logging, level.upper())
