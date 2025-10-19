@@ -190,13 +190,16 @@ class FinalMessage(BaseModel):
 
 
 if __name__ == "__main__":
-    num_queries = 30
-    training_seed = 42
+    num_test_queries = 100
+    num_validation_queries = 50
+    num_training_queries = 50
+    training_seed = 5678
     validation_seed = 1234
-    test_seed = 5678
+    test_seed = 42
 
     bm25 = BM25Search(corpus)
-    graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries,
+    graded_bm25 = run_strategy(bm25, judgments,
+                               num_queries=num_test_queries,
                                seed=test_seed)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
@@ -221,7 +224,7 @@ if __name__ == "__main__":
         judgments=judgments,
         search_fn=search_esci,
         seed=validation_seed,
-        num_queries=50
+        num_queries=num_validation_queries
     )
 
     apply_patch, revert_changes = make_patch_fn(
@@ -237,8 +240,8 @@ if __name__ == "__main__":
         module_name="rerank_esci",
         search_fn=search_esci,
         workers=16,
-        num_queries=num_queries,
-        seed=test_seed
+        num_queries=num_training_queries,
+        seed=training_seed
     )
 
     tools = [search_esci, apply_patch, run_reranker, run_evals,
@@ -282,16 +285,18 @@ if __name__ == "__main__":
             codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
                                                      search_fn=search_esci,
                                                      module_name="rerank_esci")
-            results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries,
+            results_codegen = run_strategy(codegen_strategy, judgments,
+                                           num_queries=num_test_queries,
                                            seed=test_seed)
             ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
         except Exception as e:
             print("Error running codegen strategy:", e)
             ndcg = 0
+        ndcgs.append(ndcg)
         print("=== End of Round ===")
         print(f"Round {rounds} complete.")
         print(f"Codegen NDCG: {ndcg} (test)")
-        ndcgs.append(ndcg)
-    print(f"Baseline NDCG: {bm25_ndcg}")
-    for i, ndcg in enumerate(ndcgs):
-        print(f"Round {i} NDCG: {ndcg}")
+        print("All rounds so far:")
+        print(f"Baseline NDCG: {bm25_ndcg}")
+        for i, ndcg in enumerate(ndcgs):
+            print(f"Round {i} NDCG: {ndcg}")
