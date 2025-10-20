@@ -5,7 +5,6 @@ import os
 from hashlib import md5
 from typing import Optional, Tuple
 from pydantic import BaseModel
-import threading
 import json
 
 
@@ -24,7 +23,6 @@ class CachedEnrichClient(EnrichClient):
         self.enricher = enricher
         self.cache_file = cache_file
         self.cache = {}
-        self.cache_lock = threading.Lock()
         self.load_cache()
 
     def load_cache(self):
@@ -76,17 +74,15 @@ class CachedEnrichClient(EnrichClient):
         return self.enricher.debug(prompt)
 
     def enrich(self, prompt: str) -> Optional[BaseModel]:
-        with self.cache_lock:
-            prompt_key = self.prompt_key(prompt)
-            if prompt_key in self.cache:
-                logger.debug(f"Cache hit for prompt: {prompt_key}")
-                as_json = self.cache[prompt_key]
-                return self.response_model.model_validate_json(as_json)
-            logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
+        prompt_key = self.prompt_key(prompt)
+        if prompt_key in self.cache:
+            logger.debug(f"Cache hit for prompt: {prompt_key}")
+            as_json = self.cache[prompt_key]
+            return self.response_model.model_validate_json(as_json)
+        logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
         enriched_data = self.enricher.enrich(prompt)
-        with self.cache_lock:
-            if enriched_data:
-                self.cache[prompt_key] = enriched_data.model_dump_json()
+        if enriched_data:
+            self.cache[prompt_key] = enriched_data.model_dump_json()
         self.save_cache()
         return enriched_data
 
