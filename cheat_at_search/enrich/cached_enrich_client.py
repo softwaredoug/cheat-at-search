@@ -87,8 +87,8 @@ class CachedEnrichClient(EnrichClient):
         with self.cache_lock:
             if enriched_data:
                 self.cache[prompt_key] = enriched_data.model_dump_json()
-                self.save_cache()
-            return enriched_data
+        self.save_cache()
+        return enriched_data
 
     def str_hash(self) -> str:
         return self.enricher.str_hash()
