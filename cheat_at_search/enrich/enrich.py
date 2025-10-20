@@ -75,7 +75,6 @@ class AutoEnricher:
                         try:
                             res_idx, enriched_data = future.result()
                         except Exception as e:
-                            import pdb; pdb.set_trace()
                             logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
 
                         if res_idx > len(prompts):
