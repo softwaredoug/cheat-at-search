@@ -83,7 +83,8 @@ class CachedEnrichClient(EnrichClient):
                 as_json = self.cache[prompt_key]
                 return self.response_model.model_validate_json(as_json)
             logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
-            enriched_data = self.enricher.enrich(prompt)
+        enriched_data = self.enricher.enrich(prompt)
+        with self.cache_lock:
             if enriched_data:
                 self.cache[prompt_key] = enriched_data.model_dump_json()
                 self.save_cache()
