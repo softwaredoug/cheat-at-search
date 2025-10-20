@@ -73,6 +73,7 @@ class AutoEnricher:
                     fail = False
                     for future in as_completed(futures):
                         idx = futures[future]
+                        pbar.update(1)
                         try:
                             res_idx, enriched_data = future.result()
                         except Exception as e:
@@ -91,7 +92,6 @@ class AutoEnricher:
                         results[res_idx] = enriched_data
                     if fail:
                         raise ValueError("Enrichment failed due to errors in processing.")
-                    pbar.update(1)
         for idx in error_idxes:
             results[idx] = enrich_one(idx, prompts[idx])[1]
             logger.warning(f"Enrichment failed for prompt at index {idx}, setting result to None.")
