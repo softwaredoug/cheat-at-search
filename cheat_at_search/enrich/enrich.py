@@ -46,8 +46,10 @@ class AutoEnricher:
         """Enrich a list of prompts, using multiple threads, and cache the results."""
         results = [None] * len(prompts)
 
+        if not isinstance(prompts, list):
+            raise ValueError(f"Prompts must be a list of strings. Found type {type(prompts)}")
+
         for prompt in prompts:
-            import pdb; pdb.set_trace()
             if not isinstance(prompt, str):
                 raise ValueError(f"All prompts must be strings. Found prompt of type {type(prompt)}")
 
