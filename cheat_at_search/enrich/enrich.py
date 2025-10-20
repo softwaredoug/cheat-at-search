@@ -45,6 +45,7 @@ class AutoEnricher:
     def enrich_all(self, prompts: list[str], workers=5, batch_size=100) -> list[BaseModel]:
         """Enrich a list of prompts, using multiple threads, and cache the results."""
         results = [None] * len(prompts)
+        results_len = len(results)
 
         if not isinstance(prompts, list):
             raise ValueError(f"Prompts must be a list of strings. Found type {type(prompts)}")
@@ -77,10 +78,13 @@ class AutoEnricher:
                                 logger.error(f"Result index {res_idx} out of bounds for prompts of length {len(prompts)}")
                                 fail = True
                                 break
+                            if len(results) != results_len:
+                                logger.error("Results list size changed during enrichment, possible concurrency issue.")
+                                fail = True
+                                break
                             results[res_idx] = enriched_data
                         except Exception as e:
                             logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
-                            import pdb; pdb.set_trace()
                     if fail:
                         raise ValueError("Enrichment failed due to errors in processing.")
                     pbar.update(1)
