@@ -24,6 +24,7 @@ class CachedEnrichClient(EnrichClient):
         self.enricher = enricher
         self.cache_file = cache_file
         self.cache = {}
+        self.last_cache_save_time = perf_counter()
         self.load_cache()
 
     def load_cache(self):
@@ -87,7 +88,10 @@ class CachedEnrichClient(EnrichClient):
         logger.info(f"Enrichment took {end - start:.2f} seconds.")
         if enriched_data:
             self.cache[prompt_key] = enriched_data.model_dump_json()
-        self.save_cache()
+        now = perf_counter()
+        if now - self.last_cache_save_time > 60:
+            self.save_cache()
+            self.last_cache_save_time = perf_counter()
         return enriched_data
 
     def str_hash(self) -> str:
