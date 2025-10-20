@@ -9,7 +9,7 @@ from time import perf_counter
 import json
 
 
-logger = log_to_stdout(logger_name="query_parser")
+logger = log_to_stdout(logger_name="cached_enrich_client")
 
 
 class CachedEnrichClient(EnrichClient):
@@ -82,15 +82,13 @@ class CachedEnrichClient(EnrichClient):
             as_json = self.cache[prompt_key]
             return self.response_model.model_validate_json(as_json)
         logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
-        start = perf_counter()
         enriched_data = self.enricher.enrich(prompt)
-        end = perf_counter()
-        logger.info(f"Enrichment took {end - start:.2f} seconds.")
         if enriched_data:
             self.cache[prompt_key] = enriched_data.model_dump_json()
         now = perf_counter()
         if now - self.last_cache_save_time > 60:
             self.save_cache()
+            logger.info("Cache saved to disk.")
             self.last_cache_save_time = perf_counter()
         return enriched_data
 
