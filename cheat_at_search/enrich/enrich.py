@@ -60,21 +60,28 @@ class AutoEnricher:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             with tqdm(total=len(prompts), desc="Enriching prompts") as pbar:
                 for i in range(0, len(prompts), batch_size):
+                    result_idx_base = i
                     batch_prompts = prompts[i:i + batch_size]
 
                     futures = {
-                        executor.submit(enrich_one, idx + i, prompt): idx + i
+                        executor.submit(enrich_one, idx + result_idx_base, prompt): idx + result_idx_base
                         for idx, prompt in enumerate(batch_prompts)
                     }
 
+                    fail = False
                     for future in as_completed(futures):
                         idx = futures[future]
                         try:
                             res_idx, enriched_data = future.result()
+                            if res_idx > len(prompts):
+                                logger.error(f"Result index {res_idx} out of bounds for prompts of length {len(prompts)}")
+                                fail = True
                             results[res_idx] = enriched_data
                         except Exception as e:
                             logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
-                        pbar.update(1)
+                    if fail:
+                        raise ValueError("Enrichment failed due to errors in processing.")
+                    pbar.update(1)
         return results
 
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
