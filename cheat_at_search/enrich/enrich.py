@@ -46,6 +46,10 @@ class AutoEnricher:
         """Enrich a list of prompts, using multiple threads, and cache the results."""
         results = [None] * len(prompts)
 
+        for prompt in prompts:
+            if not isinstance(prompt, str):
+                raise ValueError(f"All prompts must be strings. Found prompt of type {type(prompt)}")
+
         def enrich_one(idx, prompt):
             return idx, self.cached_enricher.enrich(prompt)
 
