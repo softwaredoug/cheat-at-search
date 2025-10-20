@@ -47,6 +47,7 @@ class AutoEnricher:
         results = [None] * len(prompts)
 
         for prompt in prompts:
+            import pdb; pdb.set_trace()
             if not isinstance(prompt, str):
                 raise ValueError(f"All prompts must be strings. Found prompt of type {type(prompt)}")
 
