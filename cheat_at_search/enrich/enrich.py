@@ -58,6 +58,7 @@ class AutoEnricher:
             return idx, self.cached_enricher.enrich(prompt)
 
         logger.info(f"Enriching {len(prompts)} prompts with {workers} workers and batch size {batch_size}")
+        error_idxes = []
         with ThreadPoolExecutor(max_workers=workers) as executor:
             with tqdm(total=len(prompts), desc="Enriching prompts") as pbar:
                 for i in range(0, len(prompts), batch_size):
@@ -75,7 +76,8 @@ class AutoEnricher:
                         try:
                             res_idx, enriched_data = future.result()
                         except Exception as e:
-                            logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
+                            logger.debug(f"(Forgiven) Error enriching prompt at index {idx}: {str(e)}")
+                            error_idxes.append(idx)
 
                         if res_idx > len(prompts):
                             logger.error(f"Result index {res_idx} out of bounds for prompts of length {len(prompts)}")
@@ -89,6 +91,9 @@ class AutoEnricher:
                     if fail:
                         raise ValueError("Enrichment failed due to errors in processing.")
                     pbar.update(1)
+        for idx in error_idxes:
+            results[idx] = enrich_one(idx, prompts[idx])[1]
+            logger.warning(f"Enrichment failed for prompt at index {idx}, setting result to None.")
         return results
 
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
