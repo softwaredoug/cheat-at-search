@@ -92,9 +92,11 @@ class AutoEnricher:
                     if fail:
                         raise ValueError("Enrichment failed due to errors in processing.")
                     pbar.update(len(batch_prompts))
+        self.cached_enricher.save_cache()
         for idx in error_idxes:
             results[idx] = enrich_one(idx, prompts[idx])[1]
             logger.warning(f"Enrichment failed for prompt at index {idx}, setting result to None.")
+        self.cached_enricher.save_cache()
         return results
 
     def debug(self, prompt: str) -> Optional[DebugMetaData]:

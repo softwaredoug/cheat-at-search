@@ -88,7 +88,7 @@ class CachedEnrichClient(EnrichClient):
         now = perf_counter()
         if now - self.last_cache_save_time > 60:
             self.save_cache()
-            logger.info("Cache saved to disk.")
+            logger.debug("Cache saved to disk.")
             self.last_cache_save_time = perf_counter()
         return enriched_data
 
