@@ -76,6 +76,7 @@ class AutoEnricher:
                             if res_idx > len(prompts):
                                 logger.error(f"Result index {res_idx} out of bounds for prompts of length {len(prompts)}")
                                 fail = True
+                                break
                             results[res_idx] = enriched_data
                         except Exception as e:
                             logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
