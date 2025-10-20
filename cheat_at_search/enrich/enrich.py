@@ -74,17 +74,18 @@ class AutoEnricher:
                         idx = futures[future]
                         try:
                             res_idx, enriched_data = future.result()
-                            if res_idx > len(prompts):
-                                logger.error(f"Result index {res_idx} out of bounds for prompts of length {len(prompts)}")
-                                fail = True
-                                break
-                            if len(results) != results_len:
-                                logger.error("Results list size changed during enrichment, possible concurrency issue.")
-                                fail = True
-                                break
-                            results[res_idx] = enriched_data
                         except Exception as e:
                             logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
+
+                        if res_idx > len(prompts):
+                            logger.error(f"Result index {res_idx} out of bounds for prompts of length {len(prompts)}")
+                            fail = True
+                            break
+                        if len(results) != results_len:
+                            logger.error("Results list size changed during enrichment, possible concurrency issue.")
+                            fail = True
+                            break
+                        results[res_idx] = enriched_data
                     if fail:
                         raise ValueError("Enrichment failed due to errors in processing.")
                     pbar.update(1)
