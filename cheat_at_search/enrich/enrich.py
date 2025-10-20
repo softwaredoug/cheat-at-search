@@ -80,6 +80,7 @@ class AutoEnricher:
                             results[res_idx] = enriched_data
                         except Exception as e:
                             logger.error(f"Error enriching prompt at index {idx}: {str(e)}")
+                            import pdb; pdb.set_trace()
                     if fail:
                         raise ValueError("Enrichment failed due to errors in processing.")
                     pbar.update(1)
