@@ -5,6 +5,7 @@ import os
 from hashlib import md5
 from typing import Optional, Tuple
 from pydantic import BaseModel
+from time import perf_counter
 import json
 
 
@@ -80,7 +81,10 @@ class CachedEnrichClient(EnrichClient):
             as_json = self.cache[prompt_key]
             return self.response_model.model_validate_json(as_json)
         logger.debug(f"Cache miss for prompt: {prompt_key}, enriching...")
+        start = perf_counter()
         enriched_data = self.enricher.enrich(prompt)
+        end = perf_counter()
+        logger.info(f"Enrichment took {end - start:.2f} seconds.")
         if enriched_data:
             self.cache[prompt_key] = enriched_data.model_dump_json()
         self.save_cache()
