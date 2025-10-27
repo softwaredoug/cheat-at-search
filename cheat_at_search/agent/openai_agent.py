@@ -28,6 +28,7 @@ class OpenAIAgent(Agent):
 
     def chat(self, user_prompt: str = None, inputs=None, return_usage=False) -> SearchResults:
         """Chat, handle any response."""
+        tool_call_logs = []
         if not inputs:
             inputs = [
                 {"role": "system", "content": self.system_prompt},
@@ -77,6 +78,11 @@ class OpenAIAgent(Agent):
                         ToolArgsModel = tool[0]
                         tool_fn = tool[2]
 
+                        tool_call_logs.append({
+                            "tool_name": tool_name,
+                            "arguments": item.arguments,
+                        })
+
                         fn_args: ToolArgsModel = ToolArgsModel.model_validate_json(item.arguments)
                         py_resp, json_resp = tool_fn(fn_args)
                         # 4. Provide function call results to the model
@@ -87,6 +93,11 @@ class OpenAIAgent(Agent):
                         })
             if return_usage:
                 resp.usage = resp.usage
+            if len(tool_call_logs) > 0:
+                logger.info("**** Search completed ****")
+                logger.info("Tool call summary:")
+                for log in tool_call_logs:
+                    logger.info(f"Tool called: {log['tool_name']}")
             return resp, inputs, total_tokens
         except Exception as e:
             logger.error("Error calling MCP search tool:", e)
