@@ -3,6 +3,7 @@ from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.pydantize import make_tool_adapter
 from openai import OpenAI
+from typing import Optional
 
 
 logger = log_to_stdout("openai_search_client")
@@ -13,6 +14,7 @@ class OpenAIAgent(Agent):
                  tools,
                  model: str,
                  system_prompt: str = "",
+                 max_tokens: Optional[int] = None,
                  response_model=SearchResults):
         self.search_tools = {tool.__name__: make_tool_adapter(tool) for tool in tools}
 
@@ -25,6 +27,7 @@ class OpenAIAgent(Agent):
         self.response_model = response_model
         self.openai = OpenAI(api_key=self.openai_key)
         self.last_usage = None
+        self.max_tokens = max_tokens
 
     def chat(self, user_prompt: str = None, inputs=None, return_usage=False) -> SearchResults:
         """Chat, handle any response."""
@@ -64,6 +67,9 @@ class OpenAIAgent(Agent):
 
                 logger.debug("Usage: ", resp.usage)
                 logger.info(f"Total tokens so far: {total_tokens}")
+                if self.max_tokens and total_tokens >= self.max_tokens:
+                    logger.info(f"Reached max tokens limit of {self.max_tokens}. Stopping further tool calls.")
+                    break
 
                 tool_calls_found = False
 

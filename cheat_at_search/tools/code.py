@@ -184,6 +184,9 @@ def make_patch_fn(search_fn, corpus, module_name: str,
 
             icon = '✅' if ndcgs_after.mean() >= ndcgs_before.mean() else '❌'
             logger.info(f"{icon} Evaluated patch successfully. train NDCG before: {ndcgs_before.mean()}, after: {ndcgs_after.mean()}")
+            logger.info(f"Changed queries NDCG deltas: {changed_queries}")
+            logger.info("Code:")
+            logger.info(code)
             return EvalResult(success=True, error_message=None, ndcg_deltas=changed_queries,
                               ndcg_before=ndcgs_before.mean(), ndcg_after=ndcgs_after.mean(),
                               current_code=existing_code)

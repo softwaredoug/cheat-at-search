@@ -318,6 +318,7 @@ Reranker code with NDCG {ndcg}:
     search_client = OpenAIAgent(tools=tools,
                                 model="openai/gpt-5",
                                 system_prompt=prompt,
+                                max_tokens=1_100_000,
                                 response_model=FinalMessage)
     resp: FinalMessage = search_client.loop()
     print("Final message from agent:")
