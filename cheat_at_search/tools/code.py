@@ -72,7 +72,7 @@ def make_patch_fn(search_fn, corpus, module_name: str,
                   guardrail_fns: List = [],
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
-                  eval_margin=0.003) -> callable:
+                  eval_margin=0.003) -> Tuple[callable, Optional[callable], callable]:
     """Returns a function that applies patches to the reranker code."""
 
     if training_eval_fn is not None:
@@ -234,4 +234,6 @@ def make_patch_fn(search_fn, corpus, module_name: str,
                 existing_code = f.read()
             return EditResult(success=False, error_message=str(e), query_results={},
                               current_code=existing_code)
+    if training_eval_fn is None:
+        return apply_patch, None, revert_changes
     return apply_patch, try_out_patch, revert_changes
