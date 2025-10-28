@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 import pandas as pd
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.openai_agent import OpenAIAgent
+from functools import lru_cache
 
 
 logger = log_to_stdout(logger_name="cheat_at_search.code")
@@ -73,6 +74,11 @@ def make_patch_fn(search_fn, corpus, module_name: str,
                   validation_eval_fn: Optional[Callable] = None,
                   eval_margin=0.003) -> callable:
     """Returns a function that applies patches to the reranker code."""
+
+    if training_eval_fn is not None:
+        training_eval_fn = lru_cache(maxsize=64)(training_eval_fn)
+    if validation_eval_fn is not None:
+        validation_eval_fn = lru_cache(maxsize=64)(validation_eval_fn)
 
     def revert_changes() -> str:
         """Undo the last patch to rerank_esci.py by restoring from backup."""
