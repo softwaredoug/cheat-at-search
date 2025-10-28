@@ -65,6 +65,7 @@ def _docs():
             return desc
 
     products['product_description'] = products['product_description'].apply(_clean_html)
+    logger.info("Cleaned HTML from product descriptions.")
     products['description'] = products['product_description']
     return products
 

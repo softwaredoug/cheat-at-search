@@ -34,10 +34,9 @@ class EvalResult(BaseModel):
 
 
 def make_length_validator(max_lines: int = 10, max_cols=120) -> Callable[[str], Optional[str]]:
+    guardrail_desc = f"""Edits longer than {max_lines} and wider than {max_cols} characters will be rejected."""
 
     def length_validation(code: str) -> Optional[str]:
-        """Validate that the code does not exceed max_lines."""
-
         if code.count('\n') > max_lines:
             return f"Code exceeds maximum length of {max_lines} lines."
 
@@ -45,6 +44,7 @@ def make_length_validator(max_lines: int = 10, max_cols=120) -> Callable[[str], 
             if len(line) > max_cols + 20:
                 return f"Line exceeds maximum length of {max_cols} characters: {line}"
         return None
+    length_validation.__doc__ = guardrail_desc
     return length_validation
 
 
@@ -61,6 +61,7 @@ def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
                         response_model=GuardrailResponse)
 
     def code_guardrails(code: str) -> Optional[str]:
+        """Edits where the code appears to be overfit to training queries will be rejected."""
         response = agent.loop(user_prompt=f"Please evaluate the following code for compliance:\n```python\n{code}\n```")
         if not response.compliant:
             issues = "\n".join(response.issues) if response.issues else "No specific issues provided."
@@ -77,8 +78,18 @@ def make_patch_fn(search_fn, corpus, module_name: str,
 
     if training_eval_fn is not None:
         training_eval_fn = lru_cache(maxsize=64)(training_eval_fn)
+    guardrail_doc_strs = "\n".join([
+        func.__doc__ for func in guardrail_fns
+    ])
+    full_guardrail_doc_strs = guardrail_doc_strs
     if validation_eval_fn is not None:
         validation_eval_fn = lru_cache(maxsize=64)(validation_eval_fn)
+        full_guardrail_doc_strs += f"\nEdits that reduce validation NDCG will be rejected as overfitting (must improve by at least {eval_margin})."
+        full_guardrail_doc_strs = "Your code will be rejected if it does not meet these guardrails:\n" + full_guardrail_doc_strs
+        guardrail_doc_strs += "\nNo checks to validation NDCG are performed in try_out_patch."
+
+    if guardrail_doc_strs:
+        guardrail_doc_strs = "Your code will be rejected if it does not meet these guardrails:\n" + guardrail_doc_strs
 
     def revert_changes() -> str:
         """Undo the last patch to rerank_esci.py by restoring from backup."""
@@ -160,16 +171,6 @@ def make_patch_fn(search_fn, corpus, module_name: str,
             return code
 
     def try_out_patch(edit: Edit) -> EvalResult:
-        """Evaluate the proposed code change to analyze its impact on training queries.
-        (Results won't be saved, this is used to evaluate potential patches before applying them.)
-
-        Edits more than 10 lines will be rejected.
-        Edits with lines longer than 120 characters will be rejected.
-        Edits that fail to compile / eval will be rejected
-        Edits where the code appears to be overfit to training queries will be rejected
-        NO checks to validation NDCG are performed in this function.
-
-        """
         logger.info("Evaluating patch")
 
         with open(f"{module_name}.py", "r") as f:
@@ -200,16 +201,14 @@ def make_patch_fn(search_fn, corpus, module_name: str,
             logger.info(f"Error evaluating patch: {e}")
             return EvalResult(success=False, error_message=str(e), ndcg_deltas={}, existing_code=existing_code)
 
+    try_out_patch.__doc__ = f"""Evaluate the proposed code change to analyze its impact on training queries.
+    (Results won't be saved, this is used to evaluate potential patches before applying them.)
+
+    {guardrail_doc_strs}
+
+    """
+
     def apply_patch(edit: Edit) -> EditResult:
-        """Save the proposed code change to rerank_esci.py.
-
-        Edits more than 10 lines will be rejected.
-        Edits with lines longer than 120 characters will be rejected.
-        Edits that fail to compile / eval will be rejected
-        Edits where the code appears to be overfit to training queries will be rejected
-        Edits that reduce validation NDCG will be rejected as overfitting
-
-        """
         try:
             logger.info("Applying patch with edits")
             code, existing_code, local_vars = _patch_code(edit)
@@ -234,6 +233,11 @@ def make_patch_fn(search_fn, corpus, module_name: str,
                 existing_code = f.read()
             return EditResult(success=False, error_message=str(e), query_results={},
                               current_code=existing_code)
+    apply_patch.__doc__ = f"""Save the proposed code change to rerank_esci.py.
+
+    {full_guardrail_doc_strs}
+
+    """
     if training_eval_fn is None:
         return apply_patch, None, revert_changes
     return apply_patch, try_out_patch, revert_changes
