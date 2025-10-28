@@ -12,6 +12,7 @@ from searcharray import SearchArray
 from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
+from functools import lru_cache
 
 
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
@@ -48,8 +49,8 @@ except FileNotFoundError:
 
 
 def search_esci(keywords: str,
-                field_to_search: Literal['product_name', 'product_description', 'all_text'] = 'all_text',
-                operator: Literal['bm25_and', 'bm25_or', 'bm25_phrase', 'bm25_bigram'] = 'bm25_or',
+                field_to_search: Literal['product_name', 'product_description'],  # , 'all_text'] = 'all_text',
+                operator: Literal['bm25_and', 'bm25_or'],  # , 'bm25_phrase', 'bm25_bigram'] = 'bm25_or',
                 locale: Literal['es', 'us', 'jp'] = 'us',
                 top_k: int = 5) -> List[Dict]:
     """
@@ -248,6 +249,7 @@ def trial_run(num_test_queries=100,
         seed=validation_seed,
         num_queries=num_validation_queries
     )
+    validation_guardrail = lru_cache(maxsize=256)(validation_guardrail)
 
     training_eval = make_eval_guardrail(
         corpus=corpus,
@@ -256,6 +258,7 @@ def trial_run(num_test_queries=100,
         seed=training_seed,
         num_queries=num_training_queries
     )
+    training_eval_cached = lru_cache(maxsize=256)(training_eval)
 
     apply_patch, try_out_patch, revert_changes = make_patch_fn(
         search_fn=search_esci,
@@ -263,7 +266,7 @@ def trial_run(num_test_queries=100,
         module_name="rerank_esci",
         guardrail_fns=[length_guardrail, overfit_to_queries_guardrail],
         validation_eval_fn=validation_guardrail,
-        training_eval_fn=training_eval
+        training_eval_fn=training_eval_cached
     )
     run_evals, run_reranker = make_eval_fn(
         corpus=corpus,

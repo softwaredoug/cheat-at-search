@@ -71,7 +71,7 @@ def make_patch_fn(search_fn, corpus, module_name: str,
                   guardrail_fns: List = [],
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
-                  eval_margin=0.03) -> callable:
+                  eval_margin=0.003) -> callable:
     """Returns a function that applies patches to the reranker code."""
 
     def revert_changes() -> str:
