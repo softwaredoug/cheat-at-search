@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
 import random
+import os
 
 
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
@@ -350,8 +351,12 @@ if __name__ == "__main__":
     training_seed = 5678
     validation_seed = 1234
     test_seed = 42
+
     rand_int = random.randint(0, 100000)
     module_name = f"rerank_esci_{rand_int}"
+    while os.path.exists(f"{module_name}.py"):
+        rand_int = random.randint(0, 100000)
+        module_name = f"rerank_esci_{rand_int}"
 
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments,
