@@ -12,6 +12,8 @@ from searcharray import SearchArray
 from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
+import random
+import os
 
 
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
@@ -204,7 +206,8 @@ class FinalMessage(BaseModel):
     message: str = Field(..., description="A message indicating that the reranker improvement process is complete.")
 
 
-def trial_run(num_test_queries=100,
+def trial_run(module_name="rerank_esci",
+              num_test_queries=100,
               num_validation_queries=50,
               num_training_queries=50,
               training_seed=5678,
@@ -234,18 +237,26 @@ def trial_run(num_test_queries=100,
         num_queries=num_validation_queries
     )
 
+    training_eval = make_eval_guardrail(
+        corpus=corpus,
+        judgments=judgments,
+        search_fn=search_esci,
+        seed=training_seed,
+        num_queries=num_training_queries
+    )
+
     apply_patch, try_out_patch, revert_changes = make_patch_fn(
         search_fn=search_esci,
         corpus=corpus,
-        module_name="rerank_esci",
+        module_name=module_name,
         guardrail_fns=[length_guardrail, overfit_to_queries_guardrail],
         validation_eval_fn=validation_guardrail,
-        training_eval_fn=None
+        training_eval_fn=training_eval
     )
     run_evals, run_reranker = make_eval_fn(
         corpus=corpus,
         judgments=judgments,
-        module_name="rerank_esci",
+        module_name=module_name,
         search_fn=search_esci,
         workers=16,
         num_queries=num_training_queries,
@@ -257,10 +268,10 @@ def trial_run(num_test_queries=100,
              revert_changes]
 
     if start_code:
-        with open("rerank_esci.py", "w") as f:
+        with open(f"{module_name}.py", "w") as f:
             f.write(start_code)
 
-    with open("rerank_esci.py", "r") as f:
+    with open(f"{module_name}.py", "r") as f:
         code = f.read()
 
     prompt = build_few_shot_prompt(seed=42 + rounds * 100, num_queries=4, num_per_query=4)
@@ -302,7 +313,7 @@ Reranker code with NDCG {ndcg}:
     try:
         codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
                                                  search_fn=search_esci,
-                                                 module_name="rerank_esci")
+                                                 module_name=module_name)
         results_codegen = run_strategy(codegen_strategy, judgments,
                                        num_queries=num_test_queries,
                                        seed=test_seed)
@@ -312,7 +323,7 @@ Reranker code with NDCG {ndcg}:
         ndcg = 0
 
     latest_code = ""
-    with open("rerank_esci.py", "r") as f:
+    with open(f"{module_name}.py", "r") as f:
         latest_code = f.read()
 
     return ndcg, latest_code
@@ -321,10 +332,16 @@ Reranker code with NDCG {ndcg}:
 if __name__ == "__main__":
     num_test_queries = 100
     num_validation_queries = 250
-    num_training_queries = 100
+    num_training_queries = 0
     training_seed = 5678
     validation_seed = 1234
     test_seed = 42
+
+    rand_int = random.randint(0, 100000)
+    module_name = f"rerank_esci_{rand_int}"
+    while os.path.exists(f"{module_name}.py"):
+        rand_int = random.randint(0, 100000)
+        module_name = f"rerank_esci_{rand_int}"
 
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments,
@@ -341,12 +358,12 @@ if __name__ == "__main__":
     with open("cheat_at_search/start_rerank_esci.py", "r") as f:
         start_code = f.read()
 
-    with open("rerank_esci.py", "w") as f:
+    with open(f"{module_name}.py", "w") as f:
         f.write(start_code)
 
     codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
                                              search_fn=search_esci,
-                                             module_name="rerank_esci")
+                                             module_name=module_name)
     results_codegen = run_strategy(codegen_strategy, judgments,
                                    num_queries=num_test_queries,
                                    seed=test_seed)
@@ -360,7 +377,7 @@ if __name__ == "__main__":
     for rounds in range(10):
         print(f"=== Generating Reranker Code Round {rounds} ===")
         last_code = ""
-        with open("rerank_esci.py", "r") as f:
+        with open(f"{module_name}.py", "r") as f:
             last_code = f.read()
         ndcg, code = trial_run(
             num_test_queries=num_test_queries,
@@ -377,6 +394,8 @@ if __name__ == "__main__":
         ndcgs.append(ndcg)
         code_examples.append(code)
         print("=== End of Round ===")
+        print(f"SEEDS: training {training_seed} validation {validation_seed} test {test_seed}")
+        print(f"NUM QUERIES: training {num_training_queries} validation {num_validation_queries} test {num_test_queries}")
         print(f"Round {rounds} complete.")
         print(f"Codegen NDCG: {ndcg} (test)")
         print("All rounds so far:")
@@ -385,5 +404,5 @@ if __name__ == "__main__":
         for i, ndcg in enumerate(ndcgs):
             print(f"Round {i} NDCG: {ndcg}")
 
-        with open(f"rerank_esci_round_{rounds}.py", "w") as f:
+        with open(f"{module_name}_round_{rounds}.py", "w") as f:
             f.write(code)

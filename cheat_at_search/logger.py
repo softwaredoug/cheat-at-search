@@ -10,6 +10,8 @@ def log_at(level):
     logger = logging.getLogger("cheat_at_search")
     logger.setLevel(level)
     if not logger.hasHandlers():
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
         handler = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -20,6 +22,9 @@ def log_at(level):
     base_name = "cheat_at_search"
     for name, logger in logging.root.manager.loggerDict.items():
         if name.startswith(base_name + "."):
+            # Remove existing handlers to avoid duplicate logs
+            for handler in logger.handlers[:]:
+                logger.removeHandler(handler)
             logger.setLevel(level)
             handler = logging.StreamHandler(sys.stdout)
             formatter = logging.Formatter(
@@ -27,6 +32,7 @@ def log_at(level):
             )
             handler.setFormatter(formatter)
             logger.addHandler(handler)
+            logger.propagate = False
     return logger
 
 

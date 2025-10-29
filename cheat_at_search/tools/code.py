@@ -4,6 +4,8 @@ import pandas as pd
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from functools import lru_cache
+import tempfile
+import sys
 
 
 logger = log_to_stdout(logger_name="cheat_at_search.code")
@@ -69,12 +71,20 @@ def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
     return code_guardrails
 
 
-def make_patch_fn(search_fn, corpus, module_name: str,
-                  guardrail_fns: List = [],
+def make_patch_fn(search_fn,
+                  corpus,
+                  module_name: str,
+                  guardrail_fns: List = None,
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
                   eval_margin=0.003) -> Tuple[callable, Optional[callable], callable]:
     """Returns a function that applies patches to the reranker code."""
+
+    filepath = f"{module_name}.py"
+    backup_path = f"{module_name}_backup.py"
+
+    if guardrail_fns is None:
+        guardrail_fns = []
 
     if training_eval_fn is not None:
         training_eval_fn = lru_cache(maxsize=64)(training_eval_fn)
@@ -93,8 +103,8 @@ def make_patch_fn(search_fn, corpus, module_name: str,
 
     def revert_changes() -> str:
         """Undo the last patch to rerank_esci.py by restoring from backup."""
-        with open(f"{module_name}_backup.py", "r") as backup:
-            with open(f"{module_name}.py", "w") as f:
+        with open(backup_path) as backup:
+            with open(filepath) as f:
                 logger.info(f"Reverted {module_name}.py to backup.")
                 code = backup.read()
                 f.write(code)
@@ -104,7 +114,6 @@ def make_patch_fn(search_fn, corpus, module_name: str,
 
     def _patch_code(edit: Edit,
                     test_queries=["red dress", "real housewives of orange county"]) -> Tuple[str, str]:
-        filepath = f"{module_name}.py"
         with open(filepath, "r") as f:
             code = f.read()
             existing_code = code
@@ -159,14 +168,13 @@ def make_patch_fn(search_fn, corpus, module_name: str,
         return code, existing_code, local_vars
 
     def _commit_code(code: str) -> Optional[str]:
-        filepath = f"{module_name}.py"
-        backup_path = f"{module_name}_backup.py"
         with open(filepath, "r") as f:
             with open(backup_path, "w") as backup:
                 logger.info(f"Creating backup of {module_name}.py at {backup_path}")
                 backup.write(f.read())
 
         with open(filepath, "w") as f:
+            logger.info(f"Committing changes to {module_name}.py")
             f.write(code)
             return code
 
