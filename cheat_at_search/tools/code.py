@@ -4,8 +4,7 @@ import pandas as pd
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from functools import lru_cache
-import tempfile
-import sys
+import os
 
 
 logger = log_to_stdout(logger_name="cheat_at_search.code")
@@ -73,15 +72,17 @@ def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
 
 def make_patch_fn(search_fn,
                   corpus,
-                  module_name: str,
+                  code_dir: str,
                   guardrail_fns: List = None,
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
                   eval_margin=0.003) -> Tuple[callable, Optional[callable], callable]:
     """Returns a function that applies patches to the reranker code."""
 
-    filepath = f"{module_name}.py"
-    backup_path = f"{module_name}_backup.py"
+    module_name = "rerank_esci"
+
+    filepath = os.path.join(code_dir, f"{module_name}.py")
+    backup_path = os.path.join(code_dir, f"{module_name}_backup.py")
 
     if guardrail_fns is None:
         guardrail_fns = []
@@ -104,7 +105,7 @@ def make_patch_fn(search_fn,
     def revert_changes() -> str:
         """Undo the last patch to rerank_esci.py by restoring from backup."""
         with open(backup_path) as backup:
-            with open(filepath) as f:
+            with open(filepath, "w") as f:
                 logger.info(f"Reverted {module_name}.py to backup.")
                 code = backup.read()
                 f.write(code)
@@ -181,7 +182,7 @@ def make_patch_fn(search_fn,
     def try_out_patch(edit: Edit) -> EvalResult:
         logger.info("Evaluating patch")
 
-        with open(f"{module_name}.py", "r") as f:
+        with open(filepath, "r") as f:
             existing_code = f.read()
 
         try:
@@ -237,7 +238,7 @@ def make_patch_fn(search_fn,
                 return edit_result
         except Exception as e:
             logger.info(f"Error applying patch: {e}")
-            with open(f"{module_name}.py", "r") as f:
+            with open(filepath, "r") as f:
                 existing_code = f.read()
             return EditResult(success=False, error_message=str(e), query_results={},
                               current_code=existing_code)
@@ -249,3 +250,41 @@ def make_patch_fn(search_fn,
     if training_eval_fn is None:
         return apply_patch, None, revert_changes
     return apply_patch, try_out_patch, revert_changes
+
+
+def set_to_start_code(code_dir: str) -> str:
+    """Reset the reranker code to the original version from backup."""
+    module_name = "rerank_esci"
+    filepath = os.path.join(code_dir, f"{module_name}.py")
+    backup_path = os.path.join(code_dir, f"{module_name}_backup.py")
+
+    start_code = ""
+    with open("cheat_at_search/start_rerank_esci.py", "r") as f:
+        start_code = f.read()
+
+    with open(filepath, "w") as f:
+        f.write(start_code)
+
+    with open(backup_path, "w") as backup:
+        backup.write(start_code)
+    return start_code
+
+
+def set_code_to(code_dir: str, code: str) -> str:
+    """Set the reranker code to the provided code."""
+    module_name = "rerank_esci"
+    filepath = os.path.join(code_dir, f"{module_name}.py")
+
+    with open(filepath, "w") as f:
+        f.write(code)
+    return code
+
+
+def current_code(code_dir: str) -> str:
+    """Get the current reranker code."""
+    module_name = "rerank_esci"
+    filepath = os.path.join(code_dir, f"{module_name}.py")
+
+    with open(filepath, "r") as f:
+        code = f.read()
+        return code

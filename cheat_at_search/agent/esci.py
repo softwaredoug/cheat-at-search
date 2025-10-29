@@ -1,22 +1,24 @@
 from cheat_at_search.esci_data import corpus, judgments
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.search import run_strategy
-from cheat_at_search.logger import log_at
+from cheat_at_search.logger import log_at, log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search
 from cheat_at_search.tokenizers import snowball_tokenizer
-from cheat_at_search.tools.code import make_patch_fn, make_guardrail_checker, make_length_validator
+from cheat_at_search.tools.code import make_patch_fn, make_guardrail_checker, make_length_validator, set_to_start_code, current_code, set_code_to
 from cheat_at_search.tools.eval import make_eval_fn, CodeGenSearchStrategy, make_eval_guardrail
 from typing import List, Dict, Optional, Literal
 from searcharray import SearchArray
 from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
-import random
-import os
+import argparse
+import tempfile
 
 
 corpus_dir = ensure_data_subdir("esci_indexed_corpus")
+
+logger = log_to_stdout("esci_search")
 
 
 log_at("INFO")
@@ -49,26 +51,11 @@ except FileNotFoundError:
 #        np.save(corpus_dir / f"{field}_{embedding_model_name}.npy", embeddings[field])
 
 
-def search_esci(keywords: str,
-                field_to_search: Literal['product_name', 'product_description'],  # , 'all_text'] = 'all_text',
-                operator: Literal['bm25_and', 'bm25_or'],  # , 'bm25_phrase', 'bm25_bigram'] = 'bm25_or',
+def full_search(keywords: str,
+                field_to_search: Literal['product_name', 'product_description', 'all_text'] = 'all_text',
+                operator: Literal['bm25_and', 'bm25_or', 'bm25_phrase', 'bm25_bigram'] = 'bm25_or',
                 locale: Literal['es', 'us', 'jp'] = 'us',
                 top_k: int = 5) -> List[Dict]:
-    """
-    Search an attribute of the Amazon ESCI product corpus using BM25 or MiniLM embeddings, depending on the requested operator.
-
-    Args:
-        keywords: The search query string.
-        field_to_search: The field to search in. Options are 'product_name' and 'product_description'.
-        operator: How to search the field
-        locale: The locale to search in. Default is 'us'. Other options are 'es' and 'jp'.
-                Consider the language of the query when choosing the locale.
-        top_k: The number of top results to return.
-
-    Returns:
-        Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
-
-    """
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(corpus))
     if field_to_search == 'product_name':
@@ -118,6 +105,57 @@ def search_esci(keywords: str,
     return results
 
 
+def make_search_fn(variant: Literal['v1', 'v2'] = 'v1'):
+    """Wrap search tool, exposing different parameters in each variant."""
+    if variant == 'v1':
+        def search_esci(keywords: str,
+                        field_to_search: Literal['product_name', 'product_description'],  # , 'all_text'] = 'all_text',
+                        operator: Literal['bm25_and', 'bm25_or'],  # , 'bm25_phrase', 'bm25_bigram'] = 'bm25_or',
+                        locale: Literal['es', 'us', 'jp'] = 'us',
+                        top_k: int = 5) -> List[Dict]:
+            """
+            Search an attribute of the Amazon ESCI product corpus using BM25 or MiniLM embeddings, depending on the requested operator.
+
+            Args:
+                keywords: The search query string.
+                field_to_search: The field to search in. Options are 'product_name' and 'product_description'.
+                operator: How to search the field
+                locale: The locale to search in. Default is 'us'. Other options are 'es' and 'jp'.
+                        Consider the language of the query when choosing the locale.
+                top_k: The number of top results to return.
+
+            Returns:
+                Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
+
+            """
+            return full_search(keywords, field_to_search, operator, locale, top_k)
+        return search_esci
+    else:
+        def search_esci(keywords: str,
+                        field_to_search: Literal['product_name', 'product_description', 'all_text'] = 'all_text',
+                        operator: Literal['bm25_and', 'bm25_or', 'bm25_phrase', 'bm25_bigram'] = 'bm25_or',
+                        locale: Literal['es', 'us', 'jp'] = 'us',
+                        top_k: int = 5) -> List[Dict]:
+            """
+            Search an attribute of the Amazon ESCI product corpus using BM25 or MiniLM embeddings, depending on the requested operator.
+
+            Args:
+                keywords: The search query string.
+                field_to_search: The field to search in. Options are 'product_name' and 'product_description'.
+                operator: How to search the field
+                locale: The locale to search in. Default is 'us'. Other options are 'es' and 'jp'.
+                        Consider the language of the query when choosing the locale.
+                top_k: The number of top results to return.
+
+            Returns:
+                Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
+
+            """
+            return full_search(keywords, field_to_search, operator, locale, top_k)
+        return search_esci
+        raise ValueError(f"Unknown search variant: {variant}")
+
+
 def inspect_product(product_id: str) -> Optional[Dict]:
     """Inspect a product by its ID."""
     print(f"Inspecting product {product_id}")
@@ -135,7 +173,30 @@ def inspect_product(product_id: str) -> Optional[Dict]:
     }
 
 
-system_few_shot_prompt = """
+system_few_shot_prompt_v1 = """
+    Your task is to look at the data and improve the reranker code so that it returns more relevant results
+
+    Edit the reranker python module using apply_patch method.
+
+    You can run the reranker using the 'run_reranker' function, which takes a query and returns ranked, matching
+    products.
+
+    You can evaluate the reranker using the 'run_evals' function, which returns NDCG scores for all queries and mean NDCG. Your goal is to
+    increase mean NDCG.
+
+    Experiment with the current reranker by calling it with test queries. Improve the reranker based on the behavior you observe. Make edits and test while you edit.
+
+    If NDCG does not go up after your edits, revert your changes using the 'revert_changes' function.
+
+    Your code MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
+    returns a list of product IDs in the order you think best matches the query.
+
+    Here are some examples of user queries, product titles, and human labels (Relevant, Partially Relevant, Irrelevant) that
+    you are ranking:
+"""
+
+
+system_few_shot_prompt_v2 = """
 
     ## The task
 
@@ -173,8 +234,20 @@ system_few_shot_prompt = """
 """
 
 
-def build_few_shot_prompt(num_queries=10, num_per_query=10,
-                          prompt=system_few_shot_prompt,
+def parse_args():
+    parser = argparse.ArgumentParser(description="Example program using argparse.")
+    parser.add_argument("--prompt", type=str, help="Which prompt version to use", choices=['v1', 'v2'], default='v2')
+    parser.add_argument("--search_fn", type=str, help="Which search function variant to use", choices=['v1', 'v2'], default='v1')
+    parser.add_argument("--num_training_queries", type=int, help="Number of training queries", default=100)
+    parser.add_argument("--num_validation_queries", type=int, help="Number of validation queries", default=250)
+
+    args = parser.parse_args()
+    logger.info(f"Parsed arguments: {args}")
+    return args
+
+
+def build_few_shot_prompt(prompt,
+                          num_queries=10, num_per_query=10,
                           seed=42) -> str:
     if len(judgments) == 0:
         return []
@@ -221,13 +294,16 @@ class FinalMessage(BaseModel):
     message: str = Field(..., description="A message indicating that the reranker improvement process is complete.")
 
 
-def trial_run(module_name="rerank_esci",
-              num_test_queries=100,
+def trial_run(num_test_queries=100,
               num_validation_queries=50,
               num_training_queries=50,
               training_seed=5678,
               validation_seed=1234,
               test_seed=42,
+              try_out_patch_tool=False,
+              search_esci=None,
+              prompt="",
+              code_dir=None,
               code_examples=None,
               code_examples_ndcgs=None,
               start_code=None,
@@ -261,9 +337,9 @@ def trial_run(module_name="rerank_esci",
     )
 
     apply_patch, try_out_patch, revert_changes = make_patch_fn(
+        code_dir=code_dir,
         search_fn=search_esci,
         corpus=corpus,
-        module_name=module_name,
         guardrail_fns=[length_guardrail, overfit_to_queries_guardrail],
         validation_eval_fn=validation_guardrail,
         training_eval_fn=training_eval
@@ -271,25 +347,30 @@ def trial_run(module_name="rerank_esci",
     run_evals, run_reranker = make_eval_fn(
         corpus=corpus,
         judgments=judgments,
-        module_name=module_name,
         search_fn=search_esci,
         workers=16,
         num_queries=num_training_queries,
-        seed=training_seed
+        seed=training_seed,
+        code_dir=code_dir
     )
+
+    if not try_out_patch_tool:
+        try_out_patch = None
 
     tools = [search_esci, apply_patch, try_out_patch,
              run_reranker, run_evals,
              revert_changes]
 
+    # Remove any None
+    tools = [tool for tool in tools if tool is not None]
+
     if start_code:
-        with open(f"{module_name}.py", "w") as f:
-            f.write(start_code)
+        set_code_to(code_dir, start_code)
 
-    with open(f"{module_name}.py", "r") as f:
-        code = f.read()
+    code = current_code(code_dir=code_dir)
 
-    prompt = build_few_shot_prompt(seed=42 + rounds * 100, num_queries=4, num_per_query=4)
+    prompt = build_few_shot_prompt(prompt=prompt,
+                                   seed=42 + rounds * 100, num_queries=4, num_per_query=4)
 
     if code_examples:
         code_formatted = ""
@@ -326,9 +407,10 @@ Reranker code with NDCG {ndcg}:
 
     ndcg = 0
     try:
+        code = current_code(code_dir=code_dir)
         codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
                                                  search_fn=search_esci,
-                                                 module_name=module_name)
+                                                 code=code)
         results_codegen = run_strategy(codegen_strategy, judgments,
                                        num_queries=num_test_queries,
                                        seed=test_seed)
@@ -337,26 +419,21 @@ Reranker code with NDCG {ndcg}:
         print("Error running codegen strategy:", e)
         ndcg = 0
 
-    latest_code = ""
-    with open(f"{module_name}.py", "r") as f:
-        latest_code = f.read()
+    latest_code = current_code(code_dir=code_dir)
 
-    return ndcg, latest_code
+    return ndcg, latest_code, resp.message
 
 
 if __name__ == "__main__":
     num_test_queries = 100
-    num_validation_queries = 250
-    num_training_queries = 100
     training_seed = 5678
     validation_seed = 1234
     test_seed = 42
 
-    rand_int = random.randint(0, 100000)
-    module_name = f"rerank_esci_{rand_int}"
-    while os.path.exists(f"{module_name}.py"):
-        rand_int = random.randint(0, 100000)
-        module_name = f"rerank_esci_{rand_int}"
+    args = parse_args()
+
+    code_dir = tempfile.mkdtemp(prefix="esci_reranker_")
+    logger.info(f"Using temporary code directory: {code_dir}")
 
     bm25 = BM25Search(corpus)
     graded_bm25 = run_strategy(bm25, judgments,
@@ -369,16 +446,13 @@ if __name__ == "__main__":
     # best_ndcg = graded_best['ndcg'].mean()
     # print(f"Best Possible NDCG: {best_ndcg}")
 
-    start_code = ""
-    with open("cheat_at_search/start_rerank_esci.py", "r") as f:
-        start_code = f.read()
+    start_code = set_to_start_code(code_dir=code_dir)
 
-    with open(f"{module_name}.py", "w") as f:
-        f.write(start_code)
+    search_esci = make_search_fn(variant=args.search_fn)
 
     codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
                                              search_fn=search_esci,
-                                             module_name=module_name)
+                                             code=start_code)
     results_codegen = run_strategy(codegen_strategy, judgments,
                                    num_queries=num_test_queries,
                                    seed=test_seed)
@@ -386,36 +460,54 @@ if __name__ == "__main__":
     start_code_ndcg = ndcg
     print(f"Starting Code NDCG: {start_code_ndcg}")
 
+    use_try_out_patch_tool = True
+    if args.prompt == 'v1':
+        prompt = system_few_shot_prompt_v1
+        use_try_out_patch_tool = False
+    else:
+        prompt = system_few_shot_prompt_v2
+
+    num_training_queries = args.num_training_queries
+    num_validation_queries = args.num_validation_queries
+
     # Primer rounds with no code examples
     ndcgs = []
     code_examples = []
+    messages = []
     for rounds in range(10):
         print(f"=== Generating Reranker Code Round {rounds} ===")
-        last_code = ""
-        with open(f"{module_name}.py", "r") as f:
-            last_code = f.read()
-        ndcg, code = trial_run(
+        last_code = current_code(code_dir=code_dir)
+        ndcg, code, message = trial_run(
             num_test_queries=num_test_queries,
             num_validation_queries=num_validation_queries,
             num_training_queries=num_training_queries,
             training_seed=training_seed,
             validation_seed=validation_seed,
             test_seed=test_seed,
-            start_code=last_code
+            start_code=last_code,
+            search_esci=search_esci,
+            prompt=prompt,
+            try_out_patch_tool=use_try_out_patch_tool,
+            code_dir=code_dir,
         )
         training_seed += 1
         # validation_seed += 1
 
         ndcgs.append(ndcg)
         code_examples.append(code)
+        messages.append(message)
         print("=== End of Round ===")
+
         print(f"Round {rounds} complete.")
+        print(f"SEEDS: train {training_seed} val {validation_seed} test {test_seed}")
+        print(f"NUM QUERIES: train {num_training_queries} val {num_validation_queries} test {num_test_queries}")
+        print(f"ARGS: prompt {args.prompt} search_fn {args.search_fn}")
+        print(f"CODE DIR: {code_dir}")
         print(f"Codegen NDCG: {ndcg} (test)")
         print("All rounds so far:")
         print(f"Baseline (BM25) NDCG: {bm25_ndcg}")
         print(f"Starting Code NDCG: {start_code_ndcg}")
+        for i, message in enumerate(messages):
+            print(f"Round {i} Message: {message}")
         for i, ndcg in enumerate(ndcgs):
             print(f"Round {i} NDCG: {ndcg}")
-
-        with open(f"{module_name}_round_{rounds}.py", "w") as f:
-            f.write(code)

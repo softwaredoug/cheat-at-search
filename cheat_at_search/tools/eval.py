@@ -6,6 +6,7 @@ from cheat_at_search.logger import log_to_stdout
 import importlib
 import numpy as np
 import pandas as pd
+import os
 
 
 logger = log_to_stdout(logger_name="eval")
@@ -37,17 +38,13 @@ def _rerank_fn_from_code(code: str):
 class CodeGenSearchStrategy(SearchStrategy):
     def __init__(self, corpus,
                  search_fn,
-                 module_name: Optional[str] = None,
                  code: Optional[str] = None,
                  cache=True,
                  workers=1):
         super().__init__(corpus, workers=workers)
         self.index = corpus
-        self.module_name = module_name
         self.search_fn = search_fn
         self.code = code
-        if not module_name and not code:
-            raise ValueError("Either module_name or code must be provided.")
 
     def search(self, query, k=10):
         if self.code:
@@ -98,16 +95,21 @@ class EvalResults(BaseModel):
     mean_ndcg: float = Field(..., description="The mean NDCG across all queries.")
 
 
-def make_eval_fn(corpus, judgments, module_name: str, search_fn,
+def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
                  workers=16,
                  num_queries=20,
                  seed=42) -> callable:
+    module_name = "rerank_esci"
+    filepath = os.path.join(code_dir, module_name + ".py")
 
     def run_evals() -> EvalResults:
         """Evaluate the current reranker on random sample of query document ground truth."""
         logger.info("Running evals on all judgments")
+        code = None
+        with open(filepath, 'r') as f:
+            code = f.read()
         codegen_strategy = CodeGenSearchStrategy(corpus, workers=workers,
-                                                 module_name=module_name,
+                                                 code=code,
                                                  search_fn=search_fn)
         results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries,
                                        seed=seed)

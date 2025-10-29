@@ -237,13 +237,7 @@ def trial_run(module_name="rerank_esci",
         num_queries=num_validation_queries
     )
 
-    training_eval = make_eval_guardrail(
-        corpus=corpus,
-        judgments=judgments,
-        search_fn=search_esci,
-        seed=training_seed,
-        num_queries=num_training_queries
-    )
+    training_eval = None
 
     apply_patch, try_out_patch, revert_changes = make_patch_fn(
         search_fn=search_esci,
@@ -266,6 +260,9 @@ def trial_run(module_name="rerank_esci",
     tools = [search_esci, apply_patch, try_out_patch,
              run_reranker, run_evals,
              revert_changes]
+
+    # Remove any None
+    tools = [tool for tool in tools if tool is not None]
 
     if start_code:
         with open(f"{module_name}.py", "w") as f:
@@ -332,7 +329,7 @@ Reranker code with NDCG {ndcg}:
 if __name__ == "__main__":
     num_test_queries = 100
     num_validation_queries = 250
-    num_training_queries = 0
+    num_training_queries = 100
     training_seed = 5678
     validation_seed = 1234
     test_seed = 42
