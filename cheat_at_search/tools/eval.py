@@ -96,7 +96,7 @@ class EvalResults(BaseModel):
 
 
 def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
-                 workers=16,
+                 workers=4,
                  num_queries=20,
                  seed=42) -> callable:
     module_name = "rerank_esci"
@@ -191,14 +191,14 @@ def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
     return run_evals, run_reranker
 
 
-def make_eval_guardrail(corpus, judgments, search_fn, seed=1234, num_queries=100):
+def make_eval_guardrail(corpus, judgments, search_fn, seed=1234, num_queries=100, workers=4) -> callable:
 
     def eval_guardrail(code: str) -> float:
         """Evaluate on validation set to avoid overfitting. Returns query NDCGs."""
         strategy = CodeGenSearchStrategy(corpus,
                                          search_fn=search_fn,
                                          code=code,
-                                         workers=16)
+                                         workers=workers)
         results = run_strategy(strategy, judgments, num_queries=num_queries,
                                seed=seed)
         ndcgs = results.groupby('query')['ndcg'].mean()

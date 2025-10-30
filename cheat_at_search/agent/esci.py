@@ -240,6 +240,9 @@ def parse_args():
     parser.add_argument("--search_fn", type=str, help="Which search function variant to use", choices=['v1', 'v2'], default='v1')
     parser.add_argument("--num_training_queries", type=int, help="Number of training queries", default=100)
     parser.add_argument("--num_validation_queries", type=int, help="Number of validation queries", default=250)
+    parser.add_argument("--use_last_rounds_code", action='store_true', help="Use the code from the last round as the starting code")
+    parser.add_argument("--use_last_rounds_lessons", action='store_true', help="Use the code and lessons from the last round as few-shot examples")
+    parser.add_argument("--eval_margin", type=float, help="Minimum margin of improvement on validation set to accept a patch", default=0.001)
 
     args = parser.parse_args()
     logger.info(f"Parsed arguments: {args}")
@@ -292,6 +295,7 @@ def build_few_shot_prompt(prompt,
 class FinalMessage(BaseModel):
     """Final message indicating completion of the reranker improvement process."""
     message: str = Field(..., description="A message indicating that the reranker improvement process is complete.")
+    lessons: List[str] = Field(None, description="List of lessons learned during the reranker improvement process for use by other agents.")
 
 
 def trial_run(num_test_queries=100,
@@ -302,12 +306,14 @@ def trial_run(num_test_queries=100,
               test_seed=42,
               try_out_patch_tool=False,
               search_esci=None,
+              eval_margin=0.001,
               prompt="",
               code_dir=None,
               code_examples=None,
+              lessons=None,
               code_examples_ndcgs=None,
               start_code=None,
-              start_code_ndcg=None) -> (float, str):
+              start_code_ndcg=None) -> (float, str, str, List[str]):
     overfit_to_queries_guardrail = make_guardrail_checker(prompt="""
 
         You're going to look at code that reranks search queries.
@@ -342,13 +348,14 @@ def trial_run(num_test_queries=100,
         corpus=corpus,
         guardrail_fns=[length_guardrail, overfit_to_queries_guardrail],
         validation_eval_fn=validation_guardrail,
-        training_eval_fn=training_eval
+        training_eval_fn=training_eval,
+        eval_margin=eval_margin
     )
     run_evals, run_reranker = make_eval_fn(
         corpus=corpus,
         judgments=judgments,
         search_fn=search_esci,
-        workers=16,
+        workers=4,
         num_queries=num_training_queries,
         seed=training_seed,
         code_dir=code_dir
@@ -393,6 +400,13 @@ Reranker code with NDCG {ndcg}:
 
     {code}
     """
+    if lessons:
+        lessons_as_str = "\n".join([f"- {lesson}" for lesson in lessons]) if lessons else ""
+        prompt += f"""
+
+        Here are some lessons you have learned from previous rounds:
+            {lessons_as_str}
+    """
     print("Prompt is:")
     print(prompt)
 
@@ -402,13 +416,20 @@ Reranker code with NDCG {ndcg}:
                                 max_tokens=1_100_000,
                                 response_model=FinalMessage)
     resp: FinalMessage = search_client.loop()
+
+    if resp is None:
+        resp = FinalMessage(message="No response from agent.", lessons=[])
+
     print("Final message from agent:")
     print(resp.message)
+    print("Lessons learned:")
+    for lesson in resp.lessons or []:
+        print(f"- {lesson}")
 
     ndcg = 0
     try:
         code = current_code(code_dir=code_dir)
-        codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
+        codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
                                                  search_fn=search_esci,
                                                  code=code)
         results_codegen = run_strategy(codegen_strategy, judgments,
@@ -421,7 +442,7 @@ Reranker code with NDCG {ndcg}:
 
     latest_code = current_code(code_dir=code_dir)
 
-    return ndcg, latest_code, resp.message
+    return ndcg, latest_code, resp.message, resp.lessons
 
 
 if __name__ == "__main__":
@@ -450,7 +471,7 @@ if __name__ == "__main__":
 
     search_esci = make_search_fn(variant=args.search_fn)
 
-    codegen_strategy = CodeGenSearchStrategy(corpus, workers=16,
+    codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
                                              search_fn=search_esci,
                                              code=start_code)
     results_codegen = run_strategy(codegen_strategy, judgments,
@@ -474,10 +495,11 @@ if __name__ == "__main__":
     ndcgs = []
     code_examples = []
     messages = []
+    all_lessons = []
     for rounds in range(10):
         print(f"=== Generating Reranker Code Round {rounds} ===")
         last_code = current_code(code_dir=code_dir)
-        ndcg, code, message = trial_run(
+        ndcg, code, message, lessons = trial_run(
             num_test_queries=num_test_queries,
             num_validation_queries=num_validation_queries,
             num_training_queries=num_training_queries,
@@ -489,13 +511,18 @@ if __name__ == "__main__":
             prompt=prompt,
             try_out_patch_tool=use_try_out_patch_tool,
             code_dir=code_dir,
+            eval_margin=args.eval_margin,
+            lessons=all_lessons if args.use_last_rounds_lessons else None,
         )
         training_seed += 1
+        if not args.use_last_rounds_code:
+            code = start_code
         # validation_seed += 1
 
         ndcgs.append(ndcg)
         code_examples.append(code)
         messages.append(message)
+        all_lessons.extend(lessons or [])
         print("=== End of Round ===")
 
         print(f"Round {rounds} complete.")
@@ -509,5 +536,9 @@ if __name__ == "__main__":
         print(f"Starting Code NDCG: {start_code_ndcg}")
         for i, message in enumerate(messages):
             print(f"Round {i} Message: {message}")
+        for i, lesson in enumerate(all_lessons):
+            print(f"Lesson {i}: {lesson}")
         for i, ndcg in enumerate(ndcgs):
             print(f"Round {i} NDCG: {ndcg}")
+
+        input("Press enter to continue to proceed")

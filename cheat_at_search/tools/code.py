@@ -16,6 +16,9 @@ class Edit(BaseModel):
     block_until: str = Field(..., description="The end of the block of text which the patch should be applied. Do not leave blank.")
     action: Literal['insert_after', 'replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
     text: str = Field(..., description="The text to insert or replace with. Ignored for delete action.")
+    intention: str = Field(None, description="A brief description of the intention behind this edit.")
+    why: str = Field(None, description="An optional explanation of why this edit is being made.")
+    queries_expected_to_improve: List[str] = Field(None, description="A list of training queries expected to have their NDCG changed by this edit.")
 
 
 class EditResult(BaseModel):
@@ -27,7 +30,7 @@ class EditResult(BaseModel):
 
 class EvalResult(BaseModel):
     success: bool = Field(..., description="Whether the edits can be applied succesfully without code errors.")
-    error_message: Optional[str] = Field(None, description="An error message if the edits failed to apply or tests failed.")
+    error_message: Optional[str] = Field(None, description="An error or warning message if the patch failed to be applied, evaluation failed, or NDCG did not improve sufficiently.")
     ndcg_deltas: Optional[Dict[str, float]] = Field(None, description="The NDCG deltas for the training dataset.")
     ndcg_before: Optional[float] = Field(0.0, description="The NDCG before applying the edit.")
     ndcg_after: Optional[float] = Field(0.0, description="The NDCG after applying the edit.")
@@ -115,6 +118,10 @@ def make_patch_fn(search_fn,
 
     def _patch_code(edit: Edit,
                     test_queries=["red dress", "real housewives of orange county"]) -> Tuple[str, str]:
+        logger.info("Patching code with edits")
+        logger.info(f"Goal: {edit.intention}")
+        logger.info(f"Why: {edit.why}")
+        logger.info(f"Expected improved queries: {edit.queries_expected_to_improve}")
         with open(filepath, "r") as f:
             code = f.read()
             existing_code = code
@@ -198,12 +205,28 @@ def make_patch_fn(search_fn,
                 if delta_dict[query] != 0.0:
                     changed_queries[query] = delta_dict[query]
 
-            icon = '✅' if ndcgs_after.mean() >= ndcgs_before.mean() else '❌'
+            icon = '❌'
+            if ndcgs_after.mean() >= (ndcgs_before.mean() + eval_margin):
+                icon = '✅'
+            if ndcgs_after.mean() >= ndcgs_before.mean():
+                icon = '⚠️'
+
             logger.info(f"{icon} Evaluated patch successfully. train NDCG before: {ndcgs_before.mean()}, after: {ndcgs_after.mean()}")
             logger.info(f"Changed queries NDCG deltas: {changed_queries}")
             logger.info("Code:")
             logger.info(code)
-            return EvalResult(success=True, error_message=None, ndcg_deltas=changed_queries,
+            # Check if in margin
+            warning = None
+            if ndcgs_after.mean() < (ndcgs_before.mean() + eval_margin):
+                warning = f"""⚠️ Warning: NDCG did not improve by at least {eval_margin} on training set:
+                before={ndcgs_before.mean()},
+                after={ndcgs_after.mean()}.
+            It might be rejected if applied.
+
+            Hint: look at changed queries, modify your change to get the upside of your change, and minimize the downside."""
+            logger.warning(warning)
+
+            return EvalResult(success=True, error_message=warning, ndcg_deltas=changed_queries,
                               ndcg_before=ndcgs_before.mean(), ndcg_after=ndcgs_after.mean(),
                               current_code=existing_code)
         except Exception as e:
