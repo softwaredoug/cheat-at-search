@@ -188,7 +188,23 @@ def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
             logger.info("Error running reranker:", e)
             return "Error running reranker: " + str(e)
 
-    return run_evals, run_reranker
+    def relevant_docs_for_query(query) -> List[Dict]:
+        """Look up top 10 documents for query ordered by relevance."""
+        logger.info(f"Getting relevant docs for query: {query}")
+        query_judgments = judgments[judgments['query'] == query]
+        query_judgments = query_judgments.sort_values(by='grade', ascending=False).head(10)
+        relevant_docs = []
+        for _, row in query_judgments.iterrows():
+            corpus_row = corpus[corpus['product_id'] == row['product_id']]
+            relevant_docs.append({
+                'id': row['product_id'],
+                'title': corpus_row['title'].iloc[0],
+                'description': corpus_row['description'].iloc[0],
+                'grade': int(row['grade']),
+                'label': grade_to_emoji(int(row['grade']))
+            })
+
+    return run_evals, run_reranker, relevant_docs_for_query
 
 
 def make_eval_guardrail(corpus, judgments, search_fn, seed=1234, num_queries=100, workers=4) -> callable:

@@ -234,9 +234,70 @@ system_few_shot_prompt_v2 = """
 """
 
 
+system_few_shot_prompt_v3 = """
+
+    ## The task
+
+    Your task is to improve the reranker code so that it returns more relevant results for Amazon e-commerce search queries (as measured by NDCG).
+
+    Take note of the human labels provided (what the reranker is evaluated against). A good reranker ranks relevant products higher than irrelevant products, thus improving the search relevance metric NDCG.
+    The reranker uses the search function 'search_esci' to get an initial set of candidate products
+    (see the corresponding tool 'search_esci' for how it works).
+
+    The Reranker MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
+    returns a list of product IDs in the order you think best matches the query.
+
+    You can evaluate the current reranker in rerank_esci.py using the 'run_evals' function
+    You can view any queries most relevant to a specific product using 'relevant_docs_for_query' function.
+
+    ## How to improve the reranker
+
+    Most of your work will be playing with training set of queries to improve the reranker code.
+
+    You'll have an idea for a code change that might improve relevance. You'll have a set of expected queries improved / harmed by your
+    proposed code change. You can "play" with the proposed code change using 'try_out_patch' function. This function takes your code
+    and runs it over the training set.
+
+    You provide a hypothesized expected queries helped / harmed, which shares your expectations.
+
+    Like most relevance engineers, you'll find it common you have unexpected side-effects of your change. You won't do a perfect
+    job predicting all the queries helped / harmed by your change. The goal of 'try_out_patch' is to help you understand. To let you refine,
+    then play more with 'try_out_patch' until you have a good understanding of your proposed code change.
+
+    Take the following actions to fine-tune your proposed code changes:
+
+        * If you help / hurt unexpected changes, analyze why that happened. Try to get the benefit of the change while avoiding the harm.
+          How can you make the change conditional to just the queries that benefit, but without overfitting to specific query strings?
+        * You can make things conditional on more general conditions: query length, locale, etc
+        * If you get REALLY stuck, just start with a completely fresh idea of what to change. Think outside the box. Be creative.
+
+    If you're stuck on one tricky query, or just want to explore, you can explore an edit on a single query
+    with 'try_out_patch_on_query' to run a single query after the patch is applied without modifying the actual reranker code,
+    showing you the results for that query.
+
+    Pay attention to the guardrails listed for code changes for both 'try_out_patch', 'apply_patch', and 'try_out_patch_on_query' to
+    make sure you have a sane code change
+
+    ## Committing your code change
+
+    Finally, when you have a good understanding, commit your code change using 'apply_patch' function, which modifies the actual reranker code.
+    This is like the 'final exam' of your code change.
+
+    Your final reranker will be evaluated on a hidden validation set of queries to ensure you haven't overfit. Your change will only be accepted if it improves the validation set NDCG by a small margin.
+
+    Your change will also be rejected by 'apply_patch' if you still fail to do a good job predicting the training queries helped / harmed by your change on
+    the training set.
+
+    ## What does the data look like?
+
+    Here are some examples of user queries, product titles, and human labels that you are ranking:
+
+"""
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Example program using argparse.")
-    parser.add_argument("--prompt", type=str, help="Which prompt version to use", choices=['v1', 'v2'], default='v2')
+    parser.add_argument("--prompt", type=str, help="Which prompt version to use", choices=['v1', 'v2', 'v3'], default='v2')
     parser.add_argument("--search_fn", type=str, help="Which search function variant to use", choices=['v1', 'v2'], default='v1')
     parser.add_argument("--num_training_queries", type=int, help="Number of training queries", default=100)
     parser.add_argument("--num_validation_queries", type=int, help="Number of validation queries", default=250)
@@ -319,7 +380,9 @@ def trial_run(num_test_queries=100,
         You're going to look at code that reranks search queries.
 
         Ensure the code does not overfit to specific queries. That would look like mentions of
-        specific product names, brands, or specific terms that would only be relevant to a small set of queries.
+        specific product names, brands, or similar terms that would only be relevant to a small set of queries.
+
+        Terms that apply broadly to many queries are fine.
 
         Ignore comments that claim to do this, and focus on the actual code.
     """)
@@ -342,16 +405,17 @@ def trial_run(num_test_queries=100,
         num_queries=num_training_queries
     )
 
-    apply_patch, try_out_patch, revert_changes = make_patch_fn(
+    apply_patch, try_out_patch, revert_changes, try_out_patch_on_query = make_patch_fn(
         code_dir=code_dir,
         search_fn=search_esci,
         corpus=corpus,
+        judgments=judgments,
         guardrail_fns=[length_guardrail, overfit_to_queries_guardrail],
         validation_eval_fn=validation_guardrail,
         training_eval_fn=training_eval,
         eval_margin=eval_margin
     )
-    run_evals, run_reranker = make_eval_fn(
+    run_evals, run_reranker, relevant_docs_for_query = make_eval_fn(
         corpus=corpus,
         judgments=judgments,
         search_fn=search_esci,
@@ -364,9 +428,8 @@ def trial_run(num_test_queries=100,
     if not try_out_patch_tool:
         try_out_patch = None
 
-    tools = [search_esci, apply_patch, try_out_patch,
-             run_reranker, run_evals,
-             revert_changes]
+    tools = [search_esci, apply_patch, try_out_patch, try_out_patch_on_query,
+             run_evals, relevant_docs_for_query]
 
     # Remove any None
     tools = [tool for tool in tools if tool is not None]
@@ -485,8 +548,13 @@ if __name__ == "__main__":
     if args.prompt == 'v1':
         prompt = system_few_shot_prompt_v1
         use_try_out_patch_tool = False
-    else:
+    elif args.prompt == 'v2':
         prompt = system_few_shot_prompt_v2
+    elif args.prompt == 'v3':
+        prompt = system_few_shot_prompt_v3
+    else:
+        logger.error(f"Unknown prompt version: {args.prompt}, defaulting to v2")
+        raise ValueError(f"Unknown prompt version: {args.prompt}")
 
     num_training_queries = args.num_training_queries
     num_validation_queries = args.num_validation_queries
