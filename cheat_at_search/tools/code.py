@@ -17,8 +17,10 @@ class Edit(BaseModel):
     block_until: str = Field(..., description="The end of the block of text which the patch should be applied. Do not leave blank.")
     action: Literal['insert_after', 'replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
     text: str = Field(..., description="The text to insert or replace with. Ignored for delete action.")
-    intention: str = Field(None, description="A brief description of the intention behind this edit.")
-    why: str = Field(None, description="Why this edit is being made as it relates to improving search relevance on the listed queries.")
+    doing_differently: Optional[str] = Field(None, description="What you are doing differently in this edit compared to your previous attempt.")
+    what_have_you_learned: Optional[str] = Field(None, description="What you have learned from previous attempt that informed this edit.")
+    evidence_this_will_work: Optional[str] = Field(None, description="Any evidence or reasoning that this edit will improve the reranker. Use examples from query behaviors you've seen")
+    past_mistakes: Optional[str] = Field(None, description="Mea. Culpa. Past mistakes you made in previous edits that you are avoiding in this edit.")
 
     queries_expected_to_improve: List[str] = Field(None, description="A complete list of training queries expected to have their NDCG changed by this edit.")
     queries_expected_to_degrade: List[str] = Field(None, description="A complete list of training queries expected to have their NDCG decreased by this edit.")
@@ -122,6 +124,8 @@ def make_patch_fn(search_fn,
                   guardrail_fns: List = None,
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
+                  num_queries_improved_required: int = 3,
+                  perc_queries_improved_required: float = 0.75,
                   eval_margin=0.003) -> Tuple[callable, callable, callable, callable]:
     """Returns a function that applies patches to the reranker code."""
 
@@ -162,8 +166,10 @@ def make_patch_fn(search_fn,
     def _patch_code(edit: Edit,
                     test_queries=["red dress", "real housewives of orange county"]) -> Tuple[str, str]:
         logger.info("Patching code with edits")
-        logger.info(f"Goal: {edit.intention}")
-        logger.info(f"Why: {edit.why}")
+        logger.info(f"Doing Differently: {edit.doing_differently}")
+        logger.info(f"What Have You Learned: {edit.what_have_you_learned}")
+        logger.info(f"Evidence This Will Work: {edit.evidence_this_will_work}")
+        logger.info(f"Past Mistakes: {edit.past_mistakes}")
         logger.info(f"Expected improved queries: {edit.queries_expected_to_improve}")
         with open(filepath, "r") as f:
             code = f.read()
@@ -252,9 +258,83 @@ def make_patch_fn(search_fn,
             changed_queries,
             improved=False)
 
+        logger.info("Code:")
+        logger.info(code)
+        # Check if in margin
+        msgs = []
+        if ndcgs_after.mean() < (ndcgs_before.mean() + eval_margin):
+            msgs.append(f"""⚠️ Warning: NDCG did not improve by at least {eval_margin} on training set:
+            before={ndcgs_before.mean()},
+            after={ndcgs_after.mean()}.
+        It might be rejected if applied.
+
+        Hint: look at changed queries, modify your change to get the upside of your change, and minimize the downside.""")
+        else:
+            msgs.append("✅ NDCG improved sufficiently on training set.")
+
+        all_queries_improved = set(queries_improved_as_expected) | set(queries_improved_unexpectedly)
+        union = set(queries_expected_to_improve) | all_queries_improved
+        intersection = set(queries_expected_to_improve) & all_queries_improved
+        jaccard_imp = 1.0
+        if len(union) > 0:
+            jaccard_imp = len(intersection) / len(union)
+        all_queries_harmed = set(queries_harmed_as_expected) | set(queries_harmed_unexpectedly)
+        union = set(queries_expected_to_degrade) | all_queries_harmed
+        intersection = set(queries_expected_to_degrade) & all_queries_harmed
+        jaccard_harm = 1.0
+        if len(union) > 0:
+            jaccard_harm = len(intersection) / len(union)
+
+        # Track what percentage of queries were positive improvements
+        perc_queries_changed_improved = 0.0
+        total_changed = len(all_queries_improved) + len(all_queries_harmed)
+        if total_changed > 0:
+            perc_queries_changed_improved = len(all_queries_improved) / total_changed
+
+            msgs.append(f"ℹ️ Percentage of changed queries that improved: {perc_queries_changed_improved:.2f}")
+            msgs.append(f"ℹ️ Number of improved queries: {len(all_queries_improved)}")
+        else:
+            msgs.append("ℹ️ No queries were changed by this patch.")
+
+        if perc_queries_changed_improved < perc_queries_improved_required:
+            msg = f"⚠️ Low percentage of changed queries that improved: {perc_queries_changed_improved:.2f}. Please make a better change (at least {perc_queries_improved_required * 100}% of changed queries should improve)."
+            msgs.append(msg)
+        else:
+            msgs.append(f"✅ Sufficient percentage of changed queries improved: {perc_queries_changed_improved:.2f}.")
+
+        if len(all_queries_improved) < num_queries_improved_required:
+            msgs.append(f"⚠️ Very few changed queries ({len(all_queries_improved)}) improved. Please try to make a change that improves at least {num_queries_improved_required} training queries.")
+        else:
+            msgs.append(f"✅ Sufficient number of changed queries improved: {len(all_queries_improved)}.")
+
+        if jaccard_imp < 0.5:
+            msgs.append(f"⚠️ You predicted {len(queries_expected_to_improve)} queries to improve, but actually {len(all_queries_improved)} actually improved {len(queries_improved_as_expected)} were expected. (Jaccard similarity: {jaccard_imp:.2f}.) Please try to improve your predictions.")
+        else:
+            msgs.append(f"✅ Jaccard similarity for improved queries is acceptable: {jaccard_imp:.2f}.")
+        if jaccard_harm < 0.5:
+            msgs.append(f"⚠️ You predicted {len(queries_expected_to_degrade)} queries to degrade, but actually {len(all_queries_harmed)} actually degraded {len(queries_harmed_as_expected)} were expected. (Jaccard similarity: {jaccard_harm:.2f}.) Please try to improve your predictions.")
+        else:
+            msgs.append(f"✅ Jaccard similarity for harmed queries is acceptable: {jaccard_harm:.2f}.")
+
+        has_warnings = False
+        for msg in msgs:
+            if msg.startswith("⚠️"):
+                logger.warning(msg)
+                has_warnings = True
+            else:
+                logger.info(msg)
+
+        warning = None
+        if has_warnings:
+            warning = "PROBLEMS! Here are a list of guardrail violations on the training set:\n"
+            warning += "\n".join([msg for msg in msgs if msg.startswith("⚠️")])
+            warning += "Other Information:\n"
+            warning += "\n".join([msg for msg in msgs if not msg.startswith("⚠️")])
+
         return queries_improved_as_expected, queries_improved_unexpectedly, \
             queries_harmed_as_expected, queries_harmed_unexpectedly, \
-            ndcgs_before, ndcgs_after
+            ndcgs_before, ndcgs_after, \
+            warning
 
     def try_out_patch(edit: Edit) -> EvalResult:
         logger.info("Evaluating patch")
@@ -268,64 +348,15 @@ def make_patch_fn(search_fn,
             code, existing_code, local_vars = _patch_code(edit)
             queries_improved_as_expected, queries_improved_unexpectedly, \
                 queries_harmed_as_expected, queries_harmed_unexpectedly, \
-                ndcgs_before, ndcgs_after = _training_eval_fn(
+                ndcgs_before, ndcgs_after, warning = _training_eval_fn(
                     code,
                     existing_code,
                     edit.queries_expected_to_improve,
                     edit.queries_expected_to_degrade)
 
-            icon = '❌'
-            if ndcgs_after.mean() >= (ndcgs_before.mean() + eval_margin):
-                icon = '✅'
-            elif ndcgs_after.mean() >= ndcgs_before.mean():
-                icon = '⚠️'
-
-            logger.info(f"{icon} Evaluated patch successfully. train NDCG before: {ndcgs_before.mean()}, after: {ndcgs_after.mean()}")
-            logger.info("Code:")
-            logger.info(code)
-            # Check if in margin
-            warning = None
-            if ndcgs_after.mean() < (ndcgs_before.mean() + eval_margin):
-                warning = f"""⚠️ Warning: NDCG did not improve by at least {eval_margin} on training set:
-                before={ndcgs_before.mean()},
-                after={ndcgs_after.mean()}.
-            It might be rejected if applied.
-
-            Hint: look at changed queries, modify your change to get the upside of your change, and minimize the downside."""
-                logger.warning(warning)
-            else:
-                logger.info("✅ NDCG improved sufficiently on training set.")
-
-            all_queries_improved = set(queries_improved_as_expected) | set(queries_improved_unexpectedly)
-            union = set(edit.queries_expected_to_improve) | all_queries_improved
-            intersection = set(edit.queries_expected_to_improve) & all_queries_improved
-            jaccard_imp = 1.0
-            if len(union) > 0:
-                jaccard_imp = len(intersection) / len(union)
-            all_queries_harmed = set(queries_harmed_as_expected) | set(queries_harmed_unexpectedly)
-            union = set(edit.queries_expected_to_degrade) | all_queries_harmed
-            intersection = set(edit.queries_expected_to_degrade) & all_queries_harmed
-            jaccard_harm = 1.0
-            if len(union) > 0:
-                jaccard_harm = len(intersection) / len(union)
-
-            warning = warning or ""
-
-            if jaccard_imp < 0.5:
-                msg = f"\n⚠️ Warning: Low Jaccard similarity for improved queries: {jaccard_imp:.2f}. Expected improved queries are not improving as much as unexpected ones. Please try to improve your predictions."
-                warning += msg
-                logger.warning(msg)
-            else:
-                logger.info("✅ Jaccard similarity for improved queries is acceptable.")
-            if jaccard_harm < 0.5:
-                msg = f"\n⚠️ Warning: Low Jaccard similarity for harmed queries: {jaccard_harm:.2f}. Expected harmed queries are not harming as much as unexpected ones. Please try to improve your predictions."
-                warning += msg
-                logger.warning(msg)
-            else:
-                logger.info("✅ Jaccard similarity for harmed queries is acceptable.")
-
             return EvalResult(success=True, error_message=warning,
-                              ndcg_before=ndcgs_before.mean(), ndcg_after=ndcgs_after.mean(),
+                              ndcg_before=ndcgs_before.mean(),
+                              ndcg_after=ndcgs_after.mean(),
                               queries_improved_as_expected=queries_improved_as_expected,
                               queries_improved_unexpectedly=queries_improved_unexpectedly,
                               queries_harmed_as_expected=queries_harmed_as_expected,
@@ -339,6 +370,8 @@ def make_patch_fn(search_fn,
     (Results won't be saved, this is used to evaluate potential patches before applying them.)
 
     {guardrail_doc_strs}
+
+    You'll be warned if guardrails of apply_patch would be violated and therefore you should revise your change.
 
     """
 
@@ -380,43 +413,12 @@ def make_patch_fn(search_fn,
             # Check on training data, to see if expected queries changed
             queries_improved_as_expected, queries_improved_unexpectedly, \
                 queries_harmed_as_expected, queries_harmed_unexpectedly, \
-                ndcgs_before, ndcgs_after = _training_eval_fn(
-                    code,
-                    existing_code,
-                    edit.queries_expected_to_improve,
-                    edit.queries_expected_to_degrade)
-
-            all_queries_improved = set(queries_improved_as_expected) | set(queries_improved_unexpectedly)
-            union = set(edit.queries_expected_to_improve) | all_queries_improved
-            intersection = set(edit.queries_expected_to_improve) & all_queries_improved
-            jaccard_imp = 1.0
-            if len(union) > 0:
-                jaccard_imp = len(intersection) / len(union)
-            all_queries_harmed = set(queries_harmed_as_expected) | set(queries_harmed_unexpectedly)
-            union = set(edit.queries_expected_to_degrade) | all_queries_harmed
-            intersection = set(edit.queries_expected_to_degrade) & all_queries_harmed
-            jaccard_harm = 1.0
-            if len(union) > 0:
-                jaccard_harm = len(intersection) / len(union)
-
-            if jaccard_imp < 0.5 and jaccard_harm < 0.5:
-                msg = "❌ Rejecting Change: Large discrepency between predicted improved and harmed queries. Continue to experiment with your change until you can effectively predict what changes will cause improvements and harms on training data."
-                logger.warning(msg)
-                raise ValueError(msg)
-            if jaccard_imp < 0.5:
-                msg = "❌ Rejecting Change: Large discrepency between predicted improved queries. Continue to experiment with your change until you can effectively predict what changes will cause improvements on training data."
-                raise ValueError(msg)
-            if jaccard_harm < 0.5:
-                msg = "❌ Rejecting Change: Large discrepency between predicted harmed queries. Continue to experiment with your change until you can effectively predict what changes will cause harms on training data."
-                raise ValueError(msg)
-            if validation_eval_fn is not None:
-                ndcg_before = validation_eval_fn(existing_code).mean()
-                ndcg_after = validation_eval_fn(code).mean()
-                if ndcg_after < (ndcg_before + eval_margin):
-                    logger.warning(f"❌ Rejecting Change: Validation NDCG must increase at least {eval_margin} after applying patch: before={ndcg_before}, after={ndcg_after}")
-                    raise ValueError(f"Rejecting change as overfit must increase NDCG by at least {eval_margin}: before={ndcg_before}, after={ndcg_after}")
-                else:
-                    logger.info(f"✅ Validation NDCG improved: before={ndcg_before}, after={ndcg_after}")
+                ndcgs_before, ndcgs_after, warning = _training_eval_fn(code,
+                                                                       existing_code,
+                                                                       edit.queries_expected_to_improve,
+                                                                       edit.queries_expected_to_degrade)
+            if warning is not None:
+                raise ValueError(warning)
 
             code = _commit_code(code)
             if code:
@@ -442,6 +444,7 @@ def make_patch_fn(search_fn,
 
     {full_guardrail_doc_strs}
     Code will be rejected if it does not improves / harm training data as expected (within some tolerance).
+    Code will be rejected if a the percentage of changed queries by this change are not improvements (at least 75% of changed queries must improve).
 
     """
     if training_eval_fn is None:

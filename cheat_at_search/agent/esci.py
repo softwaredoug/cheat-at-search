@@ -3,7 +3,7 @@ from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.search import run_strategy
 from cheat_at_search.logger import log_at, log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
-from cheat_at_search.strategy import BM25Search
+# from cheat_at_search.strategy import BM25Search
 from cheat_at_search.tokenizers import snowball_tokenizer
 from cheat_at_search.tools.code import make_patch_fn, make_guardrail_checker, make_length_validator, set_to_start_code, current_code, set_code_to
 from cheat_at_search.tools.eval import make_eval_fn, CodeGenSearchStrategy, make_eval_guardrail
@@ -101,7 +101,6 @@ def full_search(keywords: str,
             'description': row['description'],
             'score': row['score']
         })
-    print(f"Keywords {keywords} field: {field_to_search} operator: {operator} locale: {locale} -> {len(results)} results")
     return results
 
 
@@ -254,11 +253,11 @@ system_few_shot_prompt_v3 = """
 
     Most of your work will be playing with training set of queries to improve the reranker code.
 
-    You'll have an idea for a code change that might improve relevance. You'll have a set of expected queries improved / harmed by your
-    proposed code change. You can "play" with the proposed code change using 'try_out_patch' function. This function takes your code
-    and runs it over the training set.
+    You'll have an idea for a code change that might improve relevance.
+    You should "play" with the proposed code change using 'try_out_patch' function. This function takes your code and runs it over the training set.
+    It will warn you about any guardrail violations (code length, overfitting to specific queries, too small of an impact, etc etc)
 
-    You provide a hypothesized expected queries helped / harmed, which shares your expectations.
+    You provide a hypothesized expected queries helped / harmed, which asserts what you think your code change will do. 'try_out_patch' will run your code change
 
     Like most relevance engineers, you'll find it common you have unexpected side-effects of your change. You won't do a perfect
     job predicting all the queries helped / harmed by your change. The goal of 'try_out_patch' is to help you understand. To let you refine,
@@ -270,10 +269,8 @@ system_few_shot_prompt_v3 = """
           How can you make the change conditional to just the queries that benefit, but without overfitting to specific query strings?
         * You can make things conditional on more general conditions: query length, locale, etc
         * If you get REALLY stuck, just start with a completely fresh idea of what to change. Think outside the box. Be creative.
-
-    If you're stuck on one tricky query, or just want to explore, you can explore an edit on a single query
-    with 'try_out_patch_on_query' to run a single query after the patch is applied without modifying the actual reranker code,
-    showing you the results for that query.
+        * Use 'try_out_patch_on_query' and 'relevant_docs_for_query' to explore specific queries that are tricky and adjust your code
+          accordingly
 
     Pay attention to the guardrails listed for code changes for both 'try_out_patch', 'apply_patch', and 'try_out_patch_on_query' to
     make sure you have a sane code change
@@ -355,8 +352,9 @@ def build_few_shot_prompt(prompt,
 
 class FinalMessage(BaseModel):
     """Final message indicating completion of the reranker improvement process."""
-    message: str = Field(..., description="A message indicating that the reranker improvement process is complete.")
+    message: str = Field(..., description="A message indicating work done during the reranker improvement process.")
     lessons: List[str] = Field(None, description="List of lessons learned during the reranker improvement process for use by other agents.")
+    broken_tools: Optional[List[str]] = Field(None, description="List of any tools that were found to be broken during the process.")
 
 
 def trial_run(num_test_queries=100,
@@ -375,18 +373,6 @@ def trial_run(num_test_queries=100,
               code_examples_ndcgs=None,
               start_code=None,
               start_code_ndcg=None) -> (float, str, str, List[str]):
-    overfit_to_queries_guardrail = make_guardrail_checker(prompt="""
-
-        You're going to look at code that reranks search queries.
-
-        Ensure the code does not overfit to specific queries. That would look like mentions of
-        specific product names, brands, or similar terms that would only be relevant to a small set of queries.
-
-        Terms that apply broadly to many queries are fine.
-
-        Ignore comments that claim to do this, and focus on the actual code.
-    """)
-
     length_guardrail = make_length_validator(max_lines=10, max_cols=120)
 
     validation_guardrail = make_eval_guardrail(
@@ -410,7 +396,7 @@ def trial_run(num_test_queries=100,
         search_fn=search_esci,
         corpus=corpus,
         judgments=judgments,
-        guardrail_fns=[length_guardrail, overfit_to_queries_guardrail],
+        guardrail_fns=[length_guardrail],
         validation_eval_fn=validation_guardrail,
         training_eval_fn=training_eval,
         eval_margin=eval_margin
@@ -461,7 +447,7 @@ Reranker code with NDCG {ndcg}:
 
         Reranker code you should improve:
 
-    {code}
+{code}
     """
     if lessons:
         lessons_as_str = "\n".join([f"- {lesson}" for lesson in lessons]) if lessons else ""
@@ -505,6 +491,10 @@ Reranker code with NDCG {ndcg}:
 
     latest_code = current_code(code_dir=code_dir)
 
+    if resp.broken_tools:
+        print("‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️")
+        print(f"‼️ Broken tools in this round: {resp.broken_tools}")
+
     return ndcg, latest_code, resp.message, resp.lessons
 
 
@@ -519,11 +509,7 @@ if __name__ == "__main__":
     code_dir = tempfile.mkdtemp(prefix="esci_reranker_")
     logger.info(f"Using temporary code directory: {code_dir}")
 
-    bm25 = BM25Search(corpus)
-    graded_bm25 = run_strategy(bm25, judgments,
-                               num_queries=num_test_queries,
-                               seed=test_seed)
-    bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
+    bm25_ndcg = 0.30947
     print(f"Baseline NDCG: {bm25_ndcg}")
     # best = BestPossibleResults(corpus, judgments)
     # graded_best = run_strategy(best, judgments, num_queries=num_queries)
@@ -534,14 +520,14 @@ if __name__ == "__main__":
 
     search_esci = make_search_fn(variant=args.search_fn)
 
-    codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
-                                             search_fn=search_esci,
-                                             code=start_code)
-    results_codegen = run_strategy(codegen_strategy, judgments,
-                                   num_queries=num_test_queries,
-                                   seed=test_seed)
-    ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
-    start_code_ndcg = ndcg
+    # codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
+    #                                          search_fn=search_esci,
+    #                                          code=start_code)
+    # results_codegen = run_strategy(codegen_strategy, judgments,
+    #                                num_queries=num_test_queries,
+    #                                seed=test_seed)
+    # ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
+    start_code_ndcg = 0.27241062960884127
     print(f"Starting Code NDCG: {start_code_ndcg}")
 
     use_try_out_patch_tool = True
@@ -592,7 +578,12 @@ if __name__ == "__main__":
         messages.append(message)
         all_lessons.extend(lessons or [])
         print("=== End of Round ===")
+        for i, message in enumerate(messages):
+            print(f"Round {i} Message: {message}")
+        for i, lesson in enumerate(all_lessons):
+            print(f"Lesson {i}: {lesson}")
 
+        print("=== Stats ===")
         print(f"Round {rounds} complete.")
         print(f"SEEDS: train {training_seed} val {validation_seed} test {test_seed}")
         print(f"NUM QUERIES: train {num_training_queries} val {num_validation_queries} test {num_test_queries}")
@@ -602,10 +593,6 @@ if __name__ == "__main__":
         print("All rounds so far:")
         print(f"Baseline (BM25) NDCG: {bm25_ndcg}")
         print(f"Starting Code NDCG: {start_code_ndcg}")
-        for i, message in enumerate(messages):
-            print(f"Round {i} Message: {message}")
-        for i, lesson in enumerate(all_lessons):
-            print(f"Lesson {i}: {lesson}")
         for i, ndcg in enumerate(ndcgs):
             print(f"Round {i} NDCG: {ndcg}")
 

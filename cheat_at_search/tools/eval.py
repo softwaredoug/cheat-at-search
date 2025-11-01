@@ -130,7 +130,6 @@ def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
                 relevant_doc=relevant_doc
             ))
 
-            logger.info(f"Query: {query} NDCG: {ndcg:.4f} Relevant Doc Title: {relevant_doc.title}")
         assert len(result) == len(ndcgs), "Result length does not match number of queries"
 
         eval_result = EvalResults(
