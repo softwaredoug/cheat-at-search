@@ -13,44 +13,39 @@ logger = log_to_stdout(logger_name="cheat_at_search.code")
 
 class Edit(BaseModel):
     """A single edit to apply to the reranker code."""
-    anchor: str = Field(..., description="The anchor text to identify where the patch should be applied.")
+    anchor: str = Field(..., description="The anchor text to identify where the patch/edit should be applied. This will be replaced with the new text. Do not leave blank.")
     block_until: str = Field(..., description="The end of the block of text which the patch should be applied. Do not leave blank.")
-    action: Literal['insert_after', 'replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
+    action: Literal['replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
     text: str = Field(..., description="The text to insert or replace with. Ignored for delete action.")
     doing_differently: Optional[str] = Field(None, description="What you are doing differently in this edit compared to your previous attempt.")
     what_have_you_learned: Optional[str] = Field(None, description="What you have learned from previous attempt that informed this edit.")
     evidence_this_will_work: Optional[str] = Field(None, description="Any evidence or reasoning that this edit will improve the reranker. Use examples from query behaviors you've seen")
     past_mistakes: Optional[str] = Field(None, description="Mea. Culpa. Past mistakes you made in previous edits that you are avoiding in this edit.")
 
-    queries_expected_to_improve: List[str] = Field(None, description="A complete list of training queries expected to have their NDCG changed by this edit.")
-    queries_expected_to_degrade: List[str] = Field(None, description="A complete list of training queries expected to have their NDCG decreased by this edit.")
-
 
 class EditResult(BaseModel):
     """The result of applying edits to the reranker code."""
     success: bool = Field(..., description="Whether the edits were applied successfully and the reranker passed tests.")
-    error_message: Optional[str] = Field(None, description="An error message if the edits failed to apply or tests failed.")
+    error_messages: Optional[str] = Field(None, description="An error message if the edits failed to apply or tests failed.")
+    info_messages: Optional[str] = Field(None, description="Informational message about the application of the edit.")
     current_code: str = Field(None, description="The current reranker code after this call.")
 
-    queries_improved_as_expected: Optional[List[str]] = Field(None, description="A list of training queries expected to improve that did improve.")
-    queries_improved_unexpectedly: Optional[List[str]] = Field(None, description="A list of training queries not expected to improve that did improve.")
 
-    queries_harmed_as_expected: Optional[List[str]] = Field(None, description="A list of training queries expected to degrade that did degrade.")
-    queries_harmed_unexpectedly: Optional[List[str]] = Field(None, description="A list of training queries not expected to degrade that did degrade.")
+class PerQueryDelta(BaseModel):
+    query: str = Field(..., description="The query for which the NDCG delta is reported.")
+    ndcg_before: float = Field(..., description="The NDCG before applying the edit for this query.")
+    ndcg_after: float = Field(..., description="The NDCG after applying the edit for this query.")
+    relevant_doc: Dict[str, str] = Field(..., description="An example of a relevant document for this query.")
 
 
 class EvalResult(BaseModel):
     success: bool = Field(..., description="Whether the edits can be applied succesfully without code errors.")
-    error_message: Optional[str] = Field(None, description="An error or warning message if the patch failed to be applied, evaluation failed, or NDCG did not improve sufficiently.")
+    warning_messages: Optional[str] = Field(None, description="An error or warning message if the patch failed to be applied, evaluation failed, or NDCG did not improve sufficiently.")
+    info_messages: Optional[str] = Field(None, description="Informational message about the evaluation.")
     ndcg_before: Optional[float] = Field(0.0, description="The NDCG before applying the edit.")
     ndcg_after: Optional[float] = Field(0.0, description="The NDCG after applying the edit.")
+    query_deltas: List[PerQueryDelta] = Field([], description="The per-query NDCG deltas after applying the edit.")
     current_code: Optional[str] = Field(None, description="The current reranker code after this call.")
-
-    queries_improved_as_expected: Optional[List[str]] = Field(None, description="A list of training queries expected to improve that did improve.")
-    queries_improved_unexpectedly: Optional[List[str]] = Field(None, description="A list of training queries not expected to improve that did improve.")
-
-    queries_harmed_as_expected: Optional[List[str]] = Field(None, description="A list of training queries expected to degrade that did degrade.")
-    queries_harmed_unexpectedly: Optional[List[str]] = Field(None, description="A list of training queries not expected to degrade that did degrade.")
 
 
 def make_length_validator(max_lines: int = 10, max_cols=120) -> Callable[[str], Optional[str]]:
@@ -117,6 +112,68 @@ def score_prediction(queries_expected_to_change: List[str],
     return changed_as_expected, changed_unexpectedly
 
 
+def patch_code(filepath: str,
+               module_name: str,
+               edit: Edit,
+               guardrail_fns: List = None) -> Tuple[str, str, dict]:
+    with open(filepath, "r") as f:
+        code = f.read()
+        existing_code = code
+
+        anchor_index = code.find(edit.anchor)
+        if anchor_index == -1:
+            raise ValueError(f"Anchor '{edit.anchor}' not found in code.")
+        block_index = code.find(edit.block_until, anchor_index)
+        if block_index == -1:
+            raise ValueError(f"Block until '{edit.block_until}' not found after anchor in code.")
+
+        # Validate code
+        if guardrail_fns is None:
+            guardrail_fns = []
+        for guardrail in guardrail_fns:
+            error_message = guardrail(edit.text)
+            if error_message is not None:
+                raise ValueError(error_message)
+
+        if edit.action == 'replace':
+            # Get indent at anchor
+            indent_level = anchor_index - code[:anchor_index].rfind("\n") - 1
+            # Indent the edit text
+            edit_lines = edit.text.split('\n')
+            is_indented = all([line.startswith(' ' * indent_level) or line.strip() == '' for line in edit_lines])
+            if not is_indented:
+                anchor_indent = ' ' * indent_level
+                indented_edit_lines = [edit_lines[0]]
+                for line in edit_lines[1:]:
+                    indented_edit_lines.append(anchor_indent + line if line.strip() != '' else line)
+                edit.text = '\n'.join(indented_edit_lines)
+            code = code[:anchor_index] + edit.text + code[block_index + len(edit.block_until):]
+        elif edit.action == 'delete':
+            code = code[:anchor_index] + code[block_index + len(edit.block_until):]
+        else:
+            raise ValueError(f"Unknown action '{edit.action}'.")
+    # Attempt to eval the code
+    local_vars = {}
+    try:
+        exec(code, {}, local_vars)
+    except Exception as e:
+        logger.error("Error evaluatiing patched code: " + str(e))
+        logger.error(existing_code)
+        logger.error("Anchor\n" + edit.anchor)
+        logger.error("Block Until\n" + edit.block_until)
+        logger.error("Action: " + edit.action)
+        logger.error("Text:\n" + edit.text)
+        raise ValueError(f"Error evaluating patched code: {e}")
+    if module_name not in local_vars:
+        logger.error("Edited code does not define module_name")
+        raise ValueError("The edited code does not define module_name.")
+    # Test that rerank_esci is callable
+    if not callable(local_vars[module_name]):
+        logger.error("module_name is not callable.")
+        raise ValueError("module_name is not callable.")
+    return code, existing_code, local_vars
+
+
 def make_patch_fn(search_fn,
                   corpus,
                   judgments: pd.DataFrame,
@@ -124,8 +181,9 @@ def make_patch_fn(search_fn,
                   guardrail_fns: List = None,
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
-                  num_queries_improved_required: int = 3,
-                  perc_queries_improved_required: float = 0.75,
+                  num_queries_improved_required: int = 1,
+                  perc_queries_improved_required: float = 0.65,
+                  min_ndcg_delta=0.05,  # Only count changes above this threshold
                   eval_margin=0.003) -> Tuple[callable, callable, callable, callable]:
     """Returns a function that applies patches to the reranker code."""
 
@@ -170,49 +228,20 @@ def make_patch_fn(search_fn,
         logger.info(f"What Have You Learned: {edit.what_have_you_learned}")
         logger.info(f"Evidence This Will Work: {edit.evidence_this_will_work}")
         logger.info(f"Past Mistakes: {edit.past_mistakes}")
-        logger.info(f"Expected improved queries: {edit.queries_expected_to_improve}")
-        with open(filepath, "r") as f:
-            code = f.read()
-            existing_code = code
-
-            anchor_index = code.find(edit.anchor)
-            if anchor_index == -1:
-                raise ValueError(f"Anchor '{edit.anchor}' not found in code.")
-            block_index = code.find(edit.block_until, anchor_index)
-            if block_index == -1:
-                raise ValueError(f"Block until '{edit.block_until}' not found after anchor in code.")
-
-            # Validate code
-            for guardrail in guardrail_fns:
-                error_message = guardrail(edit.text)
-                if error_message is not None:
-                    raise ValueError(error_message)
-
-            if edit.action == 'insert_after':
-                insertion_point = block_index + len(edit.block_until)
-                code = code[:insertion_point] + '\n' + edit.text + '\n' + code[insertion_point:]
-            elif edit.action == 'replace':
-                code = code[:anchor_index] + edit.text + code[block_index + len(edit.block_until):]
-            elif edit.action == 'delete':
-                code = code[:anchor_index] + code[block_index + len(edit.block_until):]
-            else:
-                raise ValueError(f"Unknown action '{edit.action}'.")
-        # Attempt to eval the code
-        local_vars = {}
-        exec(code, {}, local_vars)
-        if module_name not in local_vars:
-            logger.error("Edited code does not define module_name")
-            raise ValueError("The edited code does not define module_name.")
-        # Test that rerank_esci is callable
-        if not callable(local_vars[module_name]):
-            logger.error("module_name is not callable.")
-            raise ValueError("module_name is not callable.")
+        code, existing_code, local_vars = patch_code(filepath,
+                                                     module_name,
+                                                     edit,
+                                                     guardrail_fns)
         for query in test_queries:
             try:
                 results = local_vars[module_name](search_fn, query)[:10]
             except Exception as e:
                 logger.error(f"Error calling {module_name} with query '{query}': {e}")
-                logger.error(code)
+                logger.error(existing_code)
+                logger.error("Anchor\n" + edit.anchor)
+                logger.error("Block Until\n" + edit.block_until)
+                logger.error("Action: " + edit.action)
+                logger.error("Text:\n" + edit.text)
                 raise ValueError(f"Error calling {module_name} with query '{query}': {e}")
 
             try:
@@ -235,28 +264,11 @@ def make_patch_fn(search_fn,
             f.write(code)
             return code
 
-    def _training_eval_fn(code: str, existing_code: str,
-                          queries_expected_to_improve: List[str],
-                          queries_expected_to_degrade: List[str]):
-        ndcgs_before: pd.Series = training_eval_fn(existing_code)
-        ndcgs_after: pd.Series = training_eval_fn(code)
+    def _training_eval_fn(code: str, existing_code: str):
+        """Evaluate the code on training data and compare to existing code."""
+        ndcgs_before = training_eval_fn(existing_code)
+        ndcgs_after = training_eval_fn(code)
         deltas: pd.Series = ndcgs_after - ndcgs_before
-        delta_dict = deltas.to_dict()
-        changed_queries = {}
-        for query in delta_dict:
-            if delta_dict[query] != 0.0:
-                changed_queries[query] = delta_dict[query]
-
-        # Build lists matching expectations
-        queries_improved_as_expected, queries_improved_unexpectedly = score_prediction(
-            queries_expected_to_improve,
-            changed_queries,
-            improved=True)
-
-        queries_harmed_as_expected, queries_harmed_unexpectedly = score_prediction(
-            queries_expected_to_degrade,
-            changed_queries,
-            improved=False)
 
         logger.info("Code:")
         logger.info(code)
@@ -272,18 +284,8 @@ def make_patch_fn(search_fn,
         else:
             msgs.append("✅ NDCG improved sufficiently on training set.")
 
-        all_queries_improved = set(queries_improved_as_expected) | set(queries_improved_unexpectedly)
-        union = set(queries_expected_to_improve) | all_queries_improved
-        intersection = set(queries_expected_to_improve) & all_queries_improved
-        jaccard_imp = 1.0
-        if len(union) > 0:
-            jaccard_imp = len(intersection) / len(union)
-        all_queries_harmed = set(queries_harmed_as_expected) | set(queries_harmed_unexpectedly)
-        union = set(queries_expected_to_degrade) | all_queries_harmed
-        intersection = set(queries_expected_to_degrade) & all_queries_harmed
-        jaccard_harm = 1.0
-        if len(union) > 0:
-            jaccard_harm = len(intersection) / len(union)
+        all_queries_improved = deltas[deltas > min_ndcg_delta].index.tolist()
+        all_queries_harmed = deltas[deltas < -min_ndcg_delta].index.tolist()
 
         # Track what percentage of queries were positive improvements
         perc_queries_changed_improved = 0.0
@@ -291,10 +293,10 @@ def make_patch_fn(search_fn,
         if total_changed > 0:
             perc_queries_changed_improved = len(all_queries_improved) / total_changed
 
-            msgs.append(f"ℹ️ Percentage of changed queries that improved: {perc_queries_changed_improved:.2f}")
-            msgs.append(f"ℹ️ Number of improved queries: {len(all_queries_improved)}")
+            msgs.append(f"ℹ️ Percentage of changed queries that improved by at least {min_ndcg_delta}: {perc_queries_changed_improved:.2f}")
+            msgs.append(f"ℹ️ Number of improved queries by at least {min_ndcg_delta}: {len(all_queries_improved)}")
         else:
-            msgs.append("ℹ️ No queries were changed by this patch.")
+            msgs.append(f"ℹ️ No queries were changed by at least {min_ndcg_delta} NDCG.")
 
         if perc_queries_changed_improved < perc_queries_improved_required:
             msg = f"⚠️ Low percentage of changed queries that improved: {perc_queries_changed_improved:.2f}. Please make a better change (at least {perc_queries_improved_required * 100}% of changed queries should improve)."
@@ -307,76 +309,55 @@ def make_patch_fn(search_fn,
         else:
             msgs.append(f"✅ Sufficient number of changed queries improved: {len(all_queries_improved)}.")
 
-        if jaccard_imp < 0.5:
-            msgs.append(f"⚠️ You predicted {len(queries_expected_to_improve)} queries to improve, but actually {len(all_queries_improved)} actually improved {len(queries_improved_as_expected)} were expected. (Jaccard similarity: {jaccard_imp:.2f}.) Please try to improve your predictions.")
-        else:
-            msgs.append(f"✅ Jaccard similarity for improved queries is acceptable: {jaccard_imp:.2f}.")
-        if jaccard_harm < 0.5:
-            msgs.append(f"⚠️ You predicted {len(queries_expected_to_degrade)} queries to degrade, but actually {len(all_queries_harmed)} actually degraded {len(queries_harmed_as_expected)} were expected. (Jaccard similarity: {jaccard_harm:.2f}.) Please try to improve your predictions.")
-        else:
-            msgs.append(f"✅ Jaccard similarity for harmed queries is acceptable: {jaccard_harm:.2f}.")
-
-        has_warnings = False
+        infos = []
+        warnings = []
         for msg in msgs:
             if msg.startswith("⚠️"):
                 logger.warning(msg)
-                has_warnings = True
+                warnings.append(msg)
             else:
                 logger.info(msg)
+                infos.append(msg)
 
         warning = None
-        if has_warnings:
+        if len(warnings) > 0:
             warning = "PROBLEMS! Here are a list of guardrail violations on the training set:\n"
-            warning += "\n".join([msg for msg in msgs if msg.startswith("⚠️")])
-            warning += "Other Information:\n"
-            warning += "\n".join([msg for msg in msgs if not msg.startswith("⚠️")])
+            warning += "\n".join(warnings)
 
-        return queries_improved_as_expected, queries_improved_unexpectedly, \
-            queries_harmed_as_expected, queries_harmed_unexpectedly, \
-            ndcgs_before, ndcgs_after, \
-            warning
+        info = None
+        if len(infos) > 0:
+            info = "Here are some informational messages from evaluating on the training set:\n"
+            info += "\n".join(infos)
 
-    def try_out_patch(edit: Edit) -> EvalResult:
-        logger.info("Evaluating patch")
+        return ndcgs_before, ndcgs_after, warning, info
 
-        with open(filepath, "r") as f:
-            existing_code = f.read()
-
-        try:
-            if training_eval_fn is None:
-                return None
-            code, existing_code, local_vars = _patch_code(edit)
-            queries_improved_as_expected, queries_improved_unexpectedly, \
-                queries_harmed_as_expected, queries_harmed_unexpectedly, \
-                ndcgs_before, ndcgs_after, warning = _training_eval_fn(
-                    code,
-                    existing_code,
-                    edit.queries_expected_to_improve,
-                    edit.queries_expected_to_degrade)
-
-            return EvalResult(success=True, error_message=warning,
-                              ndcg_before=ndcgs_before.mean(),
-                              ndcg_after=ndcgs_after.mean(),
-                              queries_improved_as_expected=queries_improved_as_expected,
-                              queries_improved_unexpectedly=queries_improved_unexpectedly,
-                              queries_harmed_as_expected=queries_harmed_as_expected,
-                              queries_harmed_unexpectedly=queries_harmed_unexpectedly,
-                              current_code=existing_code)
-        except Exception as e:
-            logger.info(f"Error evaluating patch: {e}")
-            return EvalResult(success=False, error_message=str(e), ndcg_deltas={}, existing_code=existing_code)
-
-    try_out_patch.__doc__ = f"""Evaluate the proposed code change to analyze its impact on training queries.
-    (Results won't be saved, this is used to evaluate potential patches before applying them.)
-
-    {guardrail_doc_strs}
-
-    You'll be warned if guardrails of apply_patch would be violated and therefore you should revise your change.
-
-    """
+    def _per_query_deltas(ndcgs_before: pd.Series,
+                          ndcgs_after: pd.Series) -> List[PerQueryDelta]:
+        deltas: pd.Series = ndcgs_after - ndcgs_before
+        per_query_deltas = []
+        max_grade = judgments['grade'].max()
+        for query in deltas.index:
+            relevant_docs = judgments[(judgments['query'] == query) & (judgments['grade'] == max_grade)]
+            example_relevant_doc = {}
+            if not relevant_docs.empty:
+                relevant_doc_id = relevant_docs.sample(1).iloc[0]['product_id']
+                example_relevant_doc = corpus[corpus['doc_id'] == relevant_doc_id].iloc[0].to_dict()
+                example_relevant_doc = {
+                    "product_name": example_relevant_doc.get("product_name", ""),
+                    "product_description": example_relevant_doc.get("product_description", ""),
+                }
+            per_query_deltas.append(PerQueryDelta(
+                query=query,
+                ndcg_before=ndcgs_before[query],
+                ndcg_after=ndcgs_after[query],
+                relevant_doc=example_relevant_doc
+            ))
+        return per_query_deltas
 
     def try_out_patch_on_query(edit: Edit, query: str) -> Union[List[Dict], str]:
         """Try out the proposed code change on a single query without saving changes.
+
+        Returns the top 10 documents returned by the patched reranker for the given query.
 
         If the query exists in the judgments, results will be labeled
 
@@ -387,59 +368,110 @@ def make_patch_fn(search_fn,
             code, existing_code, local_vars = _patch_code(edit, test_queries=[query])
             reranker_fn = local_vars[module_name]
             results = reranker_fn(search_fn, query)
-            for result in results:
-                doc_id = result['doc_id']
+            top_docs = []
+            for doc_id in results:
                 judgment_row = query_judgments[query_judgments['doc_id'] == doc_id]
-                if not judgment_row.empty:
-                    grade = judgment_row.iloc[0]['grade']
-                    emoji = grade_to_emoji(grade)
-                    result['grade'] = grade
-                    result['label'] = emoji
-            return results
+                doc = corpus[corpus['doc_id'] == doc_id].iloc[0]
+                doc_dict = {}
+                if not doc.empty:
+                    doc_dict = {
+                        "doc_id": doc_id,
+                        "product_name": doc['product_name'],
+                        "product_description": doc['product_description'],
+                        "grade": 0,
+                        "label": grade_to_emoji(0),
+                    }
+                if not judgment_row.empty and not judgment_row.iloc[0].isnull().any():
+                    doc_dict['grade'] = judgment_row.iloc[0]['grade'].item()
+                    doc_dict['label'] = grade_to_emoji(doc_dict['grade'])
+                top_docs.append(doc_dict)
+            return top_docs
         except Exception as e:
-            logger.info(f"Error trying out patch on query '{query}': {e}")
+            logger.warning(f"Error trying out patch on query '{query}': {e}")
             return str(e)
 
+    def try_out_patch(edit: Edit) -> EvalResult:
+        logger.info("Evaluating patch")
+
+        with open(filepath, "r") as f:
+            existing_code = f.read()
+        info = None
+
+        try:
+            if training_eval_fn is None:
+                return None
+            code, existing_code, local_vars = _patch_code(edit)
+            ndcgs_before, ndcgs_after, warning, info = _training_eval_fn(
+                code,
+                existing_code)
+            per_query_deltas = _per_query_deltas(ndcgs_before, ndcgs_after)
+
+            res = EvalResult(success=True,
+                             warning_messages=warning,
+                             info_messages=info,
+                             ndcg_before=ndcgs_before.mean(),
+                             ndcg_after=ndcgs_after.mean(),
+                             per_query_deltas=per_query_deltas,
+                             current_code=existing_code)
+            return res
+        except Exception as e:
+            msg = f"Error evaluating code in patch (no eval was performed): {e}"
+            logger.warning(msg)
+            res = EvalResult(success=False, warning_messages=msg,
+                             ndcg_deltas={}, existing_code=existing_code,
+                             info_messages=info)
+            return res
+
+    try_out_patch.__doc__ = f"""Evaluate the proposed code change to analyze its impact on all training queries.
+    (Results won't be saved, this is used to evaluate potential patches before applying them.)
+
+    Limitation: only returns the NDCG for a query, not the full results. Use try_out_patch_on_query to see full results for specific queries.
+
+    {guardrail_doc_strs}
+
+    You'll be warned if guardrails of apply_patch would be violated and therefore you should revise your change
+    (though success will still be True if code runs without error).
+
+    """
+
     def apply_patch(edit: Edit) -> EditResult:
-        queries_improved_as_expected = []
-        queries_improved_unexpectedly = []
-        queries_harmed_as_expected = []
-        queries_harmed_unexpectedly = []
+        info = None
         try:
             logger.info("Applying patch with edits")
             code, existing_code, local_vars = _patch_code(edit)
             # Compare NDCG before and after
             edit_result = EditResult(success=True, error_message=None, current_code=existing_code)
             # Check on training data, to see if expected queries changed
-            queries_improved_as_expected, queries_improved_unexpectedly, \
-                queries_harmed_as_expected, queries_harmed_unexpectedly, \
-                ndcgs_before, ndcgs_after, warning = _training_eval_fn(code,
-                                                                       existing_code,
-                                                                       edit.queries_expected_to_improve,
-                                                                       edit.queries_expected_to_degrade)
+            ndcgs_before, ndcgs_after, warning, info = _training_eval_fn(
+                code,
+                existing_code)
             if warning is not None:
                 raise ValueError(warning)
+
+            if validation_eval_fn is not None:
+                ndcg_before = validation_eval_fn(existing_code).mean()
+                ndcg_after = validation_eval_fn(code).mean()
+                if ndcg_after < (ndcg_before + eval_margin):
+                    logger.warning(f"❌ Rejecting Change: Validation NDCG must increase at least {eval_margin} after applying patch: before={ndcg_before}, after={ndcg_after}")
+                    raise ValueError(f"Rejecting change as overfit to training set must increase validation NDCG by at least {eval_margin}: before={ndcg_before}, after={ndcg_after}")
+                else:
+                    logger.info(f"✅ Validation NDCG improved: before={ndcg_before}, after={ndcg_after}")
 
             code = _commit_code(code)
             if code:
                 edit_result.current_code = code
                 edit_result.success = True
-                edit_result.error_message = None
-                edit_result.queries_improved_as_expected = queries_improved_as_expected
-                edit_result.queries_improved_unexpectedly = queries_improved_unexpectedly
-                edit_result.queries_harmed_as_expected = queries_harmed_as_expected
-                edit_result.queries_harmed_unexpectedly = queries_harmed_unexpectedly
+                edit_result.error_messages = None
+                edit_result.info_messages = info
                 return edit_result
         except Exception as e:
-            logger.info(f"Error applying patch: {e}")
+            logger.warning(f"Error applying patch: {e}")
             with open(filepath, "r") as f:
                 existing_code = f.read()
-            return EditResult(success=False, error_message=str(e), query_results={},
-                              current_code=existing_code,
-                              queries_improved_as_expected=queries_improved_as_expected,
-                              queries_improved_unexpectedly=queries_improved_unexpectedly,
-                              queries_harmed_as_expected=queries_harmed_as_expected,
-                              queries_harmed_unexpectedly=queries_harmed_unexpectedly)
+            return EditResult(success=False,
+                              info_messages=info,
+                              error_messages=str(e),
+                              current_code=existing_code)
     apply_patch.__doc__ = f"""Save the proposed code change to rerank_esci.py.
 
     {full_guardrail_doc_strs}

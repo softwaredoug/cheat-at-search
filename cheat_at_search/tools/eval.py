@@ -208,8 +208,8 @@ def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
 
 def make_eval_guardrail(corpus, judgments, search_fn, seed=1234, num_queries=100, workers=4) -> callable:
 
-    def eval_guardrail(code: str) -> float:
-        """Evaluate on validation set to avoid overfitting. Returns query NDCGs."""
+    def eval_guardrail(code: str) -> pd.Series:
+        """Evaluate on validation set to avoid overfitting. Returns query NDCGs and top doc per query."""
         strategy = CodeGenSearchStrategy(corpus,
                                          search_fn=search_fn,
                                          code=code,

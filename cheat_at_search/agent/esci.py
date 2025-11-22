@@ -239,51 +239,36 @@ system_few_shot_prompt_v3 = """
 
     Your task is to improve the reranker code so that it returns more relevant results for Amazon e-commerce search queries (as measured by NDCG).
 
-    Take note of the human labels provided (what the reranker is evaluated against). A good reranker ranks relevant products higher than irrelevant products, thus improving the search relevance metric NDCG.
-    The reranker uses the search function 'search_esci' to get an initial set of candidate products
-    (see the corresponding tool 'search_esci' for how it works).
-
-    The Reranker MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
+    The Reranker code MUST have a function rerank_esci. It takes as parameters search_esci function and a query string. It
     returns a list of product IDs in the order you think best matches the query.
-
-    You can evaluate the current reranker in rerank_esci.py using the 'run_evals' function
-    You can view any queries most relevant to a specific product using 'relevant_docs_for_query' function.
 
     ## How to improve the reranker
 
-    Most of your work will be playing with training set of queries to improve the reranker code.
+    Most of your work will be playing with training set of queries to improve the reranker code with the following
+    procedure:
 
-    You'll have an idea for a code change that might improve relevance.
-    You should "play" with the proposed code change using 'try_out_patch' function. This function takes your code and runs it over the training set.
-    It will warn you about any guardrail violations (code length, overfitting to specific queries, too small of an impact, etc etc)
+    1. Evaluate the current reranker in rerank_esci.py using the 'run_evals' function
+    2. Run the reranker using the 'run_reranker' function, which takes a single query and returns ranked, matching products. Do this for
+       the lowest NDCG queries to understand what is going wrong
+    3. View what should come back for those queries by inspecting the human labels for those queries in the judgments data using
+       'relevant_docs_for_query' function
 
-    You provide a hypothesized expected queries helped / harmed, which asserts what you think your code change will do. 'try_out_patch' will run your code change
+    Then formulate a code change to improve the reranker.
 
-    Like most relevance engineers, you'll find it common you have unexpected side-effects of your change. You won't do a perfect
-    job predicting all the queries helped / harmed by your change. The goal of 'try_out_patch' is to help you understand. To let you refine,
-    then play more with 'try_out_patch' until you have a good understanding of your proposed code change.
+    1. Try the code change on the query from step (2) above, with your code change, using 'try_out_patch_on_query' function
+    2. Repeat for other tricky queries, improving your proposed code change so it holistically improves a subset of the tricky queries
+    3. When you have a good idea, try the code change on the entire training set using 'try_out_patch' function
 
-    Take the following actions to fine-tune your proposed code changes:
-
-        * If you help / hurt unexpected changes, analyze why that happened. Try to get the benefit of the change while avoiding the harm.
-          How can you make the change conditional to just the queries that benefit, but without overfitting to specific query strings?
-        * You can make things conditional on more general conditions: query length, locale, etc
-        * If you get REALLY stuck, just start with a completely fresh idea of what to change. Think outside the box. Be creative.
-        * Use 'try_out_patch_on_query' and 'relevant_docs_for_query' to explore specific queries that are tricky and adjust your code
-          accordingly
+    'try_out_patch' will show you per-query NDCG changes for your proposed code change without modifying the actual reranker code.
 
     Pay attention to the guardrails listed for code changes for both 'try_out_patch', 'apply_patch', and 'try_out_patch_on_query' to
     make sure you have a sane code change
 
+    Finally, when satisfied, and you feel confident all guardrails are met, move to committing your code change using 'apply_patch' function.
+
     ## Committing your code change
 
-    Finally, when you have a good understanding, commit your code change using 'apply_patch' function, which modifies the actual reranker code.
-    This is like the 'final exam' of your code change.
-
     Your final reranker will be evaluated on a hidden validation set of queries to ensure you haven't overfit. Your change will only be accepted if it improves the validation set NDCG by a small margin.
-
-    Your change will also be rejected by 'apply_patch' if you still fail to do a good job predicting the training queries helped / harmed by your change on
-    the training set.
 
     ## What does the data look like?
 
@@ -354,7 +339,7 @@ class FinalMessage(BaseModel):
     """Final message indicating completion of the reranker improvement process."""
     message: str = Field(..., description="A message indicating work done during the reranker improvement process.")
     lessons: List[str] = Field(None, description="List of lessons learned during the reranker improvement process for use by other agents.")
-    broken_tools: Optional[List[str]] = Field(None, description="List of any tools that were found to be broken during the process.")
+    failed_experiments: List[str] = Field(..., description="List of failed experiments you tried during the reranker improvement process.")
 
 
 def trial_run(num_test_queries=100,
@@ -370,6 +355,7 @@ def trial_run(num_test_queries=100,
               code_dir=None,
               code_examples=None,
               lessons=None,
+              failed_experiments=None,
               code_examples_ndcgs=None,
               start_code=None,
               start_code_ndcg=None) -> (float, str, str, List[str]):
@@ -456,6 +442,13 @@ Reranker code with NDCG {ndcg}:
         Here are some lessons you have learned from previous rounds:
             {lessons_as_str}
     """
+    if failed_experiments:
+        failed_experiments_as_str = "\n".join([f"- {exp}" for exp in failed_experiments]) if failed_experiments else ""
+        prompt += f"""
+
+        Here are some failed experiments you have tried before:
+            {failed_experiments_as_str}
+    """
     print("Prompt is:")
     print(prompt)
 
@@ -467,7 +460,7 @@ Reranker code with NDCG {ndcg}:
     resp: FinalMessage = search_client.loop()
 
     if resp is None:
-        resp = FinalMessage(message="No response from agent.", lessons=[])
+        resp = FinalMessage(message="No response from agent.", lessons=[], failed_experiments=[])
 
     print("Final message from agent:")
     print(resp.message)
@@ -491,11 +484,7 @@ Reranker code with NDCG {ndcg}:
 
     latest_code = current_code(code_dir=code_dir)
 
-    if resp.broken_tools:
-        print("‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️")
-        print(f"‼️ Broken tools in this round: {resp.broken_tools}")
-
-    return ndcg, latest_code, resp.message, resp.lessons
+    return ndcg, latest_code, resp.message, resp.lessons, resp.failed_experiments
 
 
 if __name__ == "__main__":
@@ -520,14 +509,14 @@ if __name__ == "__main__":
 
     search_esci = make_search_fn(variant=args.search_fn)
 
-    # codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
-    #                                          search_fn=search_esci,
-    #                                          code=start_code)
-    # results_codegen = run_strategy(codegen_strategy, judgments,
-    #                                num_queries=num_test_queries,
-    #                                seed=test_seed)
-    # ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
-    start_code_ndcg = 0.27241062960884127
+    codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
+                                             search_fn=search_esci,
+                                             code=start_code)
+    results_codegen = run_strategy(codegen_strategy, judgments,
+                                   num_queries=num_test_queries,
+                                   seed=test_seed)
+    ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
+    start_code_ndcg = ndcg
     print(f"Starting Code NDCG: {start_code_ndcg}")
 
     use_try_out_patch_tool = True
@@ -550,10 +539,11 @@ if __name__ == "__main__":
     code_examples = []
     messages = []
     all_lessons = []
+    all_failed_experiments = []
     for rounds in range(10):
         print(f"=== Generating Reranker Code Round {rounds} ===")
         last_code = current_code(code_dir=code_dir)
-        ndcg, code, message, lessons = trial_run(
+        ndcg, code, message, lessons, failed_experiments = trial_run(
             num_test_queries=num_test_queries,
             num_validation_queries=num_validation_queries,
             num_training_queries=num_training_queries,
@@ -566,7 +556,7 @@ if __name__ == "__main__":
             try_out_patch_tool=use_try_out_patch_tool,
             code_dir=code_dir,
             eval_margin=args.eval_margin,
-            lessons=all_lessons if args.use_last_rounds_lessons else None,
+            failed_experiments=all_failed_experiments
         )
         training_seed += 1
         if not args.use_last_rounds_code:
@@ -577,11 +567,14 @@ if __name__ == "__main__":
         code_examples.append(code)
         messages.append(message)
         all_lessons.extend(lessons or [])
+        all_failed_experiments.extend(failed_experiments or [])
         print("=== End of Round ===")
         for i, message in enumerate(messages):
             print(f"Round {i} Message: {message}")
         for i, lesson in enumerate(all_lessons):
             print(f"Lesson {i}: {lesson}")
+        for i, failed_exp in enumerate(all_failed_experiments):
+            print(f"Failed Experiment {i}: {failed_exp}")
 
         print("=== Stats ===")
         print(f"Round {rounds} complete.")
@@ -596,4 +589,5 @@ if __name__ == "__main__":
         for i, ndcg in enumerate(ndcgs):
             print(f"Round {i} NDCG: {ndcg}")
 
-        input("Press enter to continue to proceed")
+        if rounds > 5:
+            input("Press enter to continue to proceed")
