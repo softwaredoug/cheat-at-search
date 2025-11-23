@@ -17,6 +17,7 @@ def snowball_tokenizer(text):
         return ''
     if text is None:
         return ''
+    # Ascii folding + punctuation to space
     text = text.translate(all_trans).replace("'", " ")
     split = text.lower().split()
     return [stem_word(token)

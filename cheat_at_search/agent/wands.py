@@ -1,24 +1,23 @@
-from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products
+from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products, judgments
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
-from cheat_at_search.search import run_strategy, vs_ideal
+from cheat_at_search.agent.openai_search_client import OpenAISearchClient
+from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
-from cheat_at_search.agent.judgments import get_human_judgments
+from cheat_at_search.agent.judgments import make_judgments_tool
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal, Optional
 from searcharray import SearchArray
 import numpy as np
 import pandas as pd
 import sys
-from time import perf_counter
 
 
-enriched_products['product_name_snowball'] = SearchArray.index(enriched_products['product_name'],
-                                                               tokenizer=snowball_tokenizer)
+enriched_products['title_snowball'] = SearchArray.index(enriched_products['title'],
+                                                        tokenizer=snowball_tokenizer)
 
-enriched_products['description_snowball'] = SearchArray.index(enriched_products['product_description'],
+enriched_products['description_snowball'] = SearchArray.index(enriched_products['description'],
                                                               tokenizer=snowball_tokenizer)
 
 
@@ -64,14 +63,14 @@ def search_products(keywords: str,
         top_k: The number of top results to return.
 
     Returns:
-        Search results as a list of dictionaries with 'id', 'product_name', 'product_description', and 'score' keys.
+        Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
 
     """
     print("Searching for:", keywords, "top_k:", top_k)
     query_tokens = snowball_tokenizer(keywords)
     scores = np.zeros(len(enriched_products))
     for token in query_tokens:
-        scores += enriched_products['product_name_snowball'].array.score(token) * 10
+        scores += enriched_products['title_snowball'].array.score(token) * 10
         scores += enriched_products['description_snowball'].array.score(token)
 
     # Filter by category
@@ -91,61 +90,13 @@ def search_products(keywords: str,
     for id, row in top_products.iterrows():
         results.append({
             'id': id,
-            'product_name': row['product_name'],
-            'product_description': row['product_description'],
+            'title': row['title'],
+            'description': row['description'],
             'category': row['category'],
             'score': row['score']
         })
     print(f"Keywords {keywords} -- Found {len(results)} results")
     return results
-
-
-def chat():
-    system_prompt = """
-        You take user's search query, think of different queries, and use batch search tool to find furniture products.
-
-        Search for furniture products using the following steps:
-
-        1. Look at the search tool you have, its limitations, how it work, etc when forming your plan.
-
-        2. Before searching, use the "get_human_judgments" tool to get the ground truth human judgments for this user query. If anything shows up, use that interpret user intent and evaluate relevance of results you find.
-
-        3. Before searching, use the "get_past_queries" to get similar, past queries the user has made to
-        gain insight on how to best search for this user query using the available tool
-
-        4. Issue searches in one call to "search_products" tool.
-
-        5. Evaluate the results you get back from the search tool.
-
-        6. Save the results quality of each query (immediately after "search_products" usage) with the "save_queries" tool
-
-        7. Iterate as needed, reformulating queries, until you have enough good results to present to the user.
-
-        8. Present the best results to the user, citing the product name and description.
-
-        Outside of searches, respond to questions about your behavior (in these cases, you should not use a tool).
-    """
-
-    search_client = OpenAISearchClient(tools=[search_products, save_queries, get_past_queries,
-                                              get_human_judgments],
-                                       model="openai/gpt-5",
-                                       system_prompt=system_prompt,
-                                       response_model=None)
-    chat_adapter = OpenAIChatAdapter(search_client)
-
-    while True:
-        message = input("User: ")
-        if message in ['reset']:
-            chat_adapter.reset()
-            print("Chat reset.")
-            continue
-        if message in ['exit', 'quit']:
-            break
-        begin = perf_counter()
-        response = chat_adapter.chat(message)
-        took = perf_counter() - begin
-        print(f"(took {took:.2f}s)")
-        print("Assistant:", response)
 
 
 system_no_judgments_prompt = """
@@ -280,14 +231,14 @@ def agent_search_wands(use_old=True,
     print(f"QUERIES: {queries}")
 
     # Get best possible
-    best_possible = BestPossibleResults(enriched_products)
-    graded_best_possible = run_strategy(best_possible, queries)
+    best_possible = BestPossibleResults(enriched_products, judgments)
+    graded_best_possible = run_strategy(best_possible, judgments, num_queries=num_queries, seed=seed)
     best_possible_ndcg = graded_best_possible['ndcg'].mean()
     print(f"Best Possible NDCG: {best_possible_ndcg}")
 
     # Run BM25 baseline
     bm25 = BM25Search(enriched_products)
-    graded_bm25 = run_strategy(bm25, queries)
+    graded_bm25 = run_strategy(bm25, judgments, num_queries=num_queries, seed=seed)
     bm25_ndcg = graded_bm25['ndcg'].mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
 
@@ -300,11 +251,14 @@ def agent_search_wands(use_old=True,
                                        system_prompt=prompt)
     strategy = ReasoningSearchStrategy(enriched_products, search_client,
                                        prompt="",
-                                       cache=iterations == 1)
+                                       cache=iterations == 1,
+                                       workers=4)
     ndcgs = []
     for iter in range(iterations):
         print(f"--- Iteration {iter + 1} of {iterations} ---")
-        graded_results = run_strategy(strategy, queries)
+        graded_results = run_strategy(strategy, judgments,
+                                      num_queries=num_queries,
+                                      seed=seed)
         ndcg = graded_results['ndcg'].mean()
         print(f"BM25 Baseline NDCG: {bm25_ndcg}")
         print(f"Overall NDCG: {ndcg}")
@@ -317,16 +271,6 @@ def agent_search_wands(use_old=True,
     print(f"Baseline NDCG: {bm25_ndcg}")
     for idx, ndcg in enumerate(ndcgs):
         print(f"Iteration {idx + 1}: NDCG {ndcg}")
-
-    vs_ideal_bm25_df = vs_ideal(graded_bm25)
-    vs_ideal_bm25_df = vs_ideal_bm25_df[vs_ideal_bm25_df['query'].isin(queries['query'])]
-    print("--- BM25 Vs Ideal Top 10 ---")
-    print(vs_ideal_bm25_df.head(20).to_string())
-
-    vs_ideal_df = vs_ideal(graded_results)
-    vs_ideal_df = vs_ideal_df[vs_ideal_df['query'].isin(queries['query'])]
-    print("--- Agent Vs Ideal Top 10 ---")
-    print(vs_ideal_df.head(20).to_string())
 
 
 class PostAgentStrategy(SearchStrategy):
@@ -371,8 +315,8 @@ def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt) -> str:
         prompt += f"""
 
         User Query: {item['query']}
-        Product Name: {item['product_name']}
-        Product Description: {item['product_description']}
+        Product Name: {item['title']}
+        Product Description: {item['description']}
         Product Category: {item['category']}
         Human Label: {item['label']}
 
@@ -404,7 +348,7 @@ if __name__ == "__main__":
         agent_search_wands(use_old=False,
                            iterations=iterations,
                            num_queries=num_queries,
-                           addl_tools=[get_human_judgments,
+                           addl_tools=[make_judgments_tool(labeled_query_products),
                                        save_queries,
                                        get_past_queries],
                            prompt=system_prompt_judgments,
@@ -427,8 +371,6 @@ if __name__ == "__main__":
         agent_search_wands(use_old=False,
                            iterations=iterations,
                            num_queries=num_queries,
-                           addl_tools=[get_human_judgments],
+                           addl_tools=[make_judgments_tool(labeled_query_products)],
                            prompt=build_few_shot_prompt(10, prompt=system_few_shot_judgmens_no_history_prompt),
                            seed=seed)
-    else:
-        chat()

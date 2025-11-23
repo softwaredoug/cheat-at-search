@@ -52,15 +52,17 @@ def sync_git_repo(data_dir: str, repo_url: str):
                 text=True
             )
             logger.info(f"Updated {repo_url} dataset at {data_path}")
+            return data_path
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to update {repo_url} dataset: {e.stderr}")
-            raise
-        return data_path
+            logger.warning(f"Failed to update {repo_url} dataset: {e.stderr}. Will delete and re-clone.")
+            # If fetch or reset fails, delete and re-clone
+            subprocess.run(["rm", "-rf", str(data_path)], check=True)
 
     logger.info(f"Cloning dataset from {repo_url} to {data_path}")
 
     try:
         # Clone the repository
+        logger.info(f"Cloning {repo_url} into {data_path}")
         subprocess.run(
             ["git", "clone", "--depth=1", repo_url, str(data_path)],
             check=True,

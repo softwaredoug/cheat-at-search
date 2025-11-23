@@ -9,25 +9,28 @@ logger = log_to_stdout(logger_name="search")
 
 
 class BM25Search(SearchStrategy):
-    def __init__(self, products,
-                 name_boost=9.3,
+    def __init__(self, corpus,
+                 title_boost=9.3,
                  description_boost=4.1):
-        super().__init__(products)
-        self.index = products
-        self.name_boost = name_boost
+        super().__init__(corpus)
+        self.index = corpus
+        self.title_boost = title_boost
         self.description_boost = description_boost
-        self.index['product_name_snowball'] = SearchArray.index(
-            products['product_name'], snowball_tokenizer)
-        self.index['product_description_snowball'] = SearchArray.index(
-            products['product_description'], snowball_tokenizer)
+
+        if 'title_snowball' not in self.index and 'title' in corpus:
+            self.index['title_snowball'] = SearchArray.index(
+                corpus['title'], snowball_tokenizer)
+        if 'description_snowball' not in self.index and 'description' in corpus:
+            self.index['description_snowball'] = SearchArray.index(
+                corpus['description'], snowball_tokenizer)
 
     def search(self, query, k=10):
         """Dumb baseline lexical search"""
         tokenized = snowball_tokenizer(query)
         bm25_scores = np.zeros(len(self.index))
         for token in tokenized:
-            bm25_scores += self.index['product_name_snowball'].array.score(token) * self.name_boost
-            bm25_scores += self.index['product_description_snowball'].array.score(
+            bm25_scores += self.index['title_snowball'].array.score(token) * self.title_boost
+            bm25_scores += self.index['description_snowball'].array.score(
                 token) * self.description_boost
         top_k = np.argsort(-bm25_scores)[:k]
         scores = bm25_scores[top_k]

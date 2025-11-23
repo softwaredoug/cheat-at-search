@@ -16,6 +16,7 @@ dependencies = [
     "google-genai (>=1.2.0,<2.0.0)",
     "pyarrow (>=14.0.0,<22.0.0)",
     "pyyaml (>=6.0.3,<7.0.0)",
+    "lxml (>=6.0.2,<7.0.0)",
 ]
 
 [tool.pylsp.plugins]

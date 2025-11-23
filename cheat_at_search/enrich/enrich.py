@@ -173,7 +173,7 @@ class ProductEnricher:
                         value = ""
                     products.at[row.name, attr] = value if value is not None else ""
             else:
-                logger.warning(f"Enrichment failed for product {row.get('product_id', 'unknown')}")
+                logger.warning(f"Enrichment failed for product {row.get('doc_id', 'unknown')}")
                 for attr in self.attrs:
                     products.at[row.name, attr] = ""
 

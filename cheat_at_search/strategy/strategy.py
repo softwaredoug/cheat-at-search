@@ -7,9 +7,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class SearchStrategy:
 
-    def __init__(self, products, top_k=5,
+    def __init__(self, corpus, top_k=5,
                  workers=1):
-        self.products = products
+        self.corpus = corpus
         self.top_k = top_k
         self.workers = workers
 
@@ -27,19 +27,19 @@ class SearchStrategy:
                 query_id = query_row['query_id']
                 ranks = np.arange(len(top_k)) + 1
                 search_array_cols = [
-                    col for col in self.products.columns
-                    if isinstance(self.products[col].array, SearchArray)
+                    col for col in self.corpus.columns
+                    if isinstance(self.corpus[col].array, SearchArray)
                 ]
                 # Ensure we drop only SearchArray columns
-                top_k_products = self.products.drop(columns=search_array_cols, errors='ignore')
-                top_k_products = top_k_products.iloc[top_k].copy()
-                top_k_products['score'] = scores
-                top_k_products['query'] = query_row['query']
-                top_k_products['query_id'] = query_id
-                top_k_products['rank'] = ranks
+                top_k_corpus = self.corpus.drop(columns=search_array_cols, errors='ignore')
+                top_k_corpus = top_k_corpus.iloc[top_k].copy()
+                top_k_corpus['score'] = scores
+                top_k_corpus['query'] = query_row['query']
+                top_k_corpus['query_id'] = query_id
+                top_k_corpus['rank'] = ranks
                 # Remove any columns where .array is SearchArray
 
-                all_results.append(top_k_products)
+                all_results.append(top_k_corpus)
         return pd.concat(all_results)
 
     def search(self, query, k):

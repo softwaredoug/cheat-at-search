@@ -28,7 +28,7 @@ def fetch_wands(data_dir=wands_path, repo_url="https://github.com/softwaredoug/W
     return sync_git_repo(data_dir, repo_url)
 
 
-def _products():
+def _corpus():
     """
     Load WANDS products into a pandas DataFrame.
 
@@ -61,6 +61,11 @@ def _products():
     df['product_description'] = df['product_description'].fillna('')
     df['product_name'] = df['product_name'].fillna('')
 
+    # Normalize to common columns
+    df['doc_id'] = df['product_id']
+    df['title'] = df['product_name']
+    df['description'] = df['product_description']
+
     # Parse category and subcategory from 'category hierarchy'
     cat_as_list = df['category hierarchy'].fillna('').str.split('/')
     df['category'] = cat_as_list.apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else '')
@@ -91,6 +96,11 @@ def _enriched_products():
         df[col].fillna('', inplace=True)
 
     logger.info(f"Loaded {len(df)} enriched products")
+
+    # Normalize to common columns
+    df['doc_id'] = df['product_id']
+    df['title'] = df['product_name']
+    df['description'] = df['product_description']
     return df
 
 
@@ -237,7 +247,8 @@ def _labels():
     df.loc[df['label'] == 'Exact', 'grade'] = 2
     df.loc[df['label'] == 'Partial', 'grade'] = 1
     df.loc[df['label'] == 'Irrelevant', 'grade'] = 0
-    df = df.groupby(['query_id', 'product_id']).first().reset_index()
+    df['doc_id'] = df['product_id']
+    df = df.groupby(['query_id', 'doc_id']).first().reset_index()
     logger.info(f"Loaded {len(df)} relevance labels")
     return df
 
@@ -251,8 +262,8 @@ def _ideal10(products, labeled_queries):
         .rename(columns={'ideal_query_id': 'query_id', 'ideal_query': 'query'})
 
     ideal_top_10 = ideal_top_10.merge(
-        products[['product_id', 'product_name']], how='left', left_on='ideal_product_id', right_on='product_id'
-    ).rename(columns={'product_name': 'ideal_product_name'}).drop(columns='ideal_query_class')
+        products[['doc_id', 'title']], how='left', left_on='ideal_doc_id', right_on='doc_id'
+    ).rename(columns={'title': 'ideal_title'}).drop(columns='ideal_query_class')
 
     return ideal_top_10
 
@@ -265,12 +276,15 @@ def __getattr__(name):
 
     logging.info(f"Loading dataset: {name} for the first time")
 
-    if name == 'labels':
-        ds = _labels()
-    elif name == 'queries':
+    if name == 'judgments':
+        name = 'labeled_queries'
+
+    if name == 'queries':
         ds = _queries()
+    elif name == 'corpus':
+        ds = _corpus()
     elif name == 'products':
-        ds = _products()
+        ds = _corpus()
     elif name == 'enriched_products':
         ds = _enriched_products()
     elif name == 'enriched_queries':
@@ -287,12 +301,12 @@ def __getattr__(name):
         if 'labels' not in globals():
             globals()['labels'] = _labels()
         if 'products' not in globals():
-            globals()['products'] = _products()
+            globals()['products'] = _corpus()
         queries = globals()['queries']
         labels = globals()['labels']
         products = globals()['products']
         labeled_queries = queries.merge(labels, how='left', on='query_id')
-        labeled_query_products = labeled_queries.merge(products, how='left', on='product_id')
+        labeled_query_products = labeled_queries.merge(products, how='left', on='doc_id')
         ideal_top_10 = _ideal10(products, labeled_queries)
         globals()['labeled_queries'] = labeled_queries
         globals()['labeled_query_products'] = labeled_query_products

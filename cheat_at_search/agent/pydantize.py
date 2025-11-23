@@ -26,6 +26,8 @@ def make_tool_adapter(
         ordered_params.append((pname, p))
 
     ArgsModel: type[BaseModel] = create_model(f"{func.__name__.capitalize()}Args", **fields)  # type: ignore
+    if not func.__doc__:
+        raise ValueError(f"Function {func.__name__} must have a docstring for tool description.")
     tool_spec = {
         "type": "function",
         "name": func.__name__,
