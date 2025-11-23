@@ -1,6 +1,6 @@
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.wands_data import products
-from cheat_at_search.agent.openai_search_client import OpenAISearchClient, OpenAIChatAdapter
+from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal
@@ -150,8 +150,8 @@ def test_calling_search_tool():
     # thread, public_url = serve_tools(fns=[search_products])
     # time.sleep(1)
 
-    search_client = OpenAISearchClient(tools=[search_products], model="openai/gpt-5",
-                                       system_prompt="You are a helpful assistant that helps people find furniture products.")
+    search_client = OpenAIAgent(tools=[search_products], model="openai/gpt-5",
+                                system_prompt="You are a helpful assistant that helps people find furniture products.")
     prompt = """
         Reason carefully to find furniture products that match the following description, returning top 10 best results.
 
@@ -188,10 +188,10 @@ def test_analyze_best_search_backend():
 
     """
 
-    search_client = OpenAISearchClient(tools=[search_products, alt_search_products],
-                                       model="openai/gpt-5",
-                                       system_prompt=system_prompt,
-                                       response_model=PreferredSearchTool)
+    search_client = OpenAIAgent(tools=[search_products, alt_search_products],
+                                model="openai/gpt-5",
+                                system_prompt=system_prompt,
+                                response_model=PreferredSearchTool)
     preferred_tool = search_client.search(prompt)
     assert preferred_tool.tool_name in ["search_products", "alt_search_products"]
 
@@ -208,9 +208,9 @@ def test_reasoning_search_strategy():
 
     """
 
-    search_client = OpenAISearchClient(tools=[search_products],
-                                       model="openai/gpt-5",
-                                       system_prompt=system_prompt)
+    search_client = OpenAIAgent(tools=[search_products],
+                                model="openai/gpt-5",
+                                system_prompt=system_prompt)
     strategy = ReasoningSearchStrategy(products, search_client=search_client, prompt=prompt)
     queries = [
         "a couch for my really big butt",
