@@ -5,6 +5,7 @@ import json
 from cheat_at_search.logger import log_to_stdout
 import subprocess
 from pathlib import Path
+import requests
 
 
 logger = log_to_stdout(logger_name="data_dir")
@@ -26,6 +27,25 @@ DATA_PATH = pathlib.Path(get_project_root()) / "data"
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
+
+
+def download_file(url, dest_path):
+    filename = url.split('/')[-1]
+    local_filename = Path(dest_path) / filename
+
+    if Path(local_filename).exists():
+        print(f"File {local_filename} already exists, skipping download.")
+        return local_filename
+
+    # NOTE the stream=True parameter below
+    with requests.get(url, stream=True) as r:
+        print(f"Downloading {url} to {local_filename}")
+        r.raise_for_status()
+        with open(local_filename, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+    print(f"Downloaded to {local_filename}")
+    return local_filename
 
 
 def sync_git_repo(data_dir: str, repo_url: str):
