@@ -2,7 +2,7 @@ import pytest
 import importlib
 
 
-@pytest.mark.parametrize("data_module", ["msmarco_data", "esci_data", "wands_data"])
+@pytest.mark.parametrize("data_module", ["msmarco_data", "esci_data", "wands_data", "tmdb_data"])
 def test_common_imports(data_module):
     """Confirm no import error when importing these values from the dataset module."""
     import_dfs_to_expected_columns = {

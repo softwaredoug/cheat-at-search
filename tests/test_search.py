@@ -4,7 +4,7 @@ from cheat_at_search.search import run_strategy
 import importlib
 
 
-@pytest.mark.parametrize("data_module", ["msmarco_data", "esci_data", "wands_data"])
+@pytest.mark.parametrize("data_module", ["msmarco_data", "esci_data", "wands_data", "tmdb_data"])
 def test_bm25_search(data_module):
     """
     Run BM25 search strategy on the specified dataset module.
