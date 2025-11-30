@@ -2,7 +2,7 @@ from cheat_at_search.strategy import BM25Search
 from cheat_at_search.eval import grade_results
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.logger import log_to_stdout
-from cheat_at_search.types import Optional
+from typing import Optional
 import pandas as pd
 
 
