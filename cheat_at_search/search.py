@@ -2,29 +2,40 @@ from cheat_at_search.strategy import BM25Search
 from cheat_at_search.eval import grade_results
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.logger import log_to_stdout
+from cheat_at_search.types import Optional
 import pandas as pd
 
 
 logger = log_to_stdout(logger_name="search")
 
 
-def run_strategy(strategy, judgments, num_queries=None, seed=42,
+def run_strategy(strategy, judgments,
+                 queries: Optional[list[str]] = None,
+                 num_queries=None, seed=42,
                  sub_sample_n=None, sub_sample_seed=42):
 
-    queries = judgments[['query', 'query_id']].drop_duplicates()
+    available_queries = judgments[['query', 'query_id']].drop_duplicates()
     max_grade = judgments['grade'].max()
 
+    if queries:
+        available_queries = available_queries[available_queries['query'].isin(queries)]
+        # Check any missing queries
+        missing_queries = set(queries) - set(available_queries['query'])
+        if missing_queries:
+            raise ValueError(f"You asked to search over these queries, but they are missing from judgments: {missing_queries}")
+        judgments = judgments[judgments['query_id'].isin(available_queries['query_id'])]
+
     if num_queries:
-        queries = queries.sample(num_queries, random_state=seed)
-        judgments = judgments[judgments['query_id'].isin(queries['query_id'])]
+        available_queries = available_queries.sample(num_queries, random_state=seed)
+        judgments = judgments[judgments['query_id'].isin(available_queries['query_id'])]
 
         if sub_sample_n:
-            if sub_sample_n >= len(queries):
+            if sub_sample_n >= len(available_queries):
                 raise ValueError("sub_sample_n must be less than the number of queries after num_queries filtering.")
-            queries = queries.sample(sub_sample_n, random_state=sub_sample_seed)
-            judgments = judgments[judgments['query_id'].isin(queries['query_id'])]
+            available_queries = available_queries.sample(sub_sample_n, random_state=sub_sample_seed)
+            judgments = judgments[judgments['query_id'].isin(available_queries['query_id'])]
 
-    results = strategy.search_all(queries)
+    results = strategy.search_all(available_queries)
     graded = grade_results(
         judgments,
         results,
