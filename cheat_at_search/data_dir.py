@@ -23,10 +23,11 @@ def get_project_root():
     return os.path.dirname(file_dir)
 
 
-DATA_PATH = pathlib.Path(get_project_root()) / "data"
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
+else:    
+    DATA_PATH = pathlib.Path(get_project_root()) / "data"
 
 
 def download_file(url, dest_path):
