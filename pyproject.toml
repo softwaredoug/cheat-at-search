@@ -6,7 +6,7 @@ authors = [
     {name = "Doug Turnbull",email = "softwaredoug@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11,<4.0.0"
+requires-python = ">=3.10,<4.0.0"
 dependencies = [
     "pydantic (>=2.11.0,<3.0.0)",
     "pandas (>=2.2.0,<3.0.0)",
