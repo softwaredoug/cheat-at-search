@@ -6,7 +6,8 @@ import inspect
 
 
 def make_tool_adapter(
-    func
+    func,
+    agent_state_param: str = "agent_state",
 ):
     """
     Returns (ArgsModel, tool_spec, call_from_tool)
@@ -15,15 +16,19 @@ def make_tool_adapter(
     hints = get_type_hints(func)
 
     fields: dict[str, tuple[type, Any]] = {}
-    ordered_params: list[tuple[str, inspect.Parameter]] = []
+    ordered_params: list[tuple[str, inspect.Parameter, bool]] = []
 
     for pname, p in sig.parameters.items():
         if p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
             continue
+        is_agent_state = pname == agent_state_param
+        if is_agent_state:
+            ordered_params.append((pname, p, True))
+            continue
         ann = hints.get(pname, Any)
         default = ... if p.default is inspect._empty else p.default
         fields[pname] = (ann, default)
-        ordered_params.append((pname, p))
+        ordered_params.append((pname, p, False))
 
     ArgsModel: type[BaseModel] = create_model(f"{func.__name__.capitalize()}Args", **fields)  # type: ignore
     if not func.__doc__:
@@ -38,12 +43,21 @@ def make_tool_adapter(
     ret_ann = hints.get("return", Any)
     ret_adapter = TypeAdapter(ret_ann)   # works for BaseModel, containers, unions, tuples, etc.
 
-    def call_from_tool(d: dict):
+    def call_from_tool(d: dict, agent_state: dict | None = None):
         m = ArgsModel.model_validate(d)
 
         posargs = []
         kwargs = {}
-        for name, p in ordered_params:
+        for name, p, is_agent_state in ordered_params:
+            if is_agent_state:
+                val = agent_state
+                if val is None:
+                    val = {}
+                if p.kind == inspect.Parameter.POSITIONAL_ONLY:
+                    posargs.append(val)
+                else:
+                    kwargs[name] = val
+                continue
             val = getattr(m, name)
             if p.kind == inspect.Parameter.POSITIONAL_ONLY:
                 posargs.append(val)
