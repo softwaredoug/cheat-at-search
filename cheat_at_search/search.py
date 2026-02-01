@@ -78,6 +78,8 @@ def run_bm25(corpus, judgments):
     try:
         bm25_results_path = ensure_data_subdir('bm25_results')
         graded_bm25 = pd.read_pickle(bm25_results_path / 'graded_bm25.pkl')
+        if "doc_id" not in graded_bm25.columns:
+            raise ValueError("Cached BM25 results missing doc_id; recomputing.")
         return graded_bm25
     except Exception:
         logger.warning("BM25 results not found, running BM25 search strategy.")
@@ -92,7 +94,8 @@ graded_bm25 = run_bm25(wands_corpus, wands_judgments)
 
 
 def vs_ideal(graded_results: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
-    import pdb; pdb.set_trace()
+    if "doc_id" not in graded_results.columns:
+        raise ValueError("graded_results must include a doc_id column for vs_ideal.")
     actual = graded_results[graded_results["rank"] <= 10].copy()
     actual_name_col = "product_name" if "product_name" in actual.columns else "title"
     actual = actual.rename(columns={"rank": "rank_actual", "doc_id": "product_id_actual"})

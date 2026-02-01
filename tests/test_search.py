@@ -145,5 +145,16 @@ def test_vs_ideal_wands():
 def test_graded_bm25_cached():
     assert isinstance(graded_bm25, pd.DataFrame)
     assert len(graded_bm25) > 0
+    assert "doc_id" in graded_bm25.columns
     assert "dcg" in graded_bm25.columns
     assert "ndcg" in graded_bm25.columns
+
+
+def test_vs_ideal_with_cached_bm25():
+    from cheat_at_search import wands_data
+
+    judgments = wands_data.judgments
+    comparison = vs_ideal(graded_bm25, judgments)
+    assert len(comparison) > 0
+    assert comparison["rank_actual"].max() <= 10
+    assert comparison["rank_ideal"].max() <= 10
