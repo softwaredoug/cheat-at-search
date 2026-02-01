@@ -89,3 +89,51 @@ def run_bm25(corpus, judgments):
 
 
 graded_bm25 = run_bm25(wands_corpus, wands_judgments)
+
+
+def vs_ideal(graded_results: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
+    actual = graded_results[graded_results["rank"] <= 10].copy()
+    actual_name_col = "product_name" if "product_name" in actual.columns else "title"
+    actual = actual.rename(columns={"rank": "rank_actual", "doc_id": "product_id_actual"})
+    actual["product_name_actual"] = actual[actual_name_col]
+    actual["rank_pos"] = actual["rank_actual"]
+
+    ideal = judgments.copy()
+    ideal = ideal.sort_values(["query_id", "grade", "doc_id"], ascending=[True, False, True])
+    ideal = ideal.groupby("query_id", as_index=False, group_keys=False).head(10)
+    ideal = ideal.rename(
+        columns={
+            "doc_id": "product_id_ideal",
+            "grade": "grade_ideal",
+            "label": "label_ideal",
+        }
+    )
+    ideal["rank_ideal"] = ideal.groupby("query_id").cumcount() + 1
+    ideal["rank_pos"] = ideal["rank_ideal"]
+
+    merged = actual.merge(
+        ideal[["query_id", "query", "product_id_ideal", "label_ideal", "grade_ideal", "rank_ideal", "rank_pos"]],
+        on=["query_id", "rank_pos"],
+        how="left",
+        suffixes=("", "_ideal"),
+    )
+    merged["query"] = merged["query"].fillna(merged.get("query_ideal"))
+
+    cols = [
+        "query_id",
+        "query",
+        "product_id_ideal",
+        "label_ideal",
+        "grade_ideal",
+        "rank_ideal",
+        "product_name_actual",
+        "rank_actual",
+        "product_id_actual",
+        "product_name_actual",
+        "grade",
+        "dcg",
+        "ndcg",
+    ]
+    merged = merged.rename(columns={"grade": "grade_actual"})
+    cols[10] = "grade_actual"
+    return merged[cols]
