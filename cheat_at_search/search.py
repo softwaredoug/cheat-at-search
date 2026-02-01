@@ -1,9 +1,13 @@
-from cheat_at_search.strategy import BM25Search
-from cheat_at_search.eval import grade_results
-from cheat_at_search.data_dir import ensure_data_subdir
-from cheat_at_search.logger import log_to_stdout
 from typing import Optional
+
 import pandas as pd
+
+from cheat_at_search.eval import grade_results
+from cheat_at_search.logger import log_to_stdout
+from cheat_at_search.data_dir import ensure_data_subdir
+from cheat_at_search.strategy import BM25Search
+from cheat_at_search.wands_data import corpus as wands_corpus
+from cheat_at_search.wands_data import judgments as wands_judgments
 
 
 logger = log_to_stdout(logger_name="search")
@@ -82,3 +86,6 @@ def run_bm25(corpus, judgments):
         graded_bm25 = run_strategy(bm25, judgments)
         graded_bm25.to_pickle(bm25_results_path / 'graded_bm25.pkl')
         return graded_bm25
+
+
+graded_bm25 = run_bm25(wands_corpus, wands_judgments)
