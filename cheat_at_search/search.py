@@ -70,7 +70,7 @@ def ndcg_delta(variant_graded, baseline_graded):
     return delta.sort_values(ascending=False)
 
 
-def run_bm25(corpus):
+def run_bm25(corpus, judgments):
     try:
         bm25_results_path = ensure_data_subdir('bm25_results')
         graded_bm25 = pd.read_pickle(bm25_results_path / 'graded_bm25.pkl')
@@ -79,6 +79,6 @@ def run_bm25(corpus):
         logger.warning("BM25 results not found, running BM25 search strategy.")
         bm25_results_path = ensure_data_subdir('bm25_results')
         bm25 = BM25Search(corpus)
-        graded_bm25 = run_strategy(bm25)
+        graded_bm25 = run_strategy(bm25, judgments)
         graded_bm25.to_pickle(bm25_results_path / 'graded_bm25.pkl')
         return graded_bm25
