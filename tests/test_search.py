@@ -3,7 +3,7 @@ import importlib
 import pandas as pd
 import pytest
 
-from cheat_at_search.search import run_bm25, run_strategy, vs_ideal
+from cheat_at_search.search import graded_bm25, run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy import BM25Search
 
 
@@ -48,7 +48,7 @@ def test_run_bm25(tmp_path, monkeypatch):
     assert (tmp_path / "bm25_results" / "graded_bm25.pkl").exists()
 
 
-def test_vs_ideal():
+def test_vs_ideal_mocked():
     graded_results = pd.DataFrame(
         [
             {
@@ -111,3 +111,39 @@ def test_vs_ideal():
     assert comparison["rank_ideal"].tolist() == [1, 2]
     assert comparison["product_id_ideal"].tolist() == [102, 101]
     assert comparison["product_id_actual"].tolist() == [101, 102]
+
+
+def test_vs_ideal_wands():
+    from cheat_at_search import wands_data
+
+    corpus = wands_data.corpus
+    judgments = wands_data.judgments
+    strategy = BM25Search(corpus)
+    graded_results = run_strategy(strategy, judgments, num_queries=2, seed=123)
+
+    comparison = vs_ideal(graded_results, judgments)
+    assert list(comparison.columns) == [
+        "query_id",
+        "query",
+        "product_id_ideal",
+        "label_ideal",
+        "grade_ideal",
+        "rank_ideal",
+        "product_name_actual",
+        "rank_actual",
+        "product_id_actual",
+        "product_name_actual",
+        "grade_actual",
+        "dcg",
+        "ndcg",
+    ]
+    assert len(comparison) > 0
+    assert comparison["rank_actual"].max() <= 10
+    assert comparison["rank_ideal"].max() <= 10
+
+
+def test_graded_bm25_cached():
+    assert isinstance(graded_bm25, pd.DataFrame)
+    assert len(graded_bm25) > 0
+    assert "dcg" in graded_bm25.columns
+    assert "ndcg" in graded_bm25.columns
