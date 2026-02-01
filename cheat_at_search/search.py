@@ -92,6 +92,7 @@ graded_bm25 = run_bm25(wands_corpus, wands_judgments)
 
 
 def vs_ideal(graded_results: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
+    import pdb; pdb.set_trace()
     actual = graded_results[graded_results["rank"] <= 10].copy()
     actual_name_col = "product_name" if "product_name" in actual.columns else "title"
     actual = actual.rename(columns={"rank": "rank_actual", "doc_id": "product_id_actual"})
