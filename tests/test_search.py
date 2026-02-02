@@ -100,10 +100,10 @@ def test_vs_ideal_mocked():
         "label_ideal",
         "grade_ideal",
         "rank_ideal",
+        "product_name_ideal",
         "product_name_actual",
         "rank_actual",
         "product_id_actual",
-        "product_name_actual",
         "grade_actual",
         "dcg",
         "ndcg",
@@ -121,7 +121,7 @@ def test_vs_ideal_wands():
     strategy = BM25Search(corpus)
     graded_results = run_strategy(strategy, judgments, num_queries=2, seed=123)
 
-    comparison = vs_ideal(graded_results, judgments)
+    comparison = vs_ideal(graded_results, judgments, corpus=corpus)
     assert list(comparison.columns) == [
         "query_id",
         "query",
@@ -129,10 +129,10 @@ def test_vs_ideal_wands():
         "label_ideal",
         "grade_ideal",
         "rank_ideal",
+        "product_name_ideal",
         "product_name_actual",
         "rank_actual",
         "product_id_actual",
-        "product_name_actual",
         "grade_actual",
         "dcg",
         "ndcg",
@@ -154,7 +154,7 @@ def test_vs_ideal_with_cached_bm25():
     from cheat_at_search import wands_data
 
     judgments = wands_data.judgments
-    comparison = vs_ideal(graded_bm25, judgments)
+    comparison = vs_ideal(graded_bm25, judgments, corpus=wands_data.corpus)
     assert len(comparison) > 0
     assert comparison["rank_actual"].max() <= 10
     assert comparison["rank_ideal"].max() <= 10

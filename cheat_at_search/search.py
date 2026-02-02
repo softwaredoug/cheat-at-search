@@ -93,7 +93,11 @@ def run_bm25(corpus, judgments):
 graded_bm25 = run_bm25(wands_corpus, wands_judgments)
 
 
-def vs_ideal(graded_results: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
+def vs_ideal(
+    graded_results: pd.DataFrame,
+    judgments: pd.DataFrame,
+    corpus: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
     if "doc_id" not in graded_results.columns:
         raise ValueError("graded_results must include a doc_id column for vs_ideal.")
     actual = graded_results[graded_results["rank"] <= 10].copy()
@@ -123,6 +127,13 @@ def vs_ideal(graded_results: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFr
     )
     merged["query"] = merged["query"].fillna(merged.get("query_ideal"))
 
+    if corpus is not None:
+        name_col = "product_name" if "product_name" in corpus.columns else "title"
+        name_lookup = corpus[["doc_id", name_col]].rename(
+            columns={"doc_id": "product_id_ideal", name_col: "product_name_ideal"}
+        )
+        merged = merged.merge(name_lookup, on="product_id_ideal", how="left")
+
     cols = [
         "query_id",
         "query",
@@ -130,14 +141,15 @@ def vs_ideal(graded_results: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFr
         "label_ideal",
         "grade_ideal",
         "rank_ideal",
+        "product_name_ideal",
         "product_name_actual",
         "rank_actual",
         "product_id_actual",
-        "product_name_actual",
-        "grade",
+        "grade_actual",
         "dcg",
         "ndcg",
     ]
     merged = merged.rename(columns={"grade": "grade_actual"})
-    cols[10] = "grade_actual"
+    if "product_name_ideal" not in merged.columns:
+        merged["product_name_ideal"] = None
     return merged[cols]
