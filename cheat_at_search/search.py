@@ -101,9 +101,9 @@ def vs_ideal(
     if "doc_id" not in graded_results.columns:
         raise ValueError("graded_results must include a doc_id column for vs_ideal.")
     actual = graded_results[graded_results["rank"] <= 10].copy()
-    actual_name_col = "product_name" if "product_name" in actual.columns else "title"
-    actual = actual.rename(columns={"rank": "rank_actual", "doc_id": "product_id_actual"})
-    actual["product_name_actual"] = actual[actual_name_col]
+    actual = actual.rename(columns={"rank": "rank_actual", "doc_id": "doc_id_actual"})
+    if "title" in actual.columns:
+        actual["title_actual"] = actual["title"]
     actual["rank_pos"] = actual["rank_actual"]
 
     ideal = judgments.copy()
@@ -111,16 +111,15 @@ def vs_ideal(
     ideal = ideal.groupby("query_id", as_index=False, group_keys=False).head(10)
     ideal = ideal.rename(
         columns={
-            "doc_id": "product_id_ideal",
+            "doc_id": "doc_id_ideal",
             "grade": "grade_ideal",
-            "label": "label_ideal",
         }
     )
     ideal["rank_ideal"] = ideal.groupby("query_id").cumcount() + 1
     ideal["rank_pos"] = ideal["rank_ideal"]
 
     merged = actual.merge(
-        ideal[["query_id", "query", "product_id_ideal", "label_ideal", "grade_ideal", "rank_ideal", "rank_pos"]],
+        ideal[["query_id", "query", "doc_id_ideal", "grade_ideal", "rank_ideal", "rank_pos"]],
         on=["query_id", "rank_pos"],
         how="left",
         suffixes=("", "_ideal"),
@@ -128,28 +127,33 @@ def vs_ideal(
     merged["query"] = merged["query"].fillna(merged.get("query_ideal"))
 
     if corpus is not None:
-        name_col = "product_name" if "product_name" in corpus.columns else "title"
-        name_lookup = corpus[["doc_id", name_col]].rename(
-            columns={"doc_id": "product_id_ideal", name_col: "product_name_ideal"}
+        name_lookup = corpus[["doc_id", "title"]].rename(
+            columns={"doc_id": "doc_id_ideal", "title": "title_ideal"}
         )
-        merged = merged.merge(name_lookup, on="product_id_ideal", how="left")
+        merged = merged.merge(name_lookup, on="doc_id_ideal", how="left")
+        if "title_actual" not in merged.columns:
+            actual_lookup = corpus[["doc_id", "title"]].rename(
+                columns={"doc_id": "doc_id_actual", "title": "title_actual"}
+            )
+            merged = merged.merge(actual_lookup, on="doc_id_actual", how="left")
 
     cols = [
         "query_id",
         "query",
-        "product_id_ideal",
-        "label_ideal",
+        "doc_id_ideal",
         "grade_ideal",
         "rank_ideal",
-        "product_name_ideal",
-        "product_name_actual",
+        "title_ideal",
+        "title_actual",
         "rank_actual",
-        "product_id_actual",
+        "doc_id_actual",
         "grade_actual",
         "dcg",
         "ndcg",
     ]
     merged = merged.rename(columns={"grade": "grade_actual"})
-    if "product_name_ideal" not in merged.columns:
-        merged["product_name_ideal"] = None
+    if "title_ideal" not in merged.columns:
+        merged["title_ideal"] = None
+    if "title_actual" not in merged.columns:
+        merged["title_actual"] = None
     return merged[cols]

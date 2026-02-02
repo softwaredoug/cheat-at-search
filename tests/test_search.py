@@ -56,7 +56,7 @@ def test_vs_ideal_mocked():
                 "query": "red shoes",
                 "doc_id": 101,
                 "rank": 1,
-                "product_name": "Red Shoes A",
+                "title": "Red Shoes A",
                 "grade": 2,
                 "dcg": 1.0,
                 "ndcg": 0.5,
@@ -66,7 +66,7 @@ def test_vs_ideal_mocked():
                 "query": "red shoes",
                 "doc_id": 102,
                 "rank": 2,
-                "product_name": "Red Shoes B",
+                "title": "Red Shoes B",
                 "grade": 0,
                 "dcg": 1.0,
                 "ndcg": 0.5,
@@ -80,14 +80,12 @@ def test_vs_ideal_mocked():
                 "query": "red shoes",
                 "doc_id": 102,
                 "grade": 3,
-                "label": "E",
             },
             {
                 "query_id": 1,
                 "query": "red shoes",
                 "doc_id": 101,
                 "grade": 2,
-                "label": "S",
             },
         ]
     )
@@ -96,21 +94,20 @@ def test_vs_ideal_mocked():
     assert list(comparison.columns) == [
         "query_id",
         "query",
-        "product_id_ideal",
-        "label_ideal",
+        "doc_id_ideal",
         "grade_ideal",
         "rank_ideal",
-        "product_name_ideal",
-        "product_name_actual",
+        "title_ideal",
+        "title_actual",
         "rank_actual",
-        "product_id_actual",
+        "doc_id_actual",
         "grade_actual",
         "dcg",
         "ndcg",
     ]
     assert comparison["rank_ideal"].tolist() == [1, 2]
-    assert comparison["product_id_ideal"].tolist() == [102, 101]
-    assert comparison["product_id_actual"].tolist() == [101, 102]
+    assert comparison["doc_id_ideal"].tolist() == [102, 101]
+    assert comparison["doc_id_actual"].tolist() == [101, 102]
 
 
 def test_vs_ideal_wands():
@@ -125,14 +122,13 @@ def test_vs_ideal_wands():
     assert list(comparison.columns) == [
         "query_id",
         "query",
-        "product_id_ideal",
-        "label_ideal",
+        "doc_id_ideal",
         "grade_ideal",
         "rank_ideal",
-        "product_name_ideal",
-        "product_name_actual",
+        "title_ideal",
+        "title_actual",
         "rank_actual",
-        "product_id_actual",
+        "doc_id_actual",
         "grade_actual",
         "dcg",
         "ndcg",
