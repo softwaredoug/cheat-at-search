@@ -26,7 +26,7 @@ def get_project_root():
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
-else:    
+else:
     DATA_PATH = pathlib.Path(get_project_root()) / "data"
 
 
