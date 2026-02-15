@@ -117,8 +117,8 @@ class AutoEnricher:
         return self.enricher.response_model
 
 
-class ProductEnricher:
-    """Enrich a dataframe of products."""
+class DataframeEnricher:
+    """Enrich a dataframe of rows."""
 
     def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None,
                  separator: str = " sep "):
@@ -136,32 +136,32 @@ class ProductEnricher:
             # Remove pydantic internal attributes
             attrs = {attr for attr in attrs if attr not in
                      ["model_fields_set", "model_extra", "model_config", "model_json_schema"]}
-            logger.info(f"Enriching products with attributes: {attrs}")
+            logger.info(f"Enriching rows with attributes: {attrs}")
         self.attrs = attrs
 
-    def _slice_out_searcharray_cols(self, products: pd.DataFrame) -> pd.DataFrame:
+    def _slice_out_searcharray_cols(self, rows: pd.DataFrame) -> pd.DataFrame:
         """Slice out columns that are SearchArray columns."""
         searcharray_cols = [
-            col for col in products.columns
-            if isinstance(products[col].array, SearchArray)
+            col for col in rows.columns
+            if isinstance(rows[col].array, SearchArray)
         ]
-        return products.drop(columns=searcharray_cols, errors='ignore')
+        return rows.drop(columns=searcharray_cols, errors='ignore')
 
-    def enrich_one(self, product: dict):
-        prompt = self.prompt_fn(product)
+    def enrich_one(self, row: dict):
+        prompt = self.prompt_fn(row)
         return self.enricher.enrich(prompt)
 
-    def enrich_all(self, products: pd.DataFrame, workers=5, batch_size=100) -> pd.DataFrame:
-        products = self._slice_out_searcharray_cols(products)
+    def enrich_all(self, rows: pd.DataFrame, workers=5, batch_size=100) -> pd.DataFrame:
+        rows = self._slice_out_searcharray_cols(rows)
 
-        # Generate prompts for all products
-        prompts = [self.prompt_fn(row.to_dict()) for _, row in products.iterrows()]
+        # Generate prompts for all rows
+        prompts = [self.prompt_fn(row.to_dict()) for _, row in rows.iterrows()]
 
         # Use AutoEnricher's enrich_all method
         enriched_results = self.enricher.enrich_all(prompts, workers=workers, batch_size=batch_size)
 
         # Post-process results back into the dataframe
-        for idx, (_, row) in enumerate(products.iterrows()):
+        for idx, (_, row) in enumerate(rows.iterrows()):
             enriched_data = enriched_results[idx]
             if enriched_data:
                 for attr in self.attrs:
@@ -171,10 +171,10 @@ class ProductEnricher:
                         value = self.separator.join(map(str, value))
                     elif value is None:
                         value = ""
-                    products.at[row.name, attr] = value if value is not None else ""
+                    rows.at[row.name, attr] = value if value is not None else ""
             else:
-                logger.warning(f"Enrichment failed for product {row.get('doc_id', 'unknown')}")
+                logger.warning(f"Enrichment failed for row {row.get('doc_id', 'unknown')}")
                 for attr in self.attrs:
-                    products.at[row.name, attr] = ""
+                    rows.at[row.name, attr] = ""
 
-        return products
+        return rows

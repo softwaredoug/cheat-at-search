@@ -1,5 +1,5 @@
 from cheat_at_search.wands_data import products
-from cheat_at_search.enrich import AutoEnricher, ProductEnricher
+from cheat_at_search.enrich import AutoEnricher, DataframeEnricher
 import pytest
 import tempfile
 from cheat_at_search.data_dir import mount
@@ -58,7 +58,7 @@ def test_product_enrichment_one(model, mounted_data_dir):
         response_model=Room
     )
 
-    def get_room_prompt(product) -> str:
+    def get_room_prompt(row) -> str:
         prompt = f"""
     I am going to give you a furniture e-commerce product.
 
@@ -71,17 +71,17 @@ def test_product_enrichment_one(model, mounted_data_dir):
     Most decor can go in any room - they should get 'No Room Fits'
     If multiple rooms are mentioned - they should get 'No Room Fits'
 
-    Product Name: {product['product_name']}
-    Description: {product['product_description']}
+    Product Name: {row['product_name']}
+    Description: {row['product_description']}
             """
         return prompt
 
-    product_enricher = ProductEnricher(
+    dataframe_enricher = DataframeEnricher(
         enricher=room_enricher,
         prompt_fn=get_room_prompt,
     )
 
-    room = product_enricher.enrich_one(products.iloc[0].to_dict())
+    room = dataframe_enricher.enrich_one(products.iloc[0].to_dict())
     assert room.room in rooms_as_list, f"Unexpected room: {room.room}"
 
 
@@ -94,7 +94,7 @@ def test_product_enrichment(model, df_size, mounted_data_dir):
         response_model=Room
     )
 
-    def get_room_prompt(product) -> str:
+    def get_room_prompt(row) -> str:
         prompt = f"""
     I am going to give you a furniture e-commerce product.
 
@@ -107,17 +107,17 @@ def test_product_enrichment(model, df_size, mounted_data_dir):
     Most decor can go in any room - they should get 'No Room Fits'
     If multiple rooms are mentioned - they should get 'No Room Fits'
 
-    Product Name: {product['product_name']}
-    Description: {product['product_description']}
+    Product Name: {row['product_name']}
+    Description: {row['product_description']}
             """
         return prompt
 
-    product_enricher = ProductEnricher(
+    dataframe_enricher = DataframeEnricher(
         enricher=room_enricher,
         prompt_fn=get_room_prompt,
     )
 
-    enriched_products = product_enricher.enrich_all(products[:df_size], workers=2, batch_size=5)
+    enriched_products = dataframe_enricher.enrich_all(products[:df_size], workers=2, batch_size=5)
     existing_rooms = enriched_products['room'].dropna().unique().tolist()
     assert len(enriched_products['room'].dropna()) == df_size, "Some products were not enriched with a room"
     for actual_room in existing_rooms:
