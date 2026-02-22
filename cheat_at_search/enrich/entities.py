@@ -1,4 +1,5 @@
 import numpy as np
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 
@@ -16,13 +17,26 @@ class Entities:
         self._embeddings: np.ndarray | None = None
         self.model = model
 
-    def add_entity(self, name: str):
-        self.names.append(name)
-        embedding = np.asarray(self.model.encode(name))
-        if self._embeddings is None:
-            self._embeddings = embedding.reshape(1, -1)
+    def add(self, names: str | Sequence[str]):
+        if isinstance(names, str):
+            names_to_add = [names]
         else:
-            self._embeddings = np.vstack([self._embeddings, embedding])
+            seen: set[str] = set()
+            names_to_add = []
+            existing = set(self.names)
+            for name in names:
+                if name in seen or name in existing:
+                    continue
+                seen.add(name)
+                names_to_add.append(name)
+
+        for name in names_to_add:
+            self.names.append(name)
+            embedding = np.asarray(self.model.encode(name))
+            if self._embeddings is None:
+                self._embeddings = embedding.reshape(1, -1)
+            else:
+                self._embeddings = np.vstack([self._embeddings, embedding])
 
     def __len__(self) -> int:
         return len(self.names)
