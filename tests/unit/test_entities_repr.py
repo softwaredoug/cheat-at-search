@@ -26,3 +26,17 @@ def test_add_single_string_skips_existing_name() -> None:
     entities.add("Steve Jobs")
     assert len(entities) == 1
     assert_embeddings_match_names(entities)
+
+
+def test_contains_returns_true_for_existing_name() -> None:
+    entities = Entities(DummyModel())
+    entities.add("Steve Jobs")
+    assert "Steve Jobs" in entities
+    assert_embeddings_match_names(entities)
+
+
+def test_contains_returns_false_for_missing_name() -> None:
+    entities = Entities(DummyModel())
+    entities.add("Steve Jobs")
+    assert "Bill Gates" not in entities
+    assert_embeddings_match_names(entities)

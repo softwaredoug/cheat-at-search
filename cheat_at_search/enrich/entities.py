@@ -42,6 +42,9 @@ class Entities:
     def __len__(self) -> int:
         return len(self.names)
 
+    def __contains__(self, name: object) -> bool:
+        return isinstance(name, str) and name in self.names
+
     def __repr__(self) -> str:
         return f"Entities(names={self._names_in_order!r})"
 
