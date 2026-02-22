@@ -13,25 +13,26 @@ class Entities:
     """Track a set of entities and resolve new ones via vector similarity."""
 
     def __init__(self, model: EmbeddingModel):
-        self.names: list[str] = []
+        self.names: set[str] = set()
+        self._names_in_order: list[str] = []
         self._embeddings: np.ndarray | None = None
         self.model = model
 
     def add(self, names: str | Sequence[str]):
         if isinstance(names, str):
-            names_to_add = [names]
+            names_to_add = [names] if names not in self.names else []
         else:
             seen: set[str] = set()
             names_to_add = []
-            existing = set(self.names)
             for name in names:
-                if name in seen or name in existing:
+                if name in seen or name in self.names:
                     continue
                 seen.add(name)
                 names_to_add.append(name)
 
         for name in names_to_add:
-            self.names.append(name)
+            self.names.add(name)
+            self._names_in_order.append(name)
             embedding = np.asarray(self.model.encode(name))
             if self._embeddings is None:
                 self._embeddings = embedding.reshape(1, -1)
@@ -41,16 +42,19 @@ class Entities:
     def __len__(self) -> int:
         return len(self.names)
 
+    def __repr__(self) -> str:
+        return f"Entities(names={self._names_in_order!r})"
+
     def most_similar(self, name: str, top_k: int = 5, threshold: float = 0.95) -> list[str]:
         """Return stored entities most similar to name, above threshold."""
-        if not self.names:
+        if not self._names_in_order:
             return []
         embedding = np.asarray(self.model.encode(name))
         similarity = np.dot(self._embeddings, embedding)
-        top_k = min(top_k, len(self.names))
+        top_k = min(top_k, len(self._names_in_order))
         top_k_indices = np.argsort(similarity)[-top_k:][::-1]
         return [
-            self.names[i]
+            self._names_in_order[i]
             for i in top_k_indices
             if similarity[i] > threshold
         ]

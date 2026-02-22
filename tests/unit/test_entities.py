@@ -12,22 +12,30 @@ def model():
     return SentenceTransformer("all-MiniLM-L6-v2")
 
 
+def assert_embeddings_match_names(entities: Entities) -> None:
+    embedding_count = 0 if entities._embeddings is None else len(entities._embeddings)
+    assert embedding_count == len(entities.names)
+
+
 # --- empty / single entity ---
 
 def test_empty_returns_nothing(model):
     entities = Entities(model)
     assert entities.most_similar("Steve Jobs") == []
+    assert_embeddings_match_names(entities)
 
 
 def test_len_empty(model):
     entities = Entities(model)
     assert len(entities) == 0
+    assert_embeddings_match_names(entities)
 
 
 def test_exact_match(model):
     entities = Entities(model)
     entities.add("Steve Jobs")
     assert entities.most_similar("Steve Jobs") == ["Steve Jobs"]
+    assert_embeddings_match_names(entities)
 
 
 def test_len_after_add(model):
@@ -35,19 +43,22 @@ def test_len_after_add(model):
     entities.add("Steve Jobs")
     entities.add("Bill Gates")
     assert len(entities) == 2
+    assert_embeddings_match_names(entities)
 
 
 def test_add_accepts_list_and_skips_duplicates(model):
     entities = Entities(model)
     entities.add(["Steve Jobs", "Bill Gates", "Steve Jobs"])
-    assert entities.names == ["Steve Jobs", "Bill Gates"]
+    assert entities.names == {"Steve Jobs", "Bill Gates"}
+    assert_embeddings_match_names(entities)
 
 
 def test_add_list_skips_names_already_present(model):
     entities = Entities(model)
     entities.add("Steve Jobs")
     entities.add(["Steve Jobs", "Bill Gates"])
-    assert entities.names == ["Steve Jobs", "Bill Gates"]
+    assert entities.names == {"Steve Jobs", "Bill Gates"}
+    assert_embeddings_match_names(entities)
 
 
 # --- fuzzy / alternate forms ---
@@ -60,6 +71,7 @@ def test_typo_match(model):
     entities.add("Steve Jobs")
     result = entities.most_similar("Steve Joooobs", threshold=0.6)
     assert result == ["Steve Jobs"]
+    assert_embeddings_match_names(entities)
 
 
 def test_alternate_company_form(model):
@@ -68,6 +80,7 @@ def test_alternate_company_form(model):
     entities.add("Microsoft")
     result = entities.most_similar("Microsoft Corp", threshold=0.8)
     assert result == ["Microsoft"]
+    assert_embeddings_match_names(entities)
 
 
 def test_misspelled_name(model):
@@ -76,6 +89,7 @@ def test_misspelled_name(model):
     entities.add("Barack Obama")
     result = entities.most_similar("Barak Obama", threshold=0.85)
     assert result == ["Barack Obama"]
+    assert_embeddings_match_names(entities)
 
 
 # --- multiple entities ---
@@ -86,6 +100,7 @@ def test_multiple_entities_exact(model):
     entities.add("Bill Gates")
     entities.add("Elon Musk")
     assert entities.most_similar("Bill Gates") == ["Bill Gates"]
+    assert_embeddings_match_names(entities)
 
 
 def test_multiple_entities_fuzzy(model):
@@ -96,6 +111,7 @@ def test_multiple_entities_fuzzy(model):
     entities.add("Elon Musk")
     result = entities.most_similar("Elon Musk CEO", threshold=0.8)
     assert result == ["Elon Musk"]
+    assert_embeddings_match_names(entities)
 
 
 def test_top_k_limits_results(model):
@@ -104,6 +120,7 @@ def test_top_k_limits_results(model):
         entities.add(name)
     result = entities.most_similar("cat", top_k=1, threshold=0.0)
     assert len(result) == 1
+    assert_embeddings_match_names(entities)
 
 
 def test_results_ordered_by_similarity(model):
@@ -115,6 +132,7 @@ def test_results_ordered_by_similarity(model):
     # machine learning / deep learning should both rank above gardening
     gardening_idx = result.index("gardening tips")
     assert gardening_idx == len(result) - 1
+    assert_embeddings_match_names(entities)
 
 
 # --- threshold behaviour ---
@@ -125,6 +143,7 @@ def test_no_match_below_threshold(model):
     # "cat" should not be similar to "Steve Jobs" at a high threshold
     result = entities.most_similar("cat", threshold=0.95)
     assert result == []
+    assert_embeddings_match_names(entities)
 
 
 def test_match_found_at_lower_threshold(model):
@@ -133,6 +152,7 @@ def test_match_found_at_lower_threshold(model):
     # semantically related but not identical
     result = entities.most_similar("artificial intelligence", threshold=0.5)
     assert "machine learning" in result
+    assert_embeddings_match_names(entities)
 
 
 def test_exact_match_always_exceeds_high_threshold(model):
@@ -140,3 +160,4 @@ def test_exact_match_always_exceeds_high_threshold(model):
     entities.add("quantum computing")
     result = entities.most_similar("quantum computing", threshold=0.99)
     assert result == ["quantum computing"]
+    assert_embeddings_match_names(entities)
