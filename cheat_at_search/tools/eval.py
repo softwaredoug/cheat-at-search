@@ -96,10 +96,10 @@ class EvalResults(BaseModel):
 
 
 def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
+                 module_name="rerank_esci",
                  workers=4,
                  num_queries=20,
                  seed=42) -> callable:
-    module_name = "rerank_esci"
     filepath = os.path.join(code_dir, module_name + ".py")
 
     def run_evals() -> EvalResults:
