@@ -116,14 +116,17 @@ def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
         ndcgs = results_codegen.groupby('query')['ndcg'].mean()
         result: List[QueryEvalResult] = []
         for query, ndcg in ndcgs.items():
+            relevant_doc = None
             for grade in [3, 2, 1, 0]:
-                relevant_docs = judgments[(judgments['query'] == query) & (judgments['grade'] == 3)]
+                relevant_docs = judgments[(judgments['query'] == query) & (judgments['grade'] == grade)]
                 if len(relevant_docs) > 0:
                     doc_row = relevant_docs.iloc[0]
                     doc = corpus[corpus['product_id'] == doc_row['product_id']]
                     relevant_doc = Doc(title=doc['title'].iloc[0],
                                        label=grade_to_emoji(doc_row['grade']))
                     break
+            if relevant_doc is None:
+                relevant_doc = Doc(title="No relevant doc found", label='😭')
             result.append(QueryEvalResult(
                 query=query,
                 ndcg=ndcg,
