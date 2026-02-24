@@ -76,13 +76,12 @@ def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
 def make_patch_fn(search_fn,
                   corpus,
                   code_dir: str,
+                  module_name: str = "rerank_esci",
                   guardrail_fns: List = None,
                   training_eval_fn: Optional[Callable] = None,
                   validation_eval_fn: Optional[Callable] = None,
                   eval_margin=0.003) -> Tuple[callable, Optional[callable], callable]:
     """Returns a function that applies patches to the reranker code."""
-
-    module_name = "rerank_esci"
 
     filepath = os.path.join(code_dir, f"{module_name}.py")
     backup_path = os.path.join(code_dir, f"{module_name}_backup.py")
