@@ -7,7 +7,7 @@ from functools import lru_cache
 import os
 
 
-logger = log_to_stdout(logger_name="cheat_at_search.code")
+logger = log_to_stdout(logger_name="code")
 
 
 class Edit(BaseModel):
