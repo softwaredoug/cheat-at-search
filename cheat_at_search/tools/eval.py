@@ -49,8 +49,6 @@ class CodeGenSearchStrategy(SearchStrategy):
     def search(self, query, k=10):
         if self.code:
             rerank_fn = _rerank_fn_from_code(self.code)
-        elif self.module_name:
-            rerank_fn = _get_rerank_fn(self.module_name)
 
         product_ids = rerank_fn(self.search_fn, query)[:k]
         scores = np.arange(len(product_ids), 0, -1)
