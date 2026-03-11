@@ -17,7 +17,6 @@ import argparse
 from searcharray import SearchArray
 import numpy as np
 import pandas as pd
-import sys
 
 
 enriched_products["title_snowball"] = SearchArray.index(
@@ -93,7 +92,7 @@ Categories = Literal[
 ]
 
 
-def search_products(
+def search_products_keywords_cat(
     keywords: str, category: Optional[Categories] = None, top_k: int = 5
 ) -> List[Dict]:
     """
@@ -147,6 +146,55 @@ def search_products(
     return results
 
 
+search_products_keyword_cat = search_products_keywords_cat
+
+
+def search_products_keywords(keywords: str, top_k: int = 5) -> List[Dict]:
+    """
+    Search for furniture products with the given keywords and filters
+
+    This is direct keyword search along with optional category filtering.
+
+    Args:
+        keywords: The search query string.
+        category: category to filter products by.
+        top_k: The number of top results to return.
+
+    Returns:
+        Search results as a list of dictionaries with 'id', 'title', 'description', and 'score' keys.
+
+    """
+    print("Searching for:", keywords, "top_k:", top_k)
+    query_tokens = snowball_tokenizer(keywords)
+    scores = np.zeros(len(enriched_products))
+    for token in query_tokens:
+        scores += enriched_products["title_snowball"].array.score(token) * 10
+        scores += enriched_products["description_snowball"].array.score(token)
+
+    top_k_indices = np.argsort(scores)[-top_k:][::-1]
+    scores = scores[top_k_indices]
+    top_products = enriched_products.iloc[top_k_indices].copy()
+    top_products.loc[:, "score"] = scores
+
+    results = []
+
+    for id, row in top_products.iterrows():
+        results.append(
+            {
+                "id": id,
+                "title": row["title"],
+                "description": row["description"],
+                "category": row["category"],
+                "score": row["score"],
+            }
+        )
+    print(f"Keywords {keywords} -- Found {len(results)} results")
+    return results
+
+
+search_products_keyword = search_products_keywords
+
+
 system_no_judgments_prompt = """
     You take user search queries and use a search tool to find furniture products.
 
@@ -165,6 +213,15 @@ system_no_judgments_prompt = """
 
     It's very important you consider carefully the correct ranking as you'll be evaluated on
     how close that is to the average furniture shoppers ideal ranking.
+"""
+
+system_prompt_vanilla = """
+    You take user search queries and use a search tool to find furniture products.
+
+    Use only the search tool available to you. Formulate straightforward keyword queries
+    and return results per the SearchResults schema, ranked best to worst.
+
+    Gather results until you have 10 best matches you can find. It's important to return at least 10.
 """
 
 system_prompt_judgments = """
@@ -266,6 +323,8 @@ def agent_search_wands(
     prompt=system_no_judgments_prompt,
     prompt_builder=None,
     model="openai/gpt-5",
+    search_tool=search_products_keyword_cat,
+    search_tool_supports_category=True,
     iterations=5,
     num_queries=5,
     num_workers=4,
@@ -302,7 +361,7 @@ def agent_search_wands(
         bm25_ndcg = graded_bm25["ndcg"].mean()
         print(f"Baseline NDCG: {bm25_ndcg}")
 
-        tools = [search_products]
+        tools = [search_tool]
         if addl_tools:
             tools.extend(addl_tools)
 
@@ -351,8 +410,10 @@ def agent_search_wands(
 class PostAgentStrategy(SearchStrategy):
     """Use what worked well in the past for tools to retrieve relevant results."""
 
-    def __init__(self, products):
+    def __init__(self, products, search_tool, search_tool_supports_category=True):
         super().__init__(products)
+        self.search_tool = search_tool
+        self.search_tool_supports_category = search_tool_supports_category
 
     def search(self, query, k=10):
         past_queries = get_past_queries(query)
@@ -364,7 +425,12 @@ class PostAgentStrategy(SearchStrategy):
             tool_category = past_query.interaction.search_tool_category
             if past_query.interaction.quality == "good":
                 print(f"Reusing good query: {tool_query}, category: {tool_category}")
-                results = search_products(tool_query, category=tool_category, top_k=k)
+                if self.search_tool_supports_category:
+                    results = self.search_tool(
+                        tool_query, category=tool_category, top_k=k
+                    )
+                else:
+                    results = self.search_tool(tool_query, top_k=k)
                 all_results.extend(results)
 
 
@@ -406,6 +472,14 @@ def build_few_shot_prompt(k=10, prompt=search_few_shot_hist_prompt, seed=42) -> 
     return prompt
 
 
+def resolve_search_tool(name):
+    if name == "keywords_cat":
+        return search_products_keyword_cat, True
+    if name == "keywords":
+        return search_products_keyword, False
+    raise ValueError(f"Unknown search tool: {name}")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run WANDS agent search experiments.")
     parser.add_argument(
@@ -414,6 +488,7 @@ def main(argv=None):
             "post_agent_search",
             "search_hist_no_judgments",
             "search_with_hist_judgments",
+            "search_vanilla",
             "search_few_shot_hist",
             "search_few_shot",
             "search_few_shot_judgments",
@@ -425,10 +500,19 @@ def main(argv=None):
     parser.add_argument("--num-queries", type=int, default=100)
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--model", type=str, default="openai/gpt-5")
+    parser.add_argument(
+        "--search-tool",
+        choices=["keywords_cat", "keywords"],
+        default="keywords_cat",
+    )
     args = parser.parse_args(argv)
 
+    search_tool, search_tool_supports_category = resolve_search_tool(args.search_tool)
+
     if args.mode == "post_agent_search":
-        strategy = PostAgentStrategy(enriched_products)
+        strategy = PostAgentStrategy(
+            enriched_products, search_tool, search_tool_supports_category
+        )
         graded_results = run_strategy(strategy, wands_queries[:20])
         ndcg = graded_results["ndcg"].mean()
         print(f"Overall NDCG: {ndcg}")
@@ -440,6 +524,8 @@ def main(argv=None):
             addl_tools=[save_queries, get_past_queries],
             prompt=system_no_judgments_prompt,
             model=args.model,
+            search_tool=search_tool,
+            search_tool_supports_category=search_tool_supports_category,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -455,6 +541,20 @@ def main(argv=None):
             ],
             prompt=system_prompt_judgments,
             model=args.model,
+            search_tool=search_tool,
+            search_tool_supports_category=search_tool_supports_category,
+            seed=args.seed,
+            num_seeds=args.num_seeds,
+        )
+    elif args.mode == "search_vanilla":
+        agent_search_wands(
+            use_old=False,
+            iterations=args.iterations,
+            num_queries=args.num_queries,
+            prompt=system_prompt_vanilla,
+            model=args.model,
+            search_tool=search_tool,
+            search_tool_supports_category=search_tool_supports_category,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -468,6 +568,8 @@ def main(argv=None):
                 10, prompt=search_few_shot_hist_prompt, seed=curr_seed
             ),
             model=args.model,
+            search_tool=search_tool,
+            search_tool_supports_category=search_tool_supports_category,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -480,6 +582,8 @@ def main(argv=None):
                 10, prompt=search_few_shot_prompt, seed=curr_seed
             ),
             model=args.model,
+            search_tool=search_tool,
+            search_tool_supports_category=search_tool_supports_category,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -495,6 +599,8 @@ def main(argv=None):
                 seed=curr_seed,
             ),
             model=args.model,
+            search_tool=search_tool,
+            search_tool_supports_category=search_tool_supports_category,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
