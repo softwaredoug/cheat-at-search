@@ -192,7 +192,7 @@ system_prompt_judgments = """
 """
 
 
-system_few_shot_prompt = """
+search_few_shot_hist_prompt = """
     You take user search queries and use a search tool to find furniture products. Examples
     of labeled query-product pairs are listed at the bottom of this prompt to help you
     understand how we will evaluate your results.
@@ -217,7 +217,7 @@ system_few_shot_prompt = """
 """
 
 
-system_few_shot_no_history_prompt = """
+search_few_shot_prompt = """
     You take user search queries and use a search tool to find furniture products. Examples
     of labeled query-product pairs are listed at the bottom of this prompt to help you
     understand how we will evaluate your results.
@@ -234,7 +234,7 @@ system_few_shot_no_history_prompt = """
     Finally, some examples:
 """
 
-system_few_shot_judgmens_no_history_prompt = """
+search_few_shot_judgments_prompt = """
     You take user search queries and use a search tool to find furniture products. Examples
     of labeled query-product pairs are listed at the bottom of this prompt to help you
     understand how we will evaluate your results.
@@ -265,6 +265,7 @@ def agent_search_wands(
     use_old=True,
     prompt=system_no_judgments_prompt,
     prompt_builder=None,
+    model="openai/gpt-5",
     iterations=5,
     num_queries=5,
     num_workers=4,
@@ -310,7 +311,7 @@ def agent_search_wands(
             prompt_for_seed = prompt_builder(curr_seed)
 
         search_client = OpenAIAgent(
-            tools=tools, model="openai/gpt-5", system_prompt=prompt_for_seed
+            tools=tools, model=model, system_prompt=prompt_for_seed
         )
         strategy = ReasoningSearchStrategy(
             enriched_products,
@@ -367,7 +368,7 @@ class PostAgentStrategy(SearchStrategy):
                 all_results.extend(results)
 
 
-def build_few_shot_prompt(k=10, prompt=system_few_shot_prompt, seed=42) -> str:
+def build_few_shot_prompt(k=10, prompt=search_few_shot_hist_prompt, seed=42) -> str:
     labeled_query_products.sample(5, random_state=seed)
 
     labeled = labeled_query_products
@@ -423,6 +424,7 @@ def main(argv=None):
     parser.add_argument("--num-seeds", type=int, default=5)
     parser.add_argument("--num-queries", type=int, default=100)
     parser.add_argument("--seed", type=int, default=43)
+    parser.add_argument("--model", type=str, default="openai/gpt-5")
     args = parser.parse_args(argv)
 
     if args.mode == "post_agent_search":
@@ -437,6 +439,7 @@ def main(argv=None):
             num_queries=args.num_queries,
             addl_tools=[save_queries, get_past_queries],
             prompt=system_no_judgments_prompt,
+            model=args.model,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -451,6 +454,7 @@ def main(argv=None):
                 get_past_queries,
             ],
             prompt=system_prompt_judgments,
+            model=args.model,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -461,8 +465,9 @@ def main(argv=None):
             num_queries=args.num_queries,
             addl_tools=[save_queries, get_past_queries],
             prompt_builder=lambda curr_seed: build_few_shot_prompt(
-                10, prompt=system_few_shot_prompt, seed=curr_seed
+                10, prompt=search_few_shot_hist_prompt, seed=curr_seed
             ),
+            model=args.model,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -472,8 +477,9 @@ def main(argv=None):
             iterations=args.iterations,
             num_queries=args.num_queries,
             prompt_builder=lambda curr_seed: build_few_shot_prompt(
-                10, prompt=system_few_shot_no_history_prompt, seed=curr_seed
+                10, prompt=search_few_shot_prompt, seed=curr_seed
             ),
+            model=args.model,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -485,9 +491,10 @@ def main(argv=None):
             addl_tools=[make_judgments_tool(labeled_query_products)],
             prompt_builder=lambda curr_seed: build_few_shot_prompt(
                 10,
-                prompt=system_few_shot_judgmens_no_history_prompt,
+                prompt=search_few_shot_judgments_prompt,
                 seed=curr_seed,
             ),
+            model=args.model,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
