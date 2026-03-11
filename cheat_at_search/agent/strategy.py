@@ -41,11 +41,11 @@ class ReasoningSearchStrategy(SearchStrategy):
         print(f"Searching for: {query}")
         print("----")
         prompt = self.prompt + f"\nSearch query: {query}"
-        search_results, total_tokens = self.search_client.search(prompt, return_usage=True)
+        search_results, inputs, total_tokens = self.search_client.chat(prompt, return_usage=True)
         self.total_tokens += total_tokens
         top_k = []
         scores = []
-        for result in search_results.results[:k]:
+        for result in search_results.ranked_results[:k]:
             top_k.append(int(result.id))
             scores.append(result.score)
 

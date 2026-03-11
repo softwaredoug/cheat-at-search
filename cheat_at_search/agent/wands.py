@@ -1,7 +1,7 @@
 from cheat_at_search.wands_data import enriched_products, queries as wands_queries, labeled_query_products, judgments
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.openai_search_client import OpenAISearchClient
+from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
@@ -246,13 +246,13 @@ def agent_search_wands(use_old=True,
     if addl_tools:
         tools.extend(addl_tools)
 
-    search_client = OpenAISearchClient(tools=tools,
-                                       model="openai/gpt-5",
-                                       system_prompt=prompt)
+    search_client = OpenAIAgent(tools=tools,
+                                model="openai/gpt-5",
+                                system_prompt=prompt)
     strategy = ReasoningSearchStrategy(enriched_products, search_client,
                                        prompt="",
                                        cache=iterations == 1,
-                                       workers=4)
+                                       workers=1)
     ndcgs = []
     for iter in range(iterations):
         print(f"--- Iteration {iter + 1} of {iterations} ---")
