@@ -5,27 +5,65 @@ from pydantic import BaseModel, Field
 
 class SearchPlan(BaseModel):
     """Describe the parameters you passed to the search tool to get this result."""
+
     query: str = Field(
-        ..., description="The actual query string you used to search (may be different from the original user query if reformulated)"
+        ...,
+        description="The actual query string you used to search (may be different from the original user query if reformulated)",
     )
 
     category: str | None = Field(
         None, description="The category filter you applied to the search (if any)"
     )
 
-    effectiveness: Literal['high', 'medium', 'low'] = Field(
-        ..., description="How effective was this search plan in retrieving relevant results?"
+    effectiveness: Literal["high", "medium", "low"] = Field(
+        ...,
+        description="How effective was this search plan in retrieving relevant results?",
     )
 
 
 class SearchResult(BaseModel):
     """A single search result row."""
-    id: str = Field(
-        ..., description="The document identifier (product, page, etc.)"
+
+    id: str = Field(..., description="The document identifier (product, page, etc.)")
+
+    score: float = Field(
+        ..., description="A numeric score for the relevance of this result"
+    )
+
+    name: str | None = Field(
+        None,
+        description="The title / name of the product or document returned from search",
+    )
+
+    reasoning: str | None = Field(
+        None, description="Why was this document returned at the given relevance level?"
+    )
+
+    search_plan: SearchPlan | None = Field(
+        None, description="The search parameters used to retrieve this document"
+    )
+
+    rank: int | None = Field(
+        None, description="The rank of this document in the search results (1 is best)"
+    )
+
+    relevance: Literal["exact", "partial", "irrelevant"] | None = Field(
+        None, description="The relevance of this document to the search query"
+    )
+
+
+class DetailedSearchResult(BaseModel):
+    """A fully specified search result row."""
+
+    id: str = Field(..., description="The document identifier (product, page, etc.)")
+
+    score: float = Field(
+        ..., description="A numeric score for the relevance of this result"
     )
 
     name: str = Field(
-        ..., description="The title / name of the product or document returned from search"
+        ...,
+        description="The title / name of the product or document returned from search",
     )
 
     reasoning: str = Field(
@@ -40,31 +78,45 @@ class SearchResult(BaseModel):
         ..., description="The rank of this document in the search results (1 is best)"
     )
 
-    relevance: Literal['exact', 'partial', 'irrelevant'] = Field(
+    relevance: Literal["exact", "partial", "irrelevant"] = Field(
         ..., description="The relevance of this document to the search query"
     )
-
-    @property
-    def score(self) -> float:
-        """A numeric score for the relevance of this result."""
-        return 1 / self.rank
 
 
 class SearchResults(BaseModel):
     """The results of a search query, ordered by relevance."""
-    query: str = Field(
-        ..., description="The original search query passed by the user"
+
+    query: str | None = Field(
+        None, description="The original search query passed by the user"
     )
+
+    search_plans: list[SearchPlan] | None = Field(
+        None, description="The list of search plans used to retrieve results"
+    )
+
+    intent_explained: str | None = Field(
+        None,
+        description="A summary of the user's intent based on the search query (especially as it relates to human judgments if available)",
+    )
+
+    results: list[SearchResult] = Field(..., description="The list of search results")
+
+
+class DetailedSearchResults(BaseModel):
+    """Detailed results of a search query, ordered by relevance."""
+
+    query: str = Field(..., description="The original search query passed by the user")
 
     search_plans: list[SearchPlan] = Field(
         ..., description="The list of search plans used to retrieve results"
     )
 
     intent_explained: str = Field(
-        ..., description="A summary of the user's intent based on the search query (especially as it relates to human judgments if available)"
+        ...,
+        description="A summary of the user's intent based on the search query (especially as it relates to human judgments if available)",
     )
 
-    results: list[SearchResult] = Field(
+    results: list[DetailedSearchResult] = Field(
         ..., description="The list of search results"
     )
 
@@ -73,5 +125,5 @@ class Agent(ABC):
     """Use an MCP server to search for products"""
 
     @abstractmethod
-    def loop(self, prompt: str) -> SearchResults:
+    def loop(self, prompt: str) -> SearchResults | DetailedSearchResults:
         pass
