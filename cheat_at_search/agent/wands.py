@@ -414,6 +414,16 @@ def agent_search_wands(
         bm25_ndcg = bm25_by_seed_map.get(seed_value, 0)
         print(f"Seed {seed_value}: NDCG {ndcg} (BM25 NDCG {bm25_ndcg})")
 
+    avg_ndcg = 0
+    if ndcgs_by_seed:
+        avg_ndcg = sum(ndcg for _, ndcg in ndcgs_by_seed) / len(ndcgs_by_seed)
+    avg_bm25_ndcg = 0
+    if bm25_by_seed:
+        avg_bm25_ndcg = sum(ndcg for _, ndcg in bm25_by_seed) / len(bm25_by_seed)
+    print(f"Average NDCG: {avg_ndcg}")
+    print(f"Average BM25 NDCG: {avg_bm25_ndcg}")
+    return avg_ndcg
+
 
 class PostAgentStrategy(SearchStrategy):
     """Use what worked well in the past for tools to retrieve relevant results."""
