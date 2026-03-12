@@ -7,7 +7,7 @@ from cheat_at_search.wands_data import (
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_agent import OpenAIAgent
-from cheat_at_search.agent.search_client import DetailedSearchResults
+from cheat_at_search.agent.search_client import DetailedSearchResults, SearchResults
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
@@ -336,6 +336,7 @@ def agent_search_wands(
     seed=42,
     num_seeds=1,
     response_model=DetailedSearchResults,
+    run_command: str | None = None,
 ):
     ndcgs_by_seed = []
     bm25_by_seed = []
@@ -422,6 +423,8 @@ def agent_search_wands(
         avg_bm25_ndcg = sum(ndcg for _, ndcg in bm25_by_seed) / len(bm25_by_seed)
     print(f"Average NDCG: {avg_ndcg}")
     print(f"Average BM25 NDCG: {avg_bm25_ndcg}")
+    if run_command:
+        print(f"Run command: {run_command}")
     return avg_ndcg
 
 
@@ -519,6 +522,12 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--model", type=str, default="openai/gpt-5")
     parser.add_argument(
+        "--response-model",
+        choices=["bare", "detailed"],
+        default="detailed",
+        help="Structured output schema to use for search results.",
+    )
+    parser.add_argument(
         "--search-tool",
         choices=["keywords_cat", "keywords"],
         default="keywords_cat",
@@ -526,6 +535,20 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     search_tool, search_tool_supports_category = resolve_search_tool(args.search_tool)
+    response_model = (
+        SearchResults if args.response_model == "bare" else DetailedSearchResults
+    )
+    run_command = (
+        "poetry run python -m cheat_at_search.agent.wands"
+        f" {args.mode}"
+        f" --iterations {args.iterations}"
+        f" --num-seeds {args.num_seeds}"
+        f" --num-queries {args.num_queries}"
+        f" --seed {args.seed}"
+        f" --model {args.model}"
+        f" --search-tool {args.search_tool}"
+        f" --response-model {args.response_model}"
+    )
 
     if args.mode == "post_agent_search":
         strategy = PostAgentStrategy(
@@ -544,6 +567,8 @@ def main(argv=None):
             model=args.model,
             search_tool=search_tool,
             search_tool_supports_category=search_tool_supports_category,
+            response_model=response_model,
+            run_command=run_command,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -561,6 +586,8 @@ def main(argv=None):
             model=args.model,
             search_tool=search_tool,
             search_tool_supports_category=search_tool_supports_category,
+            response_model=response_model,
+            run_command=run_command,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -573,6 +600,8 @@ def main(argv=None):
             model=args.model,
             search_tool=search_tool,
             search_tool_supports_category=search_tool_supports_category,
+            response_model=response_model,
+            run_command=run_command,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -588,6 +617,8 @@ def main(argv=None):
             model=args.model,
             search_tool=search_tool,
             search_tool_supports_category=search_tool_supports_category,
+            response_model=response_model,
+            run_command=run_command,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -602,6 +633,8 @@ def main(argv=None):
             model=args.model,
             search_tool=search_tool,
             search_tool_supports_category=search_tool_supports_category,
+            response_model=response_model,
+            run_command=run_command,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -619,6 +652,8 @@ def main(argv=None):
             model=args.model,
             search_tool=search_tool,
             search_tool_supports_category=search_tool_supports_category,
+            response_model=response_model,
+            run_command=run_command,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
