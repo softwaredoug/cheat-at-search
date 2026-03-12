@@ -97,9 +97,11 @@ def search_products_keywords_cat(
     keywords: str, category: Optional[Categories] = None, top_k: int = 5
 ) -> List[Dict]:
     """
-    Search for furniture products with the given keywords and filters
+    Search for Wayfair product catalog with the given keywords and filters to find relevant
+    home goods products
 
-    This is direct keyword search along with optional category filtering.
+    This is direct keyword search along with optional category filtering. The keyword search will
+    be a simple, lexical search tokenized via snowball. Scored with BM25 - with title given emphasis.
 
     Args:
         keywords: The search query string.
@@ -152,13 +154,14 @@ search_products_keyword_cat = search_products_keywords_cat
 
 def search_products_keywords(keywords: str, top_k: int = 5) -> List[Dict]:
     """
-    Search for furniture products with the given keywords and filters
+    Search for Wayfair product catalog with the given keywords and filters to find relevant
+    home goods products
 
-    This is direct keyword search along with optional category filtering.
+    This is direct keyword search with simple token matching + BM25 scoring - with title
+    given emphasis.
 
     Args:
         keywords: The search query string.
-        category: category to filter products by.
         top_k: The number of top results to return.
 
     Returns:
@@ -217,7 +220,7 @@ system_no_judgments_prompt = """
 """
 
 system_prompt_vanilla = """
-    You take user search queries and use a search tool to find furniture products.
+    You take user search queries and use a search tool to find furniture / home goods products.
 
     Use only the search tool available to you. Formulate straightforward keyword queries
     and return results per the SearchResults schema, ranked best to worst.
