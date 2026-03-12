@@ -26,30 +26,16 @@ class SearchResult(BaseModel):
 
     id: str = Field(..., description="The document identifier (product, page, etc.)")
 
-    score: float = Field(
-        ..., description="A numeric score for the relevance of this result"
-    )
-
-    name: str | None = Field(
-        None,
-        description="The title / name of the product or document returned from search",
-    )
-
-    reasoning: str | None = Field(
-        None, description="Why was this document returned at the given relevance level?"
-    )
-
-    search_plan: SearchPlan | None = Field(
-        None, description="The search parameters used to retrieve this document"
-    )
-
-    rank: int | None = Field(
+    rank: int = Field(
         None, description="The rank of this document in the search results (1 is best)"
     )
 
-    relevance: Literal["exact", "partial", "irrelevant"] | None = Field(
-        None, description="The relevance of this document to the search query"
-    )
+    @property
+    def score(self) -> float | None:
+        """A numeric score for the relevance of this result."""
+        if self.rank is None:
+            return None
+        return 1 / self.rank
 
 
 class DetailedSearchResult(BaseModel):
@@ -57,9 +43,12 @@ class DetailedSearchResult(BaseModel):
 
     id: str = Field(..., description="The document identifier (product, page, etc.)")
 
-    score: float = Field(
-        ..., description="A numeric score for the relevance of this result"
-    )
+    @property
+    def score(self) -> float | None:
+        """A numeric score for the relevance of this result."""
+        if self.rank is None:
+            return None
+        return 1 / self.rank
 
     name: str = Field(
         ...,
@@ -85,19 +74,6 @@ class DetailedSearchResult(BaseModel):
 
 class SearchResults(BaseModel):
     """The results of a search query, ordered by relevance."""
-
-    query: str | None = Field(
-        None, description="The original search query passed by the user"
-    )
-
-    search_plans: list[SearchPlan] | None = Field(
-        None, description="The list of search plans used to retrieve results"
-    )
-
-    intent_explained: str | None = Field(
-        None,
-        description="A summary of the user's intent based on the search query (especially as it relates to human judgments if available)",
-    )
 
     results: list[SearchResult] = Field(..., description="The list of search results")
 

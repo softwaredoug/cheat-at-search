@@ -7,6 +7,7 @@ from cheat_at_search.wands_data import (
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_agent import OpenAIAgent
+from cheat_at_search.agent.search_client import DetailedSearchResults
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import BM25Search, BestPossibleResults
 from cheat_at_search.agent.history import save_queries, get_past_queries, index
@@ -331,6 +332,7 @@ def agent_search_wands(
     addl_tools=None,
     seed=42,
     num_seeds=1,
+    response_model=DetailedSearchResults,
 ):
     ndcgs_by_seed = []
     bm25_by_seed = []
@@ -370,7 +372,10 @@ def agent_search_wands(
             prompt_for_seed = prompt_builder(curr_seed)
 
         search_client = OpenAIAgent(
-            tools=tools, model=model, system_prompt=prompt_for_seed
+            tools=tools,
+            model=model,
+            system_prompt=prompt_for_seed,
+            response_model=response_model,
         )
         strategy = ReasoningSearchStrategy(
             enriched_products,
