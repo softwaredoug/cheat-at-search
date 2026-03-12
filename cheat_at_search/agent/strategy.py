@@ -20,8 +20,8 @@ class ReasoningSearchStrategy(SearchStrategy):
         self.cache = None
         self.total_tokens = 0
         if cache:
-            system_prompt = self.search_client.system_prompt
-            prompt_hash = md5((prompt + system_prompt).encode("utf-8")).hexdigest()[:8]
+            agent_hash = self.search_client.config_hash()
+            prompt_hash = md5((prompt + agent_hash).encode("utf-8")).hexdigest()[:8]
             corpus_hash = md5(
                 corpus.columns.to_series().astype(str).sum().encode("utf-8")
             ).hexdigest()[:8]
