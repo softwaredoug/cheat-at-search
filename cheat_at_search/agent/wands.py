@@ -504,7 +504,7 @@ def resolve_search_tool(name):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run WANDS agent search experiments.")
     parser.add_argument(
-        "mode",
+        "--prompt",
         choices=[
             "post_agent_search",
             "search_hist_no_judgments",
@@ -514,7 +514,8 @@ def main(argv=None):
             "search_few_shot",
             "search_few_shot_judgments",
         ],
-        help="Experiment mode to run.",
+        default="search_vanilla",
+        help="Experiment prompt to run.",
     )
     parser.add_argument("--iterations", type=int, default=1)
     parser.add_argument("--num-seeds", type=int, default=5)
@@ -540,7 +541,7 @@ def main(argv=None):
     )
     run_command = (
         "poetry run python -m cheat_at_search.agent.wands"
-        f" {args.mode}"
+        f" --prompt {args.prompt}"
         f" --iterations {args.iterations}"
         f" --num-seeds {args.num_seeds}"
         f" --num-queries {args.num_queries}"
@@ -550,14 +551,14 @@ def main(argv=None):
         f" --response-model {args.response_model}"
     )
 
-    if args.mode == "post_agent_search":
+    if args.prompt == "post_agent_search":
         strategy = PostAgentStrategy(
             enriched_products, search_tool, search_tool_supports_category
         )
         graded_results = run_strategy(strategy, wands_queries[:20])
         ndcg = graded_results["ndcg"].mean()
         print(f"Overall NDCG: {ndcg}")
-    if args.mode == "search_hist_no_judgments":
+    if args.prompt == "search_hist_no_judgments":
         agent_search_wands(
             use_old=False,
             iterations=args.iterations,
@@ -572,7 +573,7 @@ def main(argv=None):
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
-    elif args.mode == "search_with_hist_judgments":
+    elif args.prompt == "search_with_hist_judgments":
         agent_search_wands(
             use_old=False,
             iterations=args.iterations,
@@ -591,7 +592,7 @@ def main(argv=None):
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
-    elif args.mode == "search_vanilla":
+    elif args.prompt == "search_vanilla":
         agent_search_wands(
             use_old=False,
             iterations=args.iterations,
@@ -605,7 +606,7 @@ def main(argv=None):
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
-    elif args.mode == "search_few_shot_hist":
+    elif args.prompt == "search_few_shot_hist":
         agent_search_wands(
             use_old=False,
             iterations=args.iterations,
@@ -622,7 +623,7 @@ def main(argv=None):
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
-    elif args.mode == "search_few_shot":
+    elif args.prompt == "search_few_shot":
         agent_search_wands(
             use_old=False,
             iterations=args.iterations,
@@ -638,7 +639,7 @@ def main(argv=None):
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
-    elif args.mode == "search_few_shot_judgments":
+    elif args.prompt == "search_few_shot_judgments":
         agent_search_wands(
             use_old=False,
             iterations=args.iterations,
