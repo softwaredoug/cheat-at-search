@@ -337,6 +337,7 @@ def agent_search_wands(
     num_seeds=1,
     response_model=DetailedSearchResults,
     run_command: str | None = None,
+    reasoning_level: str = "medium",
 ):
     ndcgs_by_seed = []
     bm25_by_seed = []
@@ -380,6 +381,7 @@ def agent_search_wands(
             model=model,
             system_prompt=prompt_for_seed,
             response_model=response_model,
+            reasoning_level=reasoning_level,
         )
         strategy = ReasoningSearchStrategy(
             enriched_products,
@@ -523,6 +525,12 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=43)
     parser.add_argument("--model", type=str, default="openai/gpt-5")
     parser.add_argument(
+        "--reasoning-level",
+        choices=["low", "medium", "high"],
+        default="medium",
+        help="Reasoning effort to use for OpenAI responses.",
+    )
+    parser.add_argument(
         "--response-model",
         choices=["bare", "detailed"],
         default="detailed",
@@ -549,6 +557,7 @@ def main(argv=None):
         f" --model {args.model}"
         f" --search-tool {args.search_tool}"
         f" --response-model {args.response_model}"
+        f" --reasoning-level {args.reasoning_level}"
     )
 
     if args.prompt == "post_agent_search":
@@ -570,6 +579,7 @@ def main(argv=None):
             search_tool_supports_category=search_tool_supports_category,
             response_model=response_model,
             run_command=run_command,
+            reasoning_level=args.reasoning_level,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -589,6 +599,7 @@ def main(argv=None):
             search_tool_supports_category=search_tool_supports_category,
             response_model=response_model,
             run_command=run_command,
+            reasoning_level=args.reasoning_level,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -603,6 +614,7 @@ def main(argv=None):
             search_tool_supports_category=search_tool_supports_category,
             response_model=response_model,
             run_command=run_command,
+            reasoning_level=args.reasoning_level,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -620,6 +632,7 @@ def main(argv=None):
             search_tool_supports_category=search_tool_supports_category,
             response_model=response_model,
             run_command=run_command,
+            reasoning_level=args.reasoning_level,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -636,6 +649,7 @@ def main(argv=None):
             search_tool_supports_category=search_tool_supports_category,
             response_model=response_model,
             run_command=run_command,
+            reasoning_level=args.reasoning_level,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
@@ -655,6 +669,7 @@ def main(argv=None):
             search_tool_supports_category=search_tool_supports_category,
             response_model=response_model,
             run_command=run_command,
+            reasoning_level=args.reasoning_level,
             seed=args.seed,
             num_seeds=args.num_seeds,
         )
