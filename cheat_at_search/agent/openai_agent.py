@@ -19,6 +19,7 @@ class OpenAIAgent(Agent):
         system_prompt: str = "",
         max_tokens: Optional[int] = None,
         response_model=SearchResults,
+        reasoning_level: str = "medium",
     ):
         self.search_tools = {tool.__name__: make_tool_adapter(tool) for tool in tools}
 
@@ -34,6 +35,7 @@ class OpenAIAgent(Agent):
         self.openai = OpenAI(api_key=self.openai_key)
         self.last_usage = None
         self.max_tokens = max_tokens
+        self.reasoning_level = reasoning_level
 
     def config_hash(self) -> str:
         tool_specs = []
@@ -60,6 +62,7 @@ class OpenAIAgent(Agent):
             "system_prompt": self.system_prompt,
             "response_model": response_model,
             "max_tokens": self.max_tokens,
+            "reasoning_level": self.reasoning_level,
             "tools": tool_specs,
         }
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -90,6 +93,7 @@ class OpenAIAgent(Agent):
                         model=self.model,
                         input=inputs,
                         tools=tools,
+                        reasoning={"effort": self.reasoning_level},
                         text_format=self.response_model,
                     )
                 else:
@@ -97,6 +101,7 @@ class OpenAIAgent(Agent):
                         model=self.model,
                         input=inputs,
                         tools=tools,
+                        reasoning={"effort": self.reasoning_level},
                     )
                 # Iterate over tool calls
                 inputs += resp.output
