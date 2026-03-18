@@ -4,7 +4,14 @@ import importlib
 
 @pytest.mark.parametrize(
     "data_module",
-    ["msmarco_data", "minimarco_data", "esci_data", "wands_data", "tmdb_data"],
+    [
+        "msmarco_data",
+        "minimarco_data",
+        "esci_data",
+        "wands_data",
+        "tmdb_data",
+        "doug_blog_data",
+    ],
 )
 def test_common_imports(data_module):
     """Confirm no import error when importing these values from the dataset module."""

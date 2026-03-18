@@ -19,6 +19,9 @@ dependencies = [
     "lxml (>=6.0.2,<7.0.0)",
 ]
 
+[tool.poetry]
+include = ["posts.json.gz"]
+
 [tool.pylsp.plugins]
 mypy.enabled = true
 flake8.enabled = true
