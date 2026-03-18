@@ -86,6 +86,10 @@ def ndcgs(graded):
     return graded.groupby("query")["ndcg"].mean().sort_values(ascending=False)
 
 
+def mrrs(graded):
+    return graded.groupby("query")["mrr"].mean().sort_values(ascending=False)
+
+
 def ndcg_delta(variant_graded, baseline_graded):
     variant_ndcgs = ndcgs(variant_graded)
     baseline_ndcgs = ndcgs(baseline_graded)
