@@ -10,20 +10,41 @@ def idcg_max(max_grade=2, k=10):
     return np.sum(gains)
 
 
-def grade_results(judgments: pd.DataFrame,
-                  search_results: pd.DataFrame,
-                  max_grade=None,
-                  k=10) -> pd.DataFrame:
+def grade_results(
+    judgments: pd.DataFrame, search_results: pd.DataFrame, max_grade=None, k=10
+) -> pd.DataFrame:
     """Grade search results based on the labeled queries."""
-    search_results = search_results[search_results['rank'] <= k]
-    assert 'doc_id' in judgments.columns, "judgments must have a 'doc_id' column"
-    assert 'doc_id' in search_results.columns, "search_results must have a 'doc_id' column"
+    search_results = search_results[search_results["rank"] <= k]
+    assert "doc_id" in judgments.columns, "judgments must have a 'doc_id' column"
+    assert "doc_id" in search_results.columns, (
+        "search_results must have a 'doc_id' column"
+    )
     if not max_grade:
-        max_grade = judgments['grade'].max()
-    graded_results = search_results.merge(judgments[['query_id', 'query', 'doc_id', 'grade']]
-                                          , on=['query_id', 'query', 'doc_id'], how='left')
-    graded_results['grade'] = graded_results['grade'].fillna(0)
-    rank_discounts = 1 / np.log2(2 ** graded_results['rank'])
-    graded_results['discounted_gain'] = ((2 ** graded_results['grade']) - 1) * rank_discounts
-    graded_results['idcg'] = idcg_max(max_grade=max_grade, k=k)
+        max_grade = judgments["grade"].max()
+    graded_results = search_results.merge(
+        judgments[["query_id", "query", "doc_id", "grade"]],
+        on=["query_id", "query", "doc_id"],
+        how="left",
+    )
+    graded_results["grade"] = graded_results["grade"].fillna(0)
+    rank_discounts = 1 / np.log2(2 ** graded_results["rank"])
+    graded_results["discounted_gain"] = (
+        (2 ** graded_results["grade"]) - 1
+    ) * rank_discounts
+    graded_results["idcg"] = idcg_max(max_grade=max_grade, k=k)
     return graded_results
+
+
+def reciprocal_rank(graded_results: pd.DataFrame, max_grade: int) -> pd.DataFrame:
+    """Compute reciprocal rank per query for the max grade."""
+    if graded_results.empty:
+        return pd.DataFrame(columns=["query", "query_id", "mrr"])
+
+    hits = graded_results[graded_results["grade"] == max_grade]
+    min_ranks = hits.groupby(["query", "query_id"])["rank"].min()
+    rr = 1 / min_ranks
+    rr = rr.rename("mrr")
+
+    all_queries = graded_results[["query", "query_id"]].drop_duplicates()
+    rr = rr.reindex(all_queries.set_index(["query", "query_id"]).index, fill_value=0)
+    return rr.reset_index()

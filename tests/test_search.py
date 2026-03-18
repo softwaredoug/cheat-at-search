@@ -7,7 +7,9 @@ from cheat_at_search.search import graded_bm25, run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy import BM25Search
 
 
-@pytest.mark.parametrize("data_module", ["msmarco_data", "esci_data", "wands_data", "tmdb_data"])
+@pytest.mark.parametrize(
+    "data_module", ["msmarco_data", "esci_data", "wands_data", "tmdb_data"]
+)
 def test_bm25_search(data_module):
     """
     Run BM25 search strategy on the specified dataset module.
@@ -24,8 +26,16 @@ def test_bm25_search(data_module):
 def test_run_bm25(tmp_path, monkeypatch):
     corpus = pd.DataFrame(
         [
-            {"doc_id": 1, "title": "red shoes", "description": "bright red running shoes"},
-            {"doc_id": 2, "title": "blue jacket", "description": "waterproof blue jacket"},
+            {
+                "doc_id": 1,
+                "title": "red shoes",
+                "description": "bright red running shoes",
+            },
+            {
+                "doc_id": 2,
+                "title": "blue jacket",
+                "description": "waterproof blue jacket",
+            },
         ]
     )
     judgments = pd.DataFrame(
@@ -41,6 +51,7 @@ def test_run_bm25(tmp_path, monkeypatch):
         return subdir_path
 
     import cheat_at_search.search as search_module
+
     monkeypatch.setattr(search_module, "ensure_data_subdir", _ensure_data_subdir)
 
     graded_bm25 = run_bm25(corpus, judgments)
@@ -144,6 +155,7 @@ def test_graded_bm25_cached():
     assert "doc_id" in graded_bm25.columns
     assert "dcg" in graded_bm25.columns
     assert "ndcg" in graded_bm25.columns
+    assert "mrr" in graded_bm25.columns
 
 
 def test_vs_ideal_with_cached_bm25():
