@@ -174,3 +174,5 @@ cython_debug/
 .pypirc
 
 data/
+!cheat_at_search/data/
+!cheat_at_search/data/posts.json.gz

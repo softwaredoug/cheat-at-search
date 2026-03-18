@@ -1,3 +1,4 @@
+from importlib import resources
 from pathlib import Path
 
 import pandas as pd
@@ -10,12 +11,23 @@ logger = log_to_stdout("doug_blog_data")
 
 
 def _docs() -> pd.DataFrame:
-    project_root = Path(get_project_root())
-    posts_path = project_root / "posts.json.gz"
-    if not posts_path.exists():
-        raise FileNotFoundError(f"Expected posts.json.gz at {posts_path}")
+    posts_resource = None
+    try:
+        posts_resource = resources.files("cheat_at_search").joinpath(
+            "data/posts.json.gz"
+        )
+    except Exception:
+        posts_resource = None
 
-    posts = pd.read_json(posts_path, lines=True, compression="gzip")
+    if posts_resource is not None and posts_resource.is_file():
+        with posts_resource.open("rb") as handle:
+            posts = pd.read_json(handle, lines=True, compression="gzip")
+    else:
+        project_root = Path(get_project_root())
+        posts_path = project_root / "cheat_at_search" / "data" / "posts.json.gz"
+        if not posts_path.exists():
+            raise FileNotFoundError(f"Expected posts.json.gz at {posts_path}")
+        posts = pd.read_json(posts_path, lines=True, compression="gzip")
     posts = posts.rename(columns={"body": "description"})
     posts["doc_id"] = range(len(posts))
     if "title" not in posts.columns:
