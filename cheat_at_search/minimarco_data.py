@@ -10,7 +10,7 @@ def _docs():
     msmarco_data.download_msmarco()
     collection_path = msmarco_data.msmarco_path / "collection.tsv"
     passages = pd.read_csv(collection_path, sep="\t", names=["doc_id", "description"])
-    sample_size = min(len(passages), 1_000_000)
+    sample_size = min(len(passages), 300_000)
     passages = passages.sample(n=sample_size, random_state=42).reset_index(drop=True)
     passages["title"] = ""
     return passages
