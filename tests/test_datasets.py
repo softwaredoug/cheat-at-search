@@ -2,7 +2,10 @@ import pytest
 import importlib
 
 
-@pytest.mark.parametrize("data_module", ["msmarco_data", "esci_data", "wands_data", "tmdb_data"])
+@pytest.mark.parametrize(
+    "data_module",
+    ["msmarco_data", "minimarco_data", "esci_data", "wands_data", "tmdb_data"],
+)
 def test_common_imports(data_module):
     """Confirm no import error when importing these values from the dataset module."""
     import_dfs_to_expected_columns = {
@@ -17,8 +20,12 @@ def test_common_imports(data_module):
                 df = getattr(module, df_import)
                 for col in expected_columns:
                     if col not in df.columns:
-                        pytest.fail(f"DataFrame {df_import} from cheat_at_search.{data_module} is missing expected column: {col}")
+                        pytest.fail(
+                            f"DataFrame {df_import} from cheat_at_search.{data_module} is missing expected column: {col}"
+                        )
             except AttributeError as e:
-                pytest.fail(f"Accessing {df_import} from cheat_at_search.{data_module} raised AttributeError: {e}")
+                pytest.fail(
+                    f"Accessing {df_import} from cheat_at_search.{data_module} raised AttributeError: {e}"
+                )
     except ImportError as e:
         pytest.fail(f"Importing cheat_at_search.{data_module} raised ImportError: {e}")
