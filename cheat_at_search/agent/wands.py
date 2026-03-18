@@ -5,6 +5,7 @@ from cheat_at_search.wands_data import (
     judgments,
 )
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
+from cheat_at_search.agent.harness import Harness
 from cheat_at_search.strategy.strategy import SearchStrategy
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.agent.search_client import DetailedSearchResults, SearchResults
@@ -376,17 +377,18 @@ def agent_search_wands(
         if prompt_builder is not None:
             prompt_for_seed = prompt_builder(curr_seed)
 
-        search_client = OpenAIAgent(
+        agent = OpenAIAgent(
             tools=tools,
             model=model,
-            system_prompt=prompt_for_seed,
             response_model=response_model,
             reasoning_level=reasoning_level,
         )
+        harness = Harness(agent)
         strategy = ReasoningSearchStrategy(
             enriched_products,
-            search_client,
+            harness,
             prompt="",
+            system_prompt=prompt_for_seed,
             cache=iterations == 1,
             workers=num_workers,
         )

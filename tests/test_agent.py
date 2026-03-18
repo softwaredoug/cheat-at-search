@@ -2,6 +2,7 @@ from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.wands_data import products
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
+from cheat_at_search.agent.harness import Harness
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal
 from openai import OpenAI
@@ -16,11 +17,13 @@ client = OpenAI(
     api_key=openai_key,
 )
 
-products['product_name_snowball'] = SearchArray.index(products['product_name'],
-                                                      tokenizer=snowball_tokenizer)
+products["product_name_snowball"] = SearchArray.index(
+    products["product_name"], tokenizer=snowball_tokenizer
+)
 
-products['description_snowball'] = SearchArray.index(products['product_description'],
-                                                     tokenizer=snowball_tokenizer)
+products["description_snowball"] = SearchArray.index(
+    products["product_description"], tokenizer=snowball_tokenizer
+)
 
 
 def search_products(query: str, top_k: int = 5) -> List[Dict]:
@@ -41,25 +44,27 @@ def search_products(query: str, top_k: int = 5) -> List[Dict]:
     query_tokens = snowball_tokenizer(query)
     scores = np.zeros(len(products))
     for token in query_tokens:
-        scores += products['product_name_snowball'].array.score(token) * 10
-        scores += products['description_snowball'].array.score(token)
+        scores += products["product_name_snowball"].array.score(token) * 10
+        scores += products["description_snowball"].array.score(token)
 
     top_k_indices = np.argsort(scores)[-top_k:][::-1]
     scores = scores[top_k_indices]
     top_products = products.iloc[top_k_indices]
-    top_products['score'] = scores
+    top_products["score"] = scores
 
     # Serialize back in JSON
     try:
         results = []
         print("Getting results")
         for id, row in top_products.iterrows():
-            results.append({
-                'id': id,
-                'product_name': row['product_name'],
-                'product_description': row['product_description'],
-                'score': row['score']
-            })
+            results.append(
+                {
+                    "id": id,
+                    "product_name": row["product_name"],
+                    "product_description": row["product_description"],
+                    "score": row["score"],
+                }
+            )
 
         return results
     except Exception as e:
@@ -83,24 +88,26 @@ def alt_search_products(query: str, top_k: int = 5) -> List[Dict]:
     query_tokens = snowball_tokenizer(query)
     scores = np.zeros(len(products))
     for token in query_tokens:
-        scores += products['product_name_snowball'].array.score(token) * 10
+        scores += products["product_name_snowball"].array.score(token) * 10
 
     top_k_indices = np.argsort(scores)[-top_k:][::-1]
     scores = scores[top_k_indices]
     top_products = products.iloc[top_k_indices]
-    top_products['score'] = scores
+    top_products["score"] = scores
 
     # Serialize back in JSON
     try:
         results = []
         print("Getting results")
         for id, row in top_products.iterrows():
-            results.append({
-                'id': id,
-                'product_name': row['product_name'],
-                'product_description': row['product_description'],
-                'score': row['score']
-            })
+            results.append(
+                {
+                    "id": id,
+                    "product_name": row["product_name"],
+                    "product_description": row["product_description"],
+                    "score": row["score"],
+                }
+            )
 
         return results
     except Exception as e:
@@ -112,8 +119,12 @@ def alt_search_products(query: str, top_k: int = 5) -> List[Dict]:
 class SearchInteraction(BaseModel):
     user_query: str = Field(..., description="The original user search query")
     search_tool_name: str = Field(..., description="The name of the search tool used")
-    search_tool_query: str = Field(..., description="The actual search query sent to the search tool")
-    quality: Literal['good', 'meh', 'bad'] = Field(..., description="The quality of the results returned by the search tool")
+    search_tool_query: str = Field(
+        ..., description="The actual search query sent to the search tool"
+    )
+    quality: Literal["good", "meh", "bad"] = Field(
+        ..., description="The quality of the results returned by the search tool"
+    )
     reasoning: str = Field(..., description="The reasoning for the quality rating")
 
 
@@ -150,8 +161,7 @@ def test_calling_search_tool():
     # thread, public_url = serve_tools(fns=[search_products])
     # time.sleep(1)
 
-    search_client = OpenAIAgent(tools=[search_products], model="openai/gpt-5",
-                                system_prompt="You are a helpful assistant that helps people find furniture products.")
+    search_client = OpenAIAgent(tools=[search_products], model="openai/gpt-5")
     prompt = """
         Reason carefully to find furniture products that match the following description, returning top 10 best results.
 
@@ -160,14 +170,22 @@ def test_calling_search_tool():
         a couch for my really big butt
 
     """
-    results = search_client.search(prompt)
+    inputs = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that helps people find furniture products.",
+        },
+        {"role": "user", "content": prompt},
+    ]
+    resp, _, _ = search_client.chat(inputs=inputs, return_usage=True)
+    results = resp.output_parsed
     assert len(results.results) > 0
 
 
 class PreferredSearchTool(BaseModel):
-    tool_name : Literal[
-        'search_products',
-        'alt_search_products',
+    tool_name: Literal[
+        "search_products",
+        "alt_search_products",
     ] = Field(..., description="The function name of the preferred search tool")
     reason: str = Field(..., description="The reason for preferring this search tool")
 
@@ -188,11 +206,17 @@ def test_analyze_best_search_backend():
 
     """
 
-    search_client = OpenAIAgent(tools=[search_products, alt_search_products],
-                                model="openai/gpt-5",
-                                system_prompt=system_prompt,
-                                response_model=PreferredSearchTool)
-    preferred_tool = search_client.search(prompt)
+    search_client = OpenAIAgent(
+        tools=[search_products, alt_search_products],
+        model="openai/gpt-5",
+        response_model=PreferredSearchTool,
+    )
+    inputs = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt},
+    ]
+    resp, _, _ = search_client.chat(inputs=inputs, return_usage=True)
+    preferred_tool = resp.output_parsed
     assert preferred_tool.tool_name in ["search_products", "alt_search_products"]
 
 
@@ -208,16 +232,17 @@ def test_reasoning_search_strategy():
 
     """
 
-    search_client = OpenAIAgent(tools=[search_products],
-                                model="openai/gpt-5",
-                                system_prompt=system_prompt)
-    strategy = ReasoningSearchStrategy(products, search_client=search_client, prompt=prompt)
+    search_client = OpenAIAgent(tools=[search_products], model="openai/gpt-5")
+    harness = Harness(search_client)
+    strategy = ReasoningSearchStrategy(
+        products, harness=harness, prompt=prompt, system_prompt=system_prompt
+    )
     queries = [
         "a couch for my really big butt",
         "a small chair for my tiny apartment",
         "a bed for a kid who loves space",
         "a table for a fancy dinner party",
-        "a lamp for reading at night"
+        "a lamp for reading at night",
     ]
     for query in queries:
         top_k, scores = strategy.search(query, k=5)

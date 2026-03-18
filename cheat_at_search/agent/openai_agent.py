@@ -16,7 +16,6 @@ class OpenAIAgent(Agent):
         self,
         tools,
         model: str,
-        system_prompt: str = "",
         max_tokens: Optional[int] = None,
         response_model=SearchResults,
         reasoning_level: str = "medium",
@@ -26,7 +25,6 @@ class OpenAIAgent(Agent):
         self.provider = model.split("/")[0]
         self.model = model.split("/")[-1]
         self.openai_key = key_for_provider("openai")
-        self.system_prompt = system_prompt
         if self.provider != "openai":
             raise ValueError(
                 f"Provider {self.provider} is not supported. This client only supports OpenAI."
@@ -59,7 +57,6 @@ class OpenAIAgent(Agent):
         payload = {
             "provider": self.provider,
             "model": f"{self.provider}/{self.model}",
-            "system_prompt": self.system_prompt,
             "response_model": response_model,
             "max_tokens": self.max_tokens,
             "reasoning_level": self.reasoning_level,
@@ -68,18 +65,9 @@ class OpenAIAgent(Agent):
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return md5(serialized.encode("utf-8")).hexdigest()
 
-    def chat(
-        self, user_prompt: str = None, inputs=None, return_usage=False
-    ) -> SearchResults:
+    def chat(self, inputs=None, return_usage=False) -> SearchResults:
         """Chat, handle any response."""
         tool_call_logs = []
-        if not inputs:
-            inputs = [
-                {"role": "system", "content": self.system_prompt},
-            ]
-        if user_prompt:
-            next_msg = {"role": "user", "content": user_prompt}
-            inputs.append(next_msg)
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
@@ -162,33 +150,16 @@ class OpenAIAgent(Agent):
             logger.error("Error calling MCP search tool:", e)
             raise e
 
-    def loop(self, user_prompt: str = None, return_usage=False) -> SearchResults:
+    def loop(self, prompt: str = None, return_usage=False) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, (
             "response_model must be set for structured search results."
         )
-        resp, _, total_tokens = self.chat(user_prompt)
+        inputs = None
+        if prompt is not None:
+            inputs = [{"role": "user", "content": prompt}]
+        resp, _, total_tokens = self.chat(inputs=inputs)
         self.last_usage = resp.usage
         if return_usage:
             return resp.output_parsed, total_tokens
         return resp.output_parsed
-
-
-class OpenAIChatAdapter:
-    def __init__(self, client: OpenAIAgent):
-        self.client = client
-        self.reset()
-
-    def chat(self, message):
-        try:
-            resp, inputs = self.client.chat(message, inputs=self.inputs)
-            self.inputs = inputs
-            return resp.output[-1].content[-1].text
-        except Exception as e:
-            logger.error("Error calling OpenAI chat:", e)
-            raise e
-
-    def reset(self, system=None):
-        if system is None:
-            system = self.client.system_prompt
-        self.inputs = []

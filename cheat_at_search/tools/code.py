@@ -12,75 +12,141 @@ logger = log_to_stdout(logger_name="code")
 
 class Edit(BaseModel):
     """A single edit to apply to the reranker code."""
-    anchor: str = Field(..., description="The anchor text to identify where the patch should be applied.")
-    block_until: str = Field(..., description="The end of the block of text which the patch should be applied. Do not leave blank.")
-    action: Literal['insert_after', 'replace', 'delete'] = Field(..., description="The action to perform: insert_after, replace, or delete.")
-    text: str = Field(..., description="The text to insert or replace with. Ignored for delete action.")
-    intention: str = Field(None, description="A brief description of the intention behind this edit.")
-    why: str = Field(None, description="An optional explanation of why this edit is being made.")
-    queries_expected_to_improve: List[str] = Field(None, description="A list of training queries expected to have their NDCG changed by this edit.")
+
+    anchor: str = Field(
+        ...,
+        description="The anchor text to identify where the patch should be applied.",
+    )
+    block_until: str = Field(
+        ...,
+        description="The end of the block of text which the patch should be applied. Do not leave blank.",
+    )
+    action: Literal["insert_after", "replace", "delete"] = Field(
+        ..., description="The action to perform: insert_after, replace, or delete."
+    )
+    text: str = Field(
+        ...,
+        description="The text to insert or replace with. Ignored for delete action.",
+    )
+    intention: str = Field(
+        None, description="A brief description of the intention behind this edit."
+    )
+    why: str = Field(
+        None, description="An optional explanation of why this edit is being made."
+    )
+    queries_expected_to_improve: List[str] = Field(
+        None,
+        description="A list of training queries expected to have their NDCG changed by this edit.",
+    )
 
 
 class EditResult(BaseModel):
     """The result of applying edits to the reranker code."""
-    success: bool = Field(..., description="Whether the edits were applied successfully and the reranker passed tests.")
-    error_message: Optional[str] = Field(None, description="An error message if the edits failed to apply or tests failed.")
-    current_code: str = Field(None, description="The current reranker code after this call.")
+
+    success: bool = Field(
+        ...,
+        description="Whether the edits were applied successfully and the reranker passed tests.",
+    )
+    error_message: Optional[str] = Field(
+        None,
+        description="An error message if the edits failed to apply or tests failed.",
+    )
+    current_code: str = Field(
+        None, description="The current reranker code after this call."
+    )
 
 
 class EvalResult(BaseModel):
-    success: bool = Field(..., description="Whether the edits can be applied succesfully without code errors.")
-    error_message: Optional[str] = Field(None, description="An error or warning message if the patch failed to be applied, evaluation failed, or NDCG did not improve sufficiently.")
-    ndcg_deltas: Optional[Dict[str, float]] = Field(None, description="The NDCG deltas for the training dataset.")
-    ndcg_before: Optional[float] = Field(0.0, description="The NDCG before applying the edit.")
-    ndcg_after: Optional[float] = Field(0.0, description="The NDCG after applying the edit.")
-    current_code: Optional[str] = Field(None, description="The current reranker code after this call.")
+    success: bool = Field(
+        ...,
+        description="Whether the edits can be applied succesfully without code errors.",
+    )
+    error_message: Optional[str] = Field(
+        None,
+        description="An error or warning message if the patch failed to be applied, evaluation failed, or NDCG did not improve sufficiently.",
+    )
+    ndcg_deltas: Optional[Dict[str, float]] = Field(
+        None, description="The NDCG deltas for the training dataset."
+    )
+    ndcg_before: Optional[float] = Field(
+        0.0, description="The NDCG before applying the edit."
+    )
+    ndcg_after: Optional[float] = Field(
+        0.0, description="The NDCG after applying the edit."
+    )
+    current_code: Optional[str] = Field(
+        None, description="The current reranker code after this call."
+    )
 
 
-def make_length_validator(max_lines: int = 10, max_cols=120) -> Callable[[str], Optional[str]]:
+def make_length_validator(
+    max_lines: int = 10, max_cols=120
+) -> Callable[[str], Optional[str]]:
     guardrail_desc = f"""Edits longer than {max_lines} and wider than {max_cols} characters will be rejected."""
 
     def length_validation(code: str) -> Optional[str]:
-        if code.count('\n') > max_lines:
+        if code.count("\n") > max_lines:
             return f"Code exceeds maximum length of {max_lines} lines."
 
-        for line in code.split('\n'):
+        for line in code.split("\n"):
             if len(line) > max_cols + 20:
                 return f"Line exceeds maximum length of {max_cols} characters: {line}"
         return None
+
     length_validation.__doc__ = guardrail_desc
     return length_validation
 
 
 class GuardrailResponse(BaseModel):
     """The response from the guardrail checker."""
-    compliant: bool = Field(..., description="Whether the code complies with the guardrails.")
-    issues: Optional[List[str]] = Field(None, description="A list of issues found in the code, if any.")
+
+    compliant: bool = Field(
+        ..., description="Whether the code complies with the guardrails."
+    )
+    issues: Optional[List[str]] = Field(
+        None, description="A list of issues found in the code, if any."
+    )
 
 
 def make_guardrail_checker(prompt: str, model: str = "openai/gpt-5-mini"):
-    agent = OpenAIAgent(tools=[],
-                        model=model,
-                        system_prompt=prompt,
-                        response_model=GuardrailResponse)
+    agent = OpenAIAgent(
+        tools=[],
+        model=model,
+        response_model=GuardrailResponse,
+    )
 
     def code_guardrails(code: str) -> Optional[str]:
         """Edits where the code appears to be overfit to training queries will be rejected."""
-        response = agent.loop(user_prompt=f"Please evaluate the following code for compliance:\n```python\n{code}\n```")
+        inputs = [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": f"Please evaluate the following code for compliance:\n```python\n{code}\n```",
+            },
+        ]
+        resp, _, _ = agent.chat(inputs=inputs, return_usage=True)
+        response = resp.output_parsed
         if not response.compliant:
-            issues = "\n".join(response.issues) if response.issues else "No specific issues provided."
+            issues = (
+                "\n".join(response.issues)
+                if response.issues
+                else "No specific issues provided."
+            )
             return f"Code does not comply with guardrails:\n{issues}"
+
     return code_guardrails
 
 
-def make_patch_fn(search_fn,
-                  corpus,
-                  code_dir: str,
-                  module_name: str = "rerank_esci",
-                  guardrail_fns: List = None,
-                  training_eval_fn: Optional[Callable] = None,
-                  validation_eval_fn: Optional[Callable] = None,
-                  eval_margin=0.003) -> Tuple[callable, Optional[callable], callable]:
+def make_patch_fn(
+    search_fn,
+    corpus,
+    code_dir: str,
+    module_name: str = "rerank_esci",
+    guardrail_fns: List = None,
+    training_eval_fn: Optional[Callable] = None,
+    validation_eval_fn: Optional[Callable] = None,
+    eval_margin=0.003,
+) -> Tuple[callable, Optional[callable], callable]:
     """Returns a function that applies patches to the reranker code."""
 
     filepath = os.path.join(code_dir, f"{module_name}.py")
@@ -91,18 +157,24 @@ def make_patch_fn(search_fn,
 
     if training_eval_fn is not None:
         training_eval_fn = lru_cache(maxsize=64)(training_eval_fn)
-    guardrail_doc_strs = "\n".join([
-        func.__doc__ for func in guardrail_fns
-    ])
+    guardrail_doc_strs = "\n".join([func.__doc__ for func in guardrail_fns])
     full_guardrail_doc_strs = guardrail_doc_strs
     if validation_eval_fn is not None:
         validation_eval_fn = lru_cache(maxsize=64)(validation_eval_fn)
         full_guardrail_doc_strs += f"\nEdits that reduce validation NDCG will be rejected as overfitting (must improve by at least {eval_margin})."
-        full_guardrail_doc_strs = "Your code will be rejected if it does not meet these guardrails:\n" + full_guardrail_doc_strs
-        guardrail_doc_strs += "\nNo checks to validation NDCG are performed in try_out_patch."
+        full_guardrail_doc_strs = (
+            "Your code will be rejected if it does not meet these guardrails:\n"
+            + full_guardrail_doc_strs
+        )
+        guardrail_doc_strs += (
+            "\nNo checks to validation NDCG are performed in try_out_patch."
+        )
 
     if guardrail_doc_strs:
-        guardrail_doc_strs = "Your code will be rejected if it does not meet these guardrails:\n" + guardrail_doc_strs
+        guardrail_doc_strs = (
+            "Your code will be rejected if it does not meet these guardrails:\n"
+            + guardrail_doc_strs
+        )
 
     def revert_changes() -> str:
         """Undo the last patch to rerank_esci.py by restoring from backup."""
@@ -115,8 +187,9 @@ def make_patch_fn(search_fn,
                 return code
         return "Error reverting changes."
 
-    def _patch_code(edit: Edit,
-                    test_queries=["red dress", "real housewives of orange county"]) -> Tuple[str, str]:
+    def _patch_code(
+        edit: Edit, test_queries=["red dress", "real housewives of orange county"]
+    ) -> Tuple[str, str]:
         logger.info("Patching code with edits")
         logger.info(f"Goal: {edit.intention}")
         logger.info(f"Why: {edit.why}")
@@ -130,7 +203,9 @@ def make_patch_fn(search_fn,
                 raise ValueError(f"Anchor '{edit.anchor}' not found in code.")
             block_index = code.find(edit.block_until, anchor_index)
             if block_index == -1:
-                raise ValueError(f"Block until '{edit.block_until}' not found after anchor in code.")
+                raise ValueError(
+                    f"Block until '{edit.block_until}' not found after anchor in code."
+                )
 
             # Validate code
             for guardrail in guardrail_fns:
@@ -138,13 +213,23 @@ def make_patch_fn(search_fn,
                 if error_message is not None:
                     raise ValueError(error_message)
 
-            if edit.action == 'insert_after':
+            if edit.action == "insert_after":
                 insertion_point = block_index + len(edit.block_until)
-                code = code[:insertion_point] + '\n' + edit.text + '\n' + code[insertion_point:]
-            elif edit.action == 'replace':
-                code = code[:anchor_index] + edit.text + code[block_index + len(edit.block_until):]
-            elif edit.action == 'delete':
-                code = code[:anchor_index] + code[block_index + len(edit.block_until):]
+                code = (
+                    code[:insertion_point]
+                    + "\n"
+                    + edit.text
+                    + "\n"
+                    + code[insertion_point:]
+                )
+            elif edit.action == "replace":
+                code = (
+                    code[:anchor_index]
+                    + edit.text
+                    + code[block_index + len(edit.block_until) :]
+                )
+            elif edit.action == "delete":
+                code = code[:anchor_index] + code[block_index + len(edit.block_until) :]
             else:
                 raise ValueError(f"Unknown action '{edit.action}'.")
         # Attempt to eval the code
@@ -163,15 +248,23 @@ def make_patch_fn(search_fn,
             except Exception as e:
                 logger.error(f"Error calling {module_name} with query '{query}': {e}")
                 logger.error(code)
-                raise ValueError(f"Error calling {module_name} with query '{query}': {e}")
+                raise ValueError(
+                    f"Error calling {module_name} with query '{query}': {e}"
+                )
 
             try:
                 if not isinstance(results, list):
-                    logger.error(f"'{module_name}' did not return a list for query '{query}'.")
-                    raise ValueError(f"'{module_name}' did not return a list for query '{query}'.")
+                    logger.error(
+                        f"'{module_name}' did not return a list for query '{query}'."
+                    )
+                    raise ValueError(
+                        f"'{module_name}' did not return a list for query '{query}'."
+                    )
             except Exception as e:
                 logger.error(f"Error collecting results with query '{query}': {e}")
-                raise ValueError(f"Error calling 'rerank_esci' with query '{query}': {e}")
+                raise ValueError(
+                    f"Error calling 'rerank_esci' with query '{query}': {e}"
+                )
         return code, existing_code, local_vars
 
     def _commit_code(code: str) -> Optional[str]:
@@ -204,13 +297,15 @@ def make_patch_fn(search_fn,
                 if delta_dict[query] != 0.0:
                     changed_queries[query] = delta_dict[query]
 
-            icon = '❌'
+            icon = "❌"
             if ndcgs_after.mean() >= (ndcgs_before.mean() + eval_margin):
-                icon = '✅'
+                icon = "✅"
             if ndcgs_after.mean() >= ndcgs_before.mean():
-                icon = '⚠️'
+                icon = "⚠️"
 
-            logger.info(f"{icon} Evaluated patch successfully. train NDCG before: {ndcgs_before.mean()}, after: {ndcgs_after.mean()}")
+            logger.info(
+                f"{icon} Evaluated patch successfully. train NDCG before: {ndcgs_before.mean()}, after: {ndcgs_after.mean()}"
+            )
             logger.info(f"Changed queries NDCG deltas: {changed_queries}")
             logger.info("Code:")
             logger.info(code)
@@ -225,12 +320,22 @@ def make_patch_fn(search_fn,
             Hint: look at changed queries, modify your change to get the upside of your change, and minimize the downside."""
             logger.warning(warning)
 
-            return EvalResult(success=True, error_message=warning, ndcg_deltas=changed_queries,
-                              ndcg_before=ndcgs_before.mean(), ndcg_after=ndcgs_after.mean(),
-                              current_code=existing_code)
+            return EvalResult(
+                success=True,
+                error_message=warning,
+                ndcg_deltas=changed_queries,
+                ndcg_before=ndcgs_before.mean(),
+                ndcg_after=ndcgs_after.mean(),
+                current_code=existing_code,
+            )
         except Exception as e:
             logger.info(f"Error evaluating patch: {e}")
-            return EvalResult(success=False, error_message=str(e), ndcg_deltas={}, existing_code=existing_code)
+            return EvalResult(
+                success=False,
+                error_message=str(e),
+                ndcg_deltas={},
+                existing_code=existing_code,
+            )
 
     try_out_patch.__doc__ = f"""Evaluate the proposed code change to analyze its impact on training queries.
     (Results won't be saved, this is used to evaluate potential patches before applying them.)
@@ -244,15 +349,23 @@ def make_patch_fn(search_fn,
             logger.info("Applying patch with edits")
             code, existing_code, local_vars = _patch_code(edit)
             # Compare NDCG before and after
-            edit_result = EditResult(success=True, error_message=None, current_code=existing_code)
+            edit_result = EditResult(
+                success=True, error_message=None, current_code=existing_code
+            )
             if validation_eval_fn is not None:
                 ndcg_before = validation_eval_fn(existing_code).mean()
                 ndcg_after = validation_eval_fn(code).mean()
                 if ndcg_after < (ndcg_before + eval_margin):
-                    logger.warning(f"❌ Rejecting Change: Validation NDCG must increase at least {eval_margin} after applying patch: before={ndcg_before}, after={ndcg_after}")
-                    raise ValueError(f"Rejecting change as overfit must increase NDCG by at least {eval_margin}: before={ndcg_before}, after={ndcg_after}")
+                    logger.warning(
+                        f"❌ Rejecting Change: Validation NDCG must increase at least {eval_margin} after applying patch: before={ndcg_before}, after={ndcg_after}"
+                    )
+                    raise ValueError(
+                        f"Rejecting change as overfit must increase NDCG by at least {eval_margin}: before={ndcg_before}, after={ndcg_after}"
+                    )
                 else:
-                    logger.info(f"✅ Validation NDCG improved: before={ndcg_before}, after={ndcg_after}")
+                    logger.info(
+                        f"✅ Validation NDCG improved: before={ndcg_before}, after={ndcg_after}"
+                    )
 
             code = _commit_code(code)
             if code:
@@ -262,8 +375,13 @@ def make_patch_fn(search_fn,
             logger.info(f"Error applying patch: {e}")
             with open(filepath, "r") as f:
                 existing_code = f.read()
-            return EditResult(success=False, error_message=str(e), query_results={},
-                              current_code=existing_code)
+            return EditResult(
+                success=False,
+                error_message=str(e),
+                query_results={},
+                current_code=existing_code,
+            )
+
     apply_patch.__doc__ = f"""Save the proposed code change to rerank_esci.py.
 
     {full_guardrail_doc_strs}

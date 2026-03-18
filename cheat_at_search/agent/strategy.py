@@ -1,5 +1,5 @@
 from cheat_at_search.strategy.strategy import SearchStrategy
-from cheat_at_search.agent.search_client import Agent
+from cheat_at_search.agent.harness import Harness
 from cheat_at_search.data_dir import ensure_data_subdir
 import pickle
 from hashlib import md5
@@ -12,16 +12,25 @@ class ReasoningSearchStrategy(SearchStrategy):
     """A search strategy that uses reasoning to improve search results."""
 
     def __init__(
-        self, corpus, search_client: Agent, prompt: str, cache=True, workers=1
+        self,
+        corpus,
+        harness: Harness,
+        prompt: str,
+        system_prompt: str,
+        cache=True,
+        workers=1,
     ):
         super().__init__(corpus, workers=workers)
-        self.search_client = search_client
+        self.harness = harness
         self.prompt = prompt
+        self.system_prompt = system_prompt
         self.cache = None
         self.total_tokens = 0
         if cache:
-            agent_hash = self.search_client.config_hash()
-            prompt_hash = md5((prompt + agent_hash).encode("utf-8")).hexdigest()[:8]
+            agent_hash = self.harness.config_hash()
+            prompt_hash = md5(
+                (prompt + system_prompt + agent_hash).encode("utf-8")
+            ).hexdigest()[:8]
             corpus_hash = md5(
                 corpus.columns.to_series().astype(str).sum().encode("utf-8")
             ).hexdigest()[:8]
@@ -51,7 +60,11 @@ class ReasoningSearchStrategy(SearchStrategy):
         print(f"Searching for: {query}")
         print("----")
         prompt = self.prompt + f"\nSearch query: {query}"
-        resp, inputs, total_tokens = self.search_client.chat(prompt, return_usage=True)
+        inputs = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        resp, inputs, total_tokens = self.harness.run(inputs)
         search_results = getattr(resp, "output_parsed", resp)
         self.total_tokens += total_tokens
         top_k = []
