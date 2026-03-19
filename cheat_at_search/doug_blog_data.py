@@ -34,7 +34,9 @@ def _docs() -> pd.DataFrame:
         posts["title"] = ""
     if "description" not in posts.columns:
         posts["description"] = ""
-    return posts[["doc_id", "title", "description"]]
+    if "publication_date" not in posts.columns:
+        posts["publication_date"] = ""
+    return posts[["doc_id", "title", "description", "publication_date"]]
 
 
 def _judgments() -> pd.DataFrame:

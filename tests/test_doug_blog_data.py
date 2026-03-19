@@ -8,3 +8,4 @@ def test_doug_blog_data_corpus_loads():
     assert "doc_id" in corpus.columns
     assert "title" in corpus.columns
     assert "description" in corpus.columns
+    assert "publication_date" in corpus.columns
