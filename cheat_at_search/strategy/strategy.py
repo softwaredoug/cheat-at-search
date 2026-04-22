@@ -13,6 +13,11 @@ class SearchStrategy:
         self.workers = workers
 
     def search_all(self, queries, k=10, batch_size=100):
+        if callable(getattr(self, "search_batch", None)):
+            return self._search_all_batched(queries, k=k, batch_size=batch_size)
+        return self._search_all_single(queries, k=k, batch_size=batch_size)
+
+    def _search_all_single(self, queries, k=10, batch_size=100):
         all_results = []
         total_queries = len(queries)
         if total_queries == 0:
@@ -55,6 +60,43 @@ class SearchStrategy:
                     gc.collect()
             finally:
                 progress.close()
+        return pd.concat(all_results)
+
+    def _search_all_batched(self, queries, k=10, batch_size=100):
+        all_results = []
+        total_queries = len(queries)
+        if total_queries == 0:
+            return pd.concat(all_results)
+
+        search_array_cols = [
+            col
+            for col in self.corpus.columns
+            if isinstance(self.corpus[col].array, SearchArray)
+        ]
+        progress = tqdm(total=total_queries, desc="Searching")
+        try:
+            for start in range(0, total_queries, batch_size):
+                batch = queries.iloc[start : start + batch_size]
+                batch_queries = batch["query"].tolist()
+                all_top_k, all_scores = self.search_batch(batch_queries, k)
+                for (_, query_row), top_k, scores in zip(
+                    batch.iterrows(), all_top_k, all_scores
+                ):
+                    query_id = query_row["query_id"]
+                    ranks = np.arange(len(top_k)) + 1
+                    top_k_corpus = self.corpus.drop(
+                        columns=search_array_cols, errors="ignore"
+                    )
+                    top_k_corpus = top_k_corpus.iloc[top_k].copy()
+                    top_k_corpus["score"] = scores
+                    top_k_corpus["query"] = query_row["query"]
+                    top_k_corpus["query_id"] = query_id
+                    top_k_corpus["rank"] = ranks
+                    all_results.append(top_k_corpus)
+                    progress.update(1)
+                gc.collect()
+        finally:
+            progress.close()
         return pd.concat(all_results)
 
     def search(self, query, k):

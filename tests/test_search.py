@@ -5,6 +5,7 @@ import pytest
 
 from cheat_at_search.search import graded_bm25, run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy import BM25Search
+from cheat_at_search.strategy.strategy import SearchStrategy
 
 
 @pytest.mark.parametrize(
@@ -166,3 +167,66 @@ def test_vs_ideal_with_cached_bm25():
     assert len(comparison) > 0
     assert comparison["rank_actual"].max() <= 10
     assert comparison["rank_ideal"].max() <= 10
+
+
+def test_search_all_uses_search_batch():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+            {"doc_id": 30, "title": "gamma"},
+            {"doc_id": 40, "title": "delta"},
+        ]
+    )
+    queries = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha"},
+            {"query_id": 2, "query": "beta"},
+            {"query_id": 3, "query": "gamma"},
+        ]
+    )
+
+    class DummyBatchStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+            self.search_calls = 0
+            self.search_batch_calls = 0
+
+        def _results_for_query(self, query, k):
+            lookup = {
+                "alpha": ([0, 1], [0.9, 0.1]),
+                "beta": ([1, 2], [0.8, 0.2]),
+                "gamma": ([2, 3], [0.7, 0.3]),
+            }
+            top_k, scores = lookup[query]
+            return top_k[:k], scores[:k]
+
+        def search(self, query, k=10):
+            self.search_calls += 1
+            return self._results_for_query(query, k)
+
+        def search_batch(self, queries, k=10):
+            self.search_batch_calls += 1
+            all_top_k = []
+            all_scores = []
+            for query in queries:
+                top_k, scores = self._results_for_query(query, k)
+                all_top_k.append(top_k)
+                all_scores.append(scores)
+            return all_top_k, all_scores
+
+    strategy = DummyBatchStrategy(corpus)
+    results = strategy.search_all(queries, k=2, batch_size=2)
+
+    assert strategy.search_calls == 0
+    assert strategy.search_batch_calls == 2
+    assert len(results) == len(queries) * 2
+
+    for query, expected_scores in {
+        "alpha": [0.9, 0.1],
+        "beta": [0.8, 0.2],
+        "gamma": [0.7, 0.3],
+    }.items():
+        subset = results[results["query"] == query]
+        assert subset["rank"].tolist() == [1, 2]
+        assert subset["score"].tolist() == expected_scores
