@@ -1,9 +1,14 @@
 import gc
+from hashlib import md5
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 from searcharray import SearchArray
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from cheat_at_search.data_dir import ensure_data_subdir
 
 
 class SearchStrategy:
@@ -12,21 +17,65 @@ class SearchStrategy:
         self.top_k = top_k
         self.workers = workers
 
-    def search_all(self, queries, k=10, batch_size=100, show_progress=True):
+    # @property
+    # def cache_key(self):
+    #     subclasses overriding this property can enable caching of search results based on the returned key
+
+    def search_all(
+        self,
+        queries,
+        k=10,
+        batch_size=100,
+        show_progress=True,
+        cache=True,
+    ):
         if callable(getattr(self, "search_batch", None)):
             return self._search_all_batched(
-                queries, k=k, batch_size=batch_size, show_progress=show_progress
+                queries,
+                k=k,
+                batch_size=batch_size,
+                show_progress=show_progress,
+                cache=cache,
             )
         return self._search_all_single(
-            queries, k=k, batch_size=batch_size, show_progress=show_progress
+            queries,
+            k=k,
+            batch_size=batch_size,
+            show_progress=show_progress,
+            cache=cache,
         )
 
-    def _search_all_single(self, queries, k=10, batch_size=100, show_progress=True):
-        all_top_ks = []
-        all_scores = []
-        all_queries = []
-        all_query_ids = []
-        all_ranks = []
+    def _cache_dir(self):
+        cache_key = getattr(self, "cache_key", None)
+        if not cache_key:
+            return None
+        base_dir = Path(ensure_data_subdir("search_cache"))
+        cache_dir = base_dir / str(cache_key)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    def _batch_cache_path(self, cache_dir, batch_index, batch):
+        if cache_dir is None:
+            return None
+        batch_signature = "|".join(
+            (
+                batch["query_id"].astype(str)
+                + ":"
+                + batch["query"].astype(str)
+            ).tolist()
+        )
+        batch_hash = md5(batch_signature.encode("utf-8")).hexdigest()
+        return cache_dir / f"batch_{batch_index}_{batch_hash}.pkl"
+
+    def _search_all_single(
+        self,
+        queries,
+        k=10,
+        batch_size=100,
+        show_progress=True,
+        cache=True,
+    ):
+        all_results = []
         total_queries = len(queries)
         if total_queries == 0:
             return pd.DataFrame()
@@ -39,6 +88,7 @@ class SearchStrategy:
         corpus_no_searcharray = self.corpus.drop(
             columns=search_array_cols, errors="ignore"
         )
+        cache_dir = self._cache_dir()
 
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             progress = tqdm(
@@ -47,42 +97,59 @@ class SearchStrategy:
                 disable=not show_progress,
             )
             try:
-                for start in range(0, total_queries, batch_size):
+                for batch_index, start in enumerate(
+                    range(0, total_queries, batch_size)
+                ):
                     batch = queries.iloc[start : start + batch_size]
+                    cache_path = self._batch_cache_path(cache_dir, batch_index, batch)
+                    if cache_path is not None and cache and cache_path.exists():
+                        all_results.append(pd.read_pickle(cache_path))
+                        progress.update(len(batch))
+                        continue
                     futures = {}
                     for _, query_row in batch.iterrows():
                         future = executor.submit(self.search, query_row["query"], k)
                         futures[future] = query_row
-
+                    batch_top_ks = []
+                    batch_scores = []
+                    batch_queries = []
+                    batch_query_ids = []
+                    batch_ranks = []
                     for future in as_completed(futures):
                         query_row = futures[future]
                         top_k, scores = future.result()
                         query_id = query_row["query_id"]
                         ranks = np.arange(len(top_k)) + 1
                         query = query_row["query"]
-                        all_top_ks.extend(list(top_k))
-                        all_scores.extend(list(scores))
-                        all_queries.extend([query] * len(top_k))
-                        all_query_ids.extend([query_id] * len(top_k))
-                        all_ranks.extend(list(ranks))
+                        batch_top_ks.extend(list(top_k))
+                        batch_scores.extend(list(scores))
+                        batch_queries.extend([query] * len(top_k))
+                        batch_query_ids.extend([query_id] * len(top_k))
+                        batch_ranks.extend(list(ranks))
                         progress.update(1)
 
+                    batch_results = corpus_no_searcharray.iloc[batch_top_ks].copy()
+                    batch_results["score"] = batch_scores
+                    batch_results["query"] = batch_queries
+                    batch_results["query_id"] = batch_query_ids
+                    batch_results["rank"] = batch_ranks
+                    if cache_path is not None:
+                        batch_results.to_pickle(cache_path)
+                    all_results.append(batch_results)
                     gc.collect()
             finally:
                 progress.close()
-        results = corpus_no_searcharray.iloc[all_top_ks].copy()
-        results["score"] = all_scores
-        results["query"] = all_queries
-        results["query_id"] = all_query_ids
-        results["rank"] = all_ranks
-        return results
+        return pd.concat(all_results) if all_results else pd.DataFrame()
 
-    def _search_all_batched(self, queries, k=10, batch_size=100, show_progress=True):
-        all_top_ks = []
-        all_scores = []
-        all_queries = []
-        all_query_ids = []
-        all_ranks = []
+    def _search_all_batched(
+        self,
+        queries,
+        k=10,
+        batch_size=100,
+        show_progress=True,
+        cache=True,
+    ):
+        all_results = []
         total_queries = len(queries)
         if total_queries == 0:
             return pd.DataFrame()
@@ -95,37 +162,53 @@ class SearchStrategy:
         corpus_no_searcharray = self.corpus.drop(
             columns=search_array_cols, errors="ignore"
         )
+        cache_dir = self._cache_dir()
         progress = tqdm(
             total=total_queries,
             desc="Searching",
             disable=not show_progress,
         )
         try:
-            for start in range(0, total_queries, batch_size):
+            for batch_index, start in enumerate(
+                range(0, total_queries, batch_size)
+            ):
                 batch = queries.iloc[start : start + batch_size]
+                cache_path = self._batch_cache_path(cache_dir, batch_index, batch)
+                if cache_path is not None and cache and cache_path.exists():
+                    all_results.append(pd.read_pickle(cache_path))
+                    progress.update(len(batch))
+                    continue
                 batch_queries = batch["query"].tolist()
                 batch_top_k, batch_scores = self.search_batch(batch_queries, k)
+                batch_top_ks = []
+                batch_scores_flat = []
+                batch_queries_flat = []
+                batch_query_ids = []
+                batch_ranks = []
                 for (_, query_row), top_k, scores in zip(
                     batch.iterrows(), batch_top_k, batch_scores
                 ):
                     query_id = query_row["query_id"]
                     ranks = np.arange(len(top_k)) + 1
                     query = query_row["query"]
-                    all_top_ks.extend(list(top_k))
-                    all_scores.extend(list(scores))
-                    all_queries.extend([query] * len(top_k))
-                    all_query_ids.extend([query_id] * len(top_k))
-                    all_ranks.extend(list(ranks))
+                    batch_top_ks.extend(list(top_k))
+                    batch_scores_flat.extend(list(scores))
+                    batch_queries_flat.extend([query] * len(top_k))
+                    batch_query_ids.extend([query_id] * len(top_k))
+                    batch_ranks.extend(list(ranks))
                     progress.update(1)
+                results = corpus_no_searcharray.iloc[batch_top_ks].copy()
+                results["score"] = batch_scores_flat
+                results["query"] = batch_queries_flat
+                results["query_id"] = batch_query_ids
+                results["rank"] = batch_ranks
+                if cache_path is not None:
+                    results.to_pickle(cache_path)
+                all_results.append(results)
                 gc.collect()
         finally:
             progress.close()
-        results = corpus_no_searcharray.iloc[all_top_ks].copy()
-        results["score"] = all_scores
-        results["query"] = all_queries
-        results["query_id"] = all_query_ids
-        results["rank"] = all_ranks
-        return results
+        return pd.concat(all_results) if all_results else pd.DataFrame()
 
     def search(self, query, k):
         # This method should be implemented by subclasses
