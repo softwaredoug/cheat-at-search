@@ -18,10 +18,23 @@ class SearchStrategy:
         return self._search_all_single(queries, k=k, batch_size=batch_size)
 
     def _search_all_single(self, queries, k=10, batch_size=100):
-        all_results = []
+        all_top_ks = []
+        all_scores = []
+        all_queries = []
+        all_query_ids = []
+        all_ranks = []
         total_queries = len(queries)
         if total_queries == 0:
-            return pd.concat(all_results)
+            return pd.DataFrame()
+
+        search_array_cols = [
+            col
+            for col in self.corpus.columns
+            if isinstance(self.corpus[col].array, SearchArray)
+        ]
+        corpus_no_searcharray = self.corpus.drop(
+            columns=search_array_cols, errors="ignore"
+        )
 
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             progress = tqdm(total=total_queries, desc="Searching")
@@ -38,66 +51,69 @@ class SearchStrategy:
                         top_k, scores = future.result()
                         query_id = query_row["query_id"]
                         ranks = np.arange(len(top_k)) + 1
-                        search_array_cols = [
-                            col
-                            for col in self.corpus.columns
-                            if isinstance(self.corpus[col].array, SearchArray)
-                        ]
-                        # Ensure we drop only SearchArray columns
-                        top_k_corpus = self.corpus.drop(
-                            columns=search_array_cols, errors="ignore"
-                        )
-                        top_k_corpus = top_k_corpus.iloc[top_k].copy()
-                        top_k_corpus["score"] = scores
-                        top_k_corpus["query"] = query_row["query"]
-                        top_k_corpus["query_id"] = query_id
-                        top_k_corpus["rank"] = ranks
-                        # Remove any columns where .array is SearchArray
-
-                        all_results.append(top_k_corpus)
+                        query = query_row["query"]
+                        all_top_ks.extend(list(top_k))
+                        all_scores.extend(list(scores))
+                        all_queries.extend([query] * len(top_k))
+                        all_query_ids.extend([query_id] * len(top_k))
+                        all_ranks.extend(list(ranks))
                         progress.update(1)
 
                     gc.collect()
             finally:
                 progress.close()
-        return pd.concat(all_results)
+        results = corpus_no_searcharray.iloc[all_top_ks].copy()
+        results["score"] = all_scores
+        results["query"] = all_queries
+        results["query_id"] = all_query_ids
+        results["rank"] = all_ranks
+        return results
 
     def _search_all_batched(self, queries, k=10, batch_size=100):
-        all_results = []
+        all_top_ks = []
+        all_scores = []
+        all_queries = []
+        all_query_ids = []
+        all_ranks = []
         total_queries = len(queries)
         if total_queries == 0:
-            return pd.concat(all_results)
+            return pd.DataFrame()
 
         search_array_cols = [
             col
             for col in self.corpus.columns
             if isinstance(self.corpus[col].array, SearchArray)
         ]
+        corpus_no_searcharray = self.corpus.drop(
+            columns=search_array_cols, errors="ignore"
+        )
         progress = tqdm(total=total_queries, desc="Searching")
         try:
             for start in range(0, total_queries, batch_size):
                 batch = queries.iloc[start : start + batch_size]
                 batch_queries = batch["query"].tolist()
-                all_top_k, all_scores = self.search_batch(batch_queries, k)
+                batch_top_k, batch_scores = self.search_batch(batch_queries, k)
                 for (_, query_row), top_k, scores in zip(
-                    batch.iterrows(), all_top_k, all_scores
+                    batch.iterrows(), batch_top_k, batch_scores
                 ):
                     query_id = query_row["query_id"]
                     ranks = np.arange(len(top_k)) + 1
-                    top_k_corpus = self.corpus.drop(
-                        columns=search_array_cols, errors="ignore"
-                    )
-                    top_k_corpus = top_k_corpus.iloc[top_k].copy()
-                    top_k_corpus["score"] = scores
-                    top_k_corpus["query"] = query_row["query"]
-                    top_k_corpus["query_id"] = query_id
-                    top_k_corpus["rank"] = ranks
-                    all_results.append(top_k_corpus)
+                    query = query_row["query"]
+                    all_top_ks.extend(list(top_k))
+                    all_scores.extend(list(scores))
+                    all_queries.extend([query] * len(top_k))
+                    all_query_ids.extend([query_id] * len(top_k))
+                    all_ranks.extend(list(ranks))
                     progress.update(1)
                 gc.collect()
         finally:
             progress.close()
-        return pd.concat(all_results)
+        results = corpus_no_searcharray.iloc[all_top_ks].copy()
+        results["score"] = all_scores
+        results["query"] = all_queries
+        results["query_id"] = all_query_ids
+        results["rank"] = all_ranks
+        return results
 
     def search(self, query, k):
         # This method should be implemented by subclasses
