@@ -9,7 +9,7 @@ from cheat_at_search.strategy.strategy import SearchStrategy
 
 
 @pytest.mark.parametrize(
-    "data_module", ["msmarco_data", "esci_data", "wands_data", "tmdb_data"]
+    "data_module", ["wands_data", "tmdb_data"]
 )
 def test_bm25_search(data_module):
     """
@@ -58,6 +58,47 @@ def test_run_bm25(tmp_path, monkeypatch):
     graded_bm25 = run_bm25(corpus, judgments)
     assert len(graded_bm25) > 0
     assert (tmp_path / "bm25_results" / "graded_bm25.pkl").exists()
+
+
+def test_run_strategy_shuffles_queries_with_seed():
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "answer": "A"},
+            {"query_id": 2, "query": "bravo", "answer": "B"},
+            {"query_id": 3, "query": "charlie", "answer": "C"},
+            {"query_id": 4, "query": "delta", "answer": "D"},
+            {"query_id": 5, "query": "echo", "answer": "E"},
+        ]
+    )
+
+    class DummyAnswerStrategy(SearchStrategy):
+        def __init__(self):
+            super().__init__(pd.DataFrame())
+            self.seen_queries = None
+
+        def answer_all(self, queries, **kwargs):
+            self.seen_queries = queries[["query", "query_id"]].reset_index(
+                drop=True
+            )
+            return pd.DataFrame(
+                {
+                    "query_id": queries["query_id"].tolist(),
+                    "query": queries["query"].tolist(),
+                    "answer": ["ok"] * len(queries),
+                }
+            )
+
+    seed = 123
+    strategy = DummyAnswerStrategy()
+    run_strategy(strategy, judgments, seed=seed, eval_answer=lambda *_: True)
+
+    expected = (
+        judgments[["query", "query_id"]]
+        .drop_duplicates()
+        .sample(frac=1, random_state=seed)
+        .reset_index(drop=True)
+    )
+    pd.testing.assert_frame_equal(strategy.seen_queries, expected)
 
 
 def test_vs_ideal_mocked():

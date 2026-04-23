@@ -37,8 +37,11 @@ def run_strategy(
             )
         judgments = judgments[judgments["query_id"].isin(available_queries["query_id"])]
 
+    if seed is not None:
+        available_queries = available_queries.sample(frac=1, random_state=seed)
+
     if num_queries:
-        available_queries = available_queries.sample(num_queries, random_state=seed)
+        available_queries = available_queries.head(num_queries)
         judgments = judgments[judgments["query_id"].isin(available_queries["query_id"])]
 
         if sub_sample_n:
