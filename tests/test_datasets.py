@@ -37,3 +37,9 @@ def test_common_imports(data_module):
                 )
     except ImportError as e:
         pytest.fail(f"Importing cheat_at_search.{data_module} raised ImportError: {e}")
+
+
+def test_bc_plus_judgments_include_answer():
+    module = importlib.import_module("cheat_at_search.bc_plus_data")
+    judgments = getattr(module, "judgments")
+    assert "answer" in judgments.columns

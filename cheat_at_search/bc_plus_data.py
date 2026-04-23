@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.logger import log_to_stdout
 
 
@@ -73,8 +74,23 @@ def _load_dataset(repo_id, split="test"):
         return _load_dataset_from_hub(repo_id)
 
 
-def _load_queries(split="test"):
-    ds = _load_dataset("Tevatron/browsecomp-plus", split=split)
+def _pick_split(ds, preferred="train"):
+    if isinstance(ds, (pd.DataFrame, pd.Series)):
+        return None
+    if hasattr(ds, "keys"):
+        if preferred in ds:
+            return preferred
+        if "test" in ds:
+            return "test"
+        return next(iter(ds.keys()))
+    return None
+
+
+def _load_queries(split="train"):
+    ds = _load_dataset("Tevatron/browsecomp-plus", split=None)
+    chosen_split = _pick_split(ds, preferred=split)
+    if chosen_split is not None:
+        ds = ds[chosen_split]
     skip_keys = {"query_id"}
     decrypted = []
     if isinstance(ds, pd.DataFrame):
@@ -142,7 +158,7 @@ def _load_corpus():
     elif isinstance(ds, pd.DataFrame):
         corpus = ds
     else:
-        split = "train" if "train" in ds else next(iter(ds.keys()))
+        split = _pick_split(ds, preferred="train")
         corpus = ds[split].to_pandas()
 
     if "doc_id" not in corpus.columns:
@@ -173,18 +189,40 @@ def __getattr__(name):
     if name in globals():
         return globals()[name]
     if name == "judgments" or name == "queries":
-        logger.info("Loading BrowseComp-Plus queries and judgments.")
-        queries_df = _load_queries()
-        judgments_df = _build_judgments(queries_df)
-        queries = queries_df[["query", "query_id"]].drop_duplicates().reset_index(
-            drop=True
-        )
+        cache_dir = Path(ensure_data_subdir("browsecomp_plus"))
+        queries_path = cache_dir / "queries.parquet"
+        judgments_path = cache_dir / "judgments.parquet"
+        if queries_path.exists() and judgments_path.exists():
+            queries = pd.read_parquet(queries_path)
+            judgments_df = pd.read_parquet(judgments_path)
+            if "answer" not in judgments_df.columns:
+                logger.info(
+                    "Cached BrowseComp-Plus judgments missing answer; rebuilding."
+                )
+                queries_df = _load_queries()
+                judgments_df = _build_judgments(queries_df)
+                judgments_df.to_parquet(judgments_path, index=False)
+        else:
+            logger.info("Loading BrowseComp-Plus queries and judgments.")
+            queries_df = _load_queries()
+            judgments_df = _build_judgments(queries_df)
+            queries = queries_df[["query", "query_id"]].drop_duplicates().reset_index(
+                drop=True
+            )
+            queries.to_parquet(queries_path, index=False)
+            judgments_df.to_parquet(judgments_path, index=False)
         globals()["queries"] = queries
         globals()["judgments"] = judgments_df
         return globals()[name]
     if name == "corpus":
-        logger.info("Loading BrowseComp-Plus corpus.")
-        corpus = _load_corpus()
+        cache_dir = Path(ensure_data_subdir("browsecomp_plus"))
+        corpus_path = cache_dir / "corpus.parquet"
+        if corpus_path.exists():
+            corpus = pd.read_parquet(corpus_path)
+        else:
+            logger.info("Loading BrowseComp-Plus corpus.")
+            corpus = _load_corpus()
+            corpus.to_parquet(corpus_path, index=False)
         globals()["corpus"] = corpus
         return globals()[name]
     raise AttributeError(f"Module {__name__} has no attribute {name}")
