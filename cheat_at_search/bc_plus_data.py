@@ -106,7 +106,7 @@ def _build_judgments(query_df):
             return value
         return list(value)
 
-    def _record(query_id, query, entry, grade):
+    def _record(query_id, query, answer, entry, grade):
         doc_id = _doc_id_from_entry(entry)
         if doc_id is None:
             return
@@ -116,6 +116,7 @@ def _build_judgments(query_df):
             judgments[key] = {
                 "query_id": query_id,
                 "query": query,
+                "answer": answer,
                 "doc_id": doc_id,
                 "grade": grade,
             }
@@ -123,12 +124,13 @@ def _build_judgments(query_df):
     for _, row in query_df.iterrows():
         query_id = row["query_id"]
         query = row["query"]
+        answer = row.get("answer")
         for entry in _doc_entries(row.get("negative_docs")):
-            _record(query_id, query, entry, grade=0)
+            _record(query_id, query, answer, entry, grade=0)
         for entry in _doc_entries(row.get("evidence_docs")):
-            _record(query_id, query, entry, grade=1)
+            _record(query_id, query, answer, entry, grade=1)
         for entry in _doc_entries(row.get("gold_docs")):
-            _record(query_id, query, entry, grade=2)
+            _record(query_id, query, answer, entry, grade=2)
 
     return pd.DataFrame(judgments.values())
 
