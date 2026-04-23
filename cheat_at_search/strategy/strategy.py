@@ -12,12 +12,16 @@ class SearchStrategy:
         self.top_k = top_k
         self.workers = workers
 
-    def search_all(self, queries, k=10, batch_size=100):
+    def search_all(self, queries, k=10, batch_size=100, show_progress=True):
         if callable(getattr(self, "search_batch", None)):
-            return self._search_all_batched(queries, k=k, batch_size=batch_size)
-        return self._search_all_single(queries, k=k, batch_size=batch_size)
+            return self._search_all_batched(
+                queries, k=k, batch_size=batch_size, show_progress=show_progress
+            )
+        return self._search_all_single(
+            queries, k=k, batch_size=batch_size, show_progress=show_progress
+        )
 
-    def _search_all_single(self, queries, k=10, batch_size=100):
+    def _search_all_single(self, queries, k=10, batch_size=100, show_progress=True):
         all_top_ks = []
         all_scores = []
         all_queries = []
@@ -37,7 +41,11 @@ class SearchStrategy:
         )
 
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            progress = tqdm(total=total_queries, desc="Searching")
+            progress = tqdm(
+                total=total_queries,
+                desc="Searching",
+                disable=not show_progress,
+            )
             try:
                 for start in range(0, total_queries, batch_size):
                     batch = queries.iloc[start : start + batch_size]
@@ -69,7 +77,7 @@ class SearchStrategy:
         results["rank"] = all_ranks
         return results
 
-    def _search_all_batched(self, queries, k=10, batch_size=100):
+    def _search_all_batched(self, queries, k=10, batch_size=100, show_progress=True):
         all_top_ks = []
         all_scores = []
         all_queries = []
@@ -87,7 +95,11 @@ class SearchStrategy:
         corpus_no_searcharray = self.corpus.drop(
             columns=search_array_cols, errors="ignore"
         )
-        progress = tqdm(total=total_queries, desc="Searching")
+        progress = tqdm(
+            total=total_queries,
+            desc="Searching",
+            disable=not show_progress,
+        )
         try:
             for start in range(0, total_queries, batch_size):
                 batch = queries.iloc[start : start + batch_size]

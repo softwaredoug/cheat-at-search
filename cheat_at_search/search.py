@@ -21,6 +21,7 @@ def run_strategy(
     seed=42,
     sub_sample_n=None,
     sub_sample_seed=42,
+    show_progress=True,
 ):
     available_queries = judgments[["query", "query_id"]].drop_duplicates()
     max_grade = judgments["grade"].max()
@@ -51,7 +52,7 @@ def run_strategy(
                 judgments["query_id"].isin(available_queries["query_id"])
             ]
 
-    results = strategy.search_all(available_queries)
+    results = strategy.search_all(available_queries, show_progress=show_progress)
     graded = grade_results(
         judgments,
         results,
