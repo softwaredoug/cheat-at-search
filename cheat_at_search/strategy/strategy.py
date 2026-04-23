@@ -45,6 +45,65 @@ class SearchStrategy:
             cache=cache,
         )
 
+    def answer_all(
+        self,
+        queries,
+        batch_size=100,
+        show_progress=True,
+        cache=True,
+    ):
+        all_results = []
+        total_queries = len(queries)
+        if total_queries == 0:
+            return pd.DataFrame()
+
+        cache_dir = self._cache_dir()
+        with ThreadPoolExecutor(max_workers=self.workers) as executor:
+            progress = tqdm(
+                total=total_queries,
+                desc="Answering",
+                disable=not show_progress,
+            )
+            try:
+                for batch_index, start in enumerate(
+                    range(0, total_queries, batch_size)
+                ):
+                    batch = queries.iloc[start : start + batch_size]
+                    cache_path = self._batch_cache_path(cache_dir, batch_index, batch)
+                    if cache_path is not None and cache and cache_path.exists():
+                        all_results.append(pd.read_pickle(cache_path))
+                        progress.update(len(batch))
+                        continue
+                    futures = {}
+                    for _, query_row in batch.iterrows():
+                        future = executor.submit(self.answer, query_row["query"])
+                        futures[future] = query_row
+                    batch_answers = []
+                    batch_queries = []
+                    batch_query_ids = []
+                    for future in as_completed(futures):
+                        query_row = futures[future]
+                        answer = future.result()
+                        batch_answers.append(answer)
+                        batch_queries.append(query_row["query"])
+                        batch_query_ids.append(query_row["query_id"])
+                        progress.update(1)
+
+                    batch_results = pd.DataFrame(
+                        {
+                            "query_id": batch_query_ids,
+                            "query": batch_queries,
+                            "answer": batch_answers,
+                        }
+                    )
+                    if cache_path is not None:
+                        batch_results.to_pickle(cache_path)
+                    all_results.append(batch_results)
+                    gc.collect()
+            finally:
+                progress.close()
+        return pd.concat(all_results) if all_results else pd.DataFrame()
+
     def _cache_dir(self):
         cache_key = getattr(self, "cache_key", None)
         if not cache_key:
@@ -211,5 +270,9 @@ class SearchStrategy:
         return pd.concat(all_results) if all_results else pd.DataFrame()
 
     def search(self, query, k):
+        # This method should be implemented by subclasses
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    def answer(self, question):
         # This method should be implemented by subclasses
         raise NotImplementedError("Subclasses should implement this method.")

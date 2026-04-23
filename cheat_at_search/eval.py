@@ -35,6 +35,24 @@ def grade_results(
     return graded_results
 
 
+def eval_answer(answer_expected, answer_actual) -> bool:
+    expected = "" if answer_expected is None else str(answer_expected)
+    actual = "" if answer_actual is None else str(answer_actual)
+    return expected.strip().lower() == actual.strip().lower()
+
+
+def grade_answers(answer_expected, answer_actual, eval_answer_fn):
+    if isinstance(answer_expected, pd.Series):
+        return pd.Series(
+            [
+                eval_answer_fn(expected, actual)
+                for expected, actual in zip(answer_expected, answer_actual)
+            ],
+            index=answer_expected.index,
+        )
+    return eval_answer_fn(answer_expected, answer_actual)
+
+
 def reciprocal_rank(graded_results: pd.DataFrame, max_grade: int) -> pd.DataFrame:
     """Compute reciprocal rank per query for the max grade."""
     if graded_results.empty:
