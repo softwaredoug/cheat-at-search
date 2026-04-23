@@ -8,6 +8,7 @@ import importlib
         "msmarco_data",
         "minimarco_data",
         "esci_data",
+        "bc_plus_data",
         "wands_data",
         "tmdb_data",
         "doug_blog_data",
