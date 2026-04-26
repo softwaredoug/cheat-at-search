@@ -169,34 +169,25 @@ class SearchStrategy:
                     for _, query_row in batch.iterrows():
                         future = executor.submit(self.search, query_row["query"], k)
                         futures[future] = query_row
-                    batch_top_ks = []
-                    batch_scores = []
-                    batch_queries = []
-                    batch_query_ids = []
-                    batch_ranks = []
+                    batch_results = SearchResultBatch()
                     for future in as_completed(futures):
                         query_row = futures[future]
                         top_k, scores = future.result()
                         if len(top_k) == 0:
-                            query = query_row["query"]
-                            raise ValueError(
-                                f"Search strategy returned no results for query: {query}"
-                            )
+                            top_k = [-1]
+                            scores = [0]
                         query_id = query_row["query_id"]
                         ranks = np.arange(len(top_k)) + 1
                         query = query_row["query"]
-                        batch_top_ks.extend(list(top_k))
-                        batch_scores.extend(list(scores))
-                        batch_queries.extend([query] * len(top_k))
-                        batch_query_ids.extend([query_id] * len(top_k))
-                        batch_ranks.extend(list(ranks))
+                        batch_results.append(
+                            list(top_k),
+                            list(scores),
+                            [query] * len(top_k),
+                            [query_id] * len(top_k),
+                            list(ranks),
+                        )
                         progress.update(1)
-
-                    batch_results = corpus_no_searcharray.iloc[batch_top_ks].copy()
-                    batch_results["score"] = batch_scores
-                    batch_results["query"] = batch_queries
-                    batch_results["query_id"] = batch_query_ids
-                    batch_results["rank"] = batch_ranks
+                    batch_results = batch_results.to_df(corpus_no_searcharray)
                     if cache_path is not None:
                         batch_results.to_pickle(cache_path)
                     all_results.append(batch_results)
@@ -244,33 +235,25 @@ class SearchStrategy:
                     continue
                 batch_queries = batch["query"].tolist()
                 batch_top_k, batch_scores = self.search_batch(batch_queries, k)
-                batch_top_ks = []
-                batch_scores_flat = []
-                batch_queries_flat = []
-                batch_query_ids = []
-                batch_ranks = []
+                batch_results = SearchResultBatch()
                 for (_, query_row), top_k, scores in zip(
                     batch.iterrows(), batch_top_k, batch_scores
                 ):
                     if len(top_k) == 0:
-                        query = query_row["query"]
-                        raise ValueError(
-                            f"Search strategy returned no results for query: {query}"
-                        )
+                        top_k = [-1]
+                        scores = [0]
                     query_id = query_row["query_id"]
                     ranks = np.arange(len(top_k)) + 1
                     query = query_row["query"]
-                    batch_top_ks.extend(list(top_k))
-                    batch_scores_flat.extend(list(scores))
-                    batch_queries_flat.extend([query] * len(top_k))
-                    batch_query_ids.extend([query_id] * len(top_k))
-                    batch_ranks.extend(list(ranks))
+                    batch_results.append(
+                        list(top_k),
+                        list(scores),
+                        [query] * len(top_k),
+                        [query_id] * len(top_k),
+                        list(ranks),
+                    )
                     progress.update(1)
-                results = corpus_no_searcharray.iloc[batch_top_ks].copy()
-                results["score"] = batch_scores_flat
-                results["query"] = batch_queries_flat
-                results["query_id"] = batch_query_ids
-                results["rank"] = batch_ranks
+                results = batch_results.to_df(corpus_no_searcharray)
                 if cache_path is not None:
                     results.to_pickle(cache_path)
                 all_results.append(results)
@@ -286,3 +269,36 @@ class SearchStrategy:
     def answer(self, question):
         # This method should be implemented by subclasses
         raise NotImplementedError("Subclasses should implement this method.")
+
+
+class SearchResultBatch:
+    def __init__(self):
+        self.top_ks = []
+        self.scores = []
+        self.queries = []
+        self.query_ids = []
+        self.ranks = []
+
+    def append(self, top_ks, scores, queries, query_ids, ranks):
+        self.top_ks.extend(top_ks)
+        self.scores.extend(scores)
+        self.queries.extend(queries)
+        self.query_ids.extend(query_ids)
+        self.ranks.extend(ranks)
+
+    def to_df(self, corpus):
+        rows = []
+        for idx in self.top_ks:
+            if idx == -1:
+                row = {col: None for col in corpus.columns}
+                if "doc_id" in row:
+                    row["doc_id"] = -1
+                rows.append(row)
+            else:
+                rows.append(corpus.iloc[idx].to_dict())
+        results = pd.DataFrame(rows)
+        results["score"] = self.scores
+        results["query"] = self.queries
+        results["query_id"] = self.query_ids
+        results["rank"] = self.ranks
+        return results

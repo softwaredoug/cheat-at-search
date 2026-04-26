@@ -274,7 +274,7 @@ def test_search_all_uses_search_batch():
         assert subset["score"].tolist() == expected_scores
 
 
-def test_search_all_raises_on_empty_results():
+def test_search_all_fills_empty_results():
     corpus = pd.DataFrame(
         [
             {"doc_id": 10, "title": "alpha"},
@@ -297,8 +297,11 @@ def test_search_all_raises_on_empty_results():
 
     strategy = EmptyResultStrategy(corpus)
 
-    with pytest.raises(ValueError, match="no results"):
-        strategy.search_all(queries, k=2)
+    results = strategy.search_all(queries, k=2)
+
+    assert results["doc_id"].tolist() == [-1, -1]
+    assert results["score"].tolist() == [0, 0]
+    assert results["rank"].tolist() == [1, 1]
 
 
 def test_search_all_accepts_numpy_results():
@@ -328,7 +331,7 @@ def test_search_all_accepts_numpy_results():
     assert len(results) == 1
 
 
-def test_search_all_batched_raises_on_empty_results():
+def test_search_all_batched_fills_empty_results():
     corpus = pd.DataFrame(
         [
             {"doc_id": 10, "title": "alpha"},
@@ -351,5 +354,35 @@ def test_search_all_batched_raises_on_empty_results():
 
     strategy = EmptyBatchStrategy(corpus)
 
-    with pytest.raises(ValueError, match="no results"):
-        strategy.search_all(queries, k=2)
+    results = strategy.search_all(queries, k=2)
+
+    assert results["doc_id"].tolist() == [-1, 10]
+    assert results["score"].tolist() == [0, 1.0]
+    assert results["rank"].tolist() == [1, 1]
+
+
+def test_run_strategy_empty_results_zero_metrics():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha", "description": "alpha"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+        ]
+    )
+
+    class EmptyResultStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search(self, query, k=10):
+            return [], []
+
+    strategy = EmptyResultStrategy(corpus)
+
+    graded = run_strategy(strategy, judgments, seed=None)
+
+    assert graded["ndcg"].tolist() == [0]
+    assert graded["mrr"].tolist() == [0]
