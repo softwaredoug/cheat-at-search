@@ -177,7 +177,7 @@ class SearchStrategy:
                     for future in as_completed(futures):
                         query_row = futures[future]
                         top_k, scores = future.result()
-                        if not top_k:
+                        if len(top_k) == 0:
                             query = query_row["query"]
                             raise ValueError(
                                 f"Search strategy returned no results for query: {query}"
@@ -252,7 +252,7 @@ class SearchStrategy:
                 for (_, query_row), top_k, scores in zip(
                     batch.iterrows(), batch_top_k, batch_scores
                 ):
-                    if not top_k:
+                    if len(top_k) == 0:
                         query = query_row["query"]
                         raise ValueError(
                             f"Search strategy returned no results for query: {query}"

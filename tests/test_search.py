@@ -1,5 +1,6 @@
 import importlib
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -298,6 +299,33 @@ def test_search_all_raises_on_empty_results():
 
     with pytest.raises(ValueError, match="no results"):
         strategy.search_all(queries, k=2)
+
+
+def test_search_all_accepts_numpy_results():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    queries = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha"},
+        ]
+    )
+
+    class NumpyResultStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search(self, query, k=10):
+            return np.array([0]), np.array([1.0])
+
+    strategy = NumpyResultStrategy(corpus)
+
+    results = strategy.search_all(queries, k=1)
+
+    assert len(results) == 1
 
 
 def test_search_all_batched_raises_on_empty_results():
