@@ -432,9 +432,9 @@ Reranker code with NDCG {ndcg}:
         codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
                                                  search_fn=search_esci,
                                                  code=code)
-        results_codegen, _ = run_strategy(codegen_strategy, judgments,
-                                          num_queries=num_test_queries,
-                                          seed=test_seed)
+        results_codegen = run_strategy(codegen_strategy, judgments,
+                                       num_queries=num_test_queries,
+                                       seed=test_seed)
         ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
     except Exception as e:
         print("Error running codegen strategy:", e)
@@ -457,9 +457,9 @@ if __name__ == "__main__":
     logger.info(f"Using temporary code directory: {code_dir}")
 
     bm25 = BM25Search(corpus)
-    graded_bm25, _ = run_strategy(bm25, judgments,
-                                  num_queries=num_test_queries,
-                                  seed=test_seed)
+    graded_bm25 = run_strategy(bm25, judgments,
+                               num_queries=num_test_queries,
+                               seed=test_seed)
     bm25_ndcg = graded_bm25.groupby('query')['ndcg'].mean().mean()
     print(f"Baseline NDCG: {bm25_ndcg}")
     # best = BestPossibleResults(corpus, judgments)
@@ -474,9 +474,9 @@ if __name__ == "__main__":
     codegen_strategy = CodeGenSearchStrategy(corpus, workers=4,
                                              search_fn=search_esci,
                                              code=start_code)
-    results_codegen, _ = run_strategy(codegen_strategy, judgments,
-                                      num_queries=num_test_queries,
-                                      seed=test_seed)
+    results_codegen = run_strategy(codegen_strategy, judgments,
+                                   num_queries=num_test_queries,
+                                   seed=test_seed)
     ndcg = results_codegen.groupby('query')['ndcg'].mean().mean()
     start_code_ndcg = ndcg
     print(f"Starting Code NDCG: {start_code_ndcg}")

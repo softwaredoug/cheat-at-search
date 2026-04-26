@@ -56,8 +56,6 @@ def run_strategy(
                 judgments["query_id"].isin(available_queries["query_id"])
             ]
 
-    available_query_strings = available_queries["query"].tolist()
-
     if eval_answer is not None:
         if "answer" not in judgments.columns:
             raise ValueError(
@@ -70,7 +68,7 @@ def run_strategy(
             show_progress,
             cache,
             eval_answer,
-        ), available_query_strings
+        )
 
     return _run_search_path(
         strategy,
@@ -78,7 +76,7 @@ def run_strategy(
         available_queries,
         show_progress,
         cache,
-    ), available_query_strings
+    )
 
 
 def _run_search_path(strategy, judgments, available_queries, show_progress, cache):
@@ -151,26 +149,20 @@ def _run_answer_path(
     ]
 
 
-def ndcgs(graded, queries: list[str]):
-    if queries is None:
-        raise ValueError("queries list is required for ndcgs")
-    ndcgs_by_query = graded.groupby("query")["ndcg"].mean()
-    return ndcgs_by_query.reindex(queries).fillna(0)
+def ndcgs(graded):
+    return graded.groupby("query")["ndcg"].mean().sort_values(ascending=False)
 
 
-def mrrs(graded, queries: list[str]):
-    if queries is None:
-        raise ValueError("queries list is required for mrrs")
-    mrrs_by_query = graded.groupby("query")["mrr"].mean()
-    return mrrs_by_query.reindex(queries).fillna(0)
+def mrrs(graded):
+    return graded.groupby("query")["mrr"].mean().sort_values(ascending=False)
 
 
-def ndcg_delta(variant_graded, baseline_graded, queries: list[str]):
-    variant_ndcgs = ndcgs(variant_graded, queries)
-    baseline_ndcgs = ndcgs(baseline_graded, queries)
+def ndcg_delta(variant_graded, baseline_graded):
+    variant_ndcgs = ndcgs(variant_graded)
+    baseline_ndcgs = ndcgs(baseline_graded)
     delta = variant_ndcgs - baseline_ndcgs
     delta = delta[delta != 0]
-    return delta
+    return delta.sort_values(ascending=False)
 
 
 def run_bm25(corpus, judgments):
@@ -186,7 +178,7 @@ def run_bm25(corpus, judgments):
         logger.warning("BM25 results not found, running BM25 search strategy.")
         bm25_results_path = ensure_data_subdir("bm25_results")
         bm25 = BM25Search(corpus)
-        graded_bm25, _ = run_strategy(bm25, judgments)
+        graded_bm25 = run_strategy(bm25, judgments)
         graded_bm25.to_pickle(bm25_results_path / "graded_bm25.pkl")
         return graded_bm25
 

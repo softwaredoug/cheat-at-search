@@ -3,7 +3,7 @@ import importlib
 import pandas as pd
 import pytest
 
-from cheat_at_search.search import graded_bm25, mrrs, ndcgs, run_bm25, run_strategy, vs_ideal
+from cheat_at_search.search import graded_bm25, run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy import BM25Search
 from cheat_at_search.strategy.strategy import SearchStrategy
 
@@ -20,7 +20,7 @@ def test_bm25_search(data_module):
     corpus = getattr(module, "corpus")
     judgments = getattr(module, "judgments")
     strategy = BM25Search(corpus)
-    graded_results, _ = run_strategy(strategy, judgments, num_queries=num_queries)
+    graded_results = run_strategy(strategy, judgments, num_queries=num_queries)
     return graded_results
 
 
@@ -101,37 +101,6 @@ def test_run_strategy_shuffles_queries_with_seed():
     pd.testing.assert_frame_equal(strategy.seen_queries, expected)
 
 
-def test_run_strategy_returns_available_queries():
-    corpus = pd.DataFrame(
-        [
-            {"doc_id": 1, "title": "alpha", "description": "alpha"},
-            {"doc_id": 2, "title": "bravo", "description": "bravo"},
-        ]
-    )
-    judgments = pd.DataFrame(
-        [
-            {"query_id": 1, "query": "alpha", "doc_id": 1, "grade": 2},
-            {"query_id": 2, "query": "bravo", "doc_id": 2, "grade": 2},
-            {"query_id": 3, "query": "charlie", "doc_id": 1, "grade": 2},
-        ]
-    )
-
-    class DummyStrategy(SearchStrategy):
-        def __init__(self, corpus):
-            super().__init__(corpus)
-
-        def search(self, query, k=10):
-            return [0], [1.0]
-
-    strategy = DummyStrategy(corpus)
-    graded, available_queries = run_strategy(
-        strategy, judgments, queries=["alpha", "charlie"], seed=None
-    )
-
-    assert graded["query"].isin(["alpha", "charlie"]).all()
-    assert available_queries == ["alpha", "charlie"]
-
-
 def test_vs_ideal_mocked():
     graded_results = pd.DataFrame(
         [
@@ -200,7 +169,7 @@ def test_vs_ideal_wands():
     corpus = wands_data.corpus
     judgments = wands_data.judgments
     strategy = BM25Search(corpus)
-    graded_results, _ = run_strategy(strategy, judgments, num_queries=2, seed=123)
+    graded_results = run_strategy(strategy, judgments, num_queries=2, seed=123)
 
     comparison = vs_ideal(graded_results, judgments, corpus=corpus)
     assert list(comparison.columns) == [
@@ -304,18 +273,55 @@ def test_search_all_uses_search_batch():
         assert subset["score"].tolist() == expected_scores
 
 
-def test_ndcgs_mrrs_include_missing_queries():
-    graded = pd.DataFrame(
+def test_search_all_raises_on_empty_results():
+    corpus = pd.DataFrame(
         [
-            {"query": "alpha", "ndcg": 0.5, "mrr": 1.0},
-            {"query": "alpha", "ndcg": 0.5, "mrr": 0.5},
-            {"query": "bravo", "ndcg": 1.0, "mrr": 0.25},
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
         ]
     )
-    queries = ["alpha", "bravo", "charlie"]
+    queries = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha"},
+            {"query_id": 2, "query": "beta"},
+        ]
+    )
 
-    ndcg_scores = ndcgs(graded, queries)
-    mrr_scores = mrrs(graded, queries)
+    class EmptyResultStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
 
-    assert ndcg_scores.tolist() == [0.5, 1.0, 0.0]
-    assert mrr_scores.tolist() == [0.75, 0.25, 0.0]
+        def search(self, query, k=10):
+            return [], []
+
+    strategy = EmptyResultStrategy(corpus)
+
+    with pytest.raises(ValueError, match="no results"):
+        strategy.search_all(queries, k=2)
+
+
+def test_search_all_batched_raises_on_empty_results():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    queries = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha"},
+            {"query_id": 2, "query": "beta"},
+        ]
+    )
+
+    class EmptyBatchStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search_batch(self, queries, k=10):
+            return [[], [0]], [[], [1.0]]
+
+    strategy = EmptyBatchStrategy(corpus)
+
+    with pytest.raises(ValueError, match="no results"):
+        strategy.search_all(queries, k=2)

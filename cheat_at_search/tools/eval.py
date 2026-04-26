@@ -109,8 +109,8 @@ def make_eval_fn(corpus, judgments, code_dir: str, search_fn,
         codegen_strategy = CodeGenSearchStrategy(corpus, workers=workers,
                                                  code=code,
                                                  search_fn=search_fn)
-        results_codegen, _ = run_strategy(codegen_strategy, judgments, num_queries=num_queries,
-                                          seed=seed)
+        results_codegen = run_strategy(codegen_strategy, judgments, num_queries=num_queries,
+                                       seed=seed)
         ndcgs = results_codegen.groupby('query')['ndcg'].mean()
         result: List[QueryEvalResult] = []
         for query, ndcg in ndcgs.items():
@@ -200,8 +200,8 @@ def make_eval_guardrail(corpus, judgments, search_fn, seed=1234, num_queries=100
                                          search_fn=search_fn,
                                          code=code,
                                          workers=workers)
-        results, _ = run_strategy(strategy, judgments, num_queries=num_queries,
-                                  seed=seed)
+        results = run_strategy(strategy, judgments, num_queries=num_queries,
+                               seed=seed)
         ndcgs = results.groupby('query')['ndcg'].mean()
         return ndcgs
     return eval_guardrail
