@@ -355,7 +355,7 @@ def agent_search_wands(
 
         # Get best possible
         best_possible = BestPossibleResults(enriched_products, judgments)
-        graded_best_possible = run_strategy(
+        graded_best_possible, _ = run_strategy(
             best_possible, judgments, num_queries=num_queries, seed=curr_seed
         )
         best_possible_ndcg = graded_best_possible["ndcg"].mean()
@@ -363,7 +363,7 @@ def agent_search_wands(
 
         # Run BM25 baseline
         bm25 = BM25Search(enriched_products)
-        graded_bm25 = run_strategy(
+        graded_bm25, _ = run_strategy(
             bm25, judgments, num_queries=num_queries, seed=curr_seed
         )
         bm25_ndcg = graded_bm25["ndcg"].mean()
@@ -395,7 +395,7 @@ def agent_search_wands(
         ndcgs = []
         for iter in range(iterations):
             print(f"--- Iteration {iter + 1} of {iterations} ---")
-            graded_results = run_strategy(
+            graded_results, _ = run_strategy(
                 strategy, judgments, num_queries=num_queries, seed=curr_seed
             )
             ndcg = graded_results["ndcg"].mean()
@@ -566,7 +566,7 @@ def main(argv=None):
         strategy = PostAgentStrategy(
             enriched_products, search_tool, search_tool_supports_category
         )
-        graded_results = run_strategy(strategy, wands_queries[:20])
+        graded_results, _ = run_strategy(strategy, wands_queries[:20])
         ndcg = graded_results["ndcg"].mean()
         print(f"Overall NDCG: {ndcg}")
     if args.prompt == "search_hist_no_judgments":

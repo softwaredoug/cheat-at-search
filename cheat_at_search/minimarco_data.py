@@ -1,6 +1,5 @@
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search import msmarco_data
-from cheat_at_search.tokenizers import snowball_tokenizer
 import pandas as pd
 
 
@@ -11,49 +10,20 @@ def _docs():
     msmarco_data.download_msmarco()
     collection_path = msmarco_data.msmarco_path / "collection.tsv"
     passages = pd.read_csv(collection_path, sep="\t", names=["doc_id", "description"])
-
-    judgments = globals().get("judgments")
-    if judgments is None:
-        judgments = _qrels()
-        globals()["judgments"] = judgments
-
-    required_doc_ids = set(judgments.loc[judgments["grade"] > 0, "doc_id"].tolist())
-    query_rows = judgments[["query_id", "query"]].drop_duplicates().reset_index(drop=True)
-    for _, row in query_rows.iterrows():
-        terms = snowball_tokenizer(row["query"])
-        for term in terms:
-            with_term = passages[
-                passages["description"].str.contains(term, case=False, regex=False, na=False)
-            ]
-            if with_term.empty:
-                continue
-            sample_size = min(100, len(with_term))
-            sampled = with_term.sample(n=sample_size, random_state=42)
-            required_doc_ids.update(sampled["doc_id"].tolist())
-
-    required_docs = passages[passages["doc_id"].isin(required_doc_ids)]
-    remaining = passages[~passages["doc_id"].isin(required_doc_ids)]
-    remaining_needed = 300_000 - len(required_docs)
-    if remaining_needed <= 0:
-        corpus = required_docs.sample(n=300_000, random_state=42).reset_index(drop=True)
-    else:
-        remaining_sample = remaining.sample(
-            n=min(remaining_needed, len(remaining)), random_state=42
-        )
-        corpus = pd.concat([required_docs, remaining_sample], ignore_index=True)
-
-    corpus["title"] = ""
-    return corpus
+    sample_size = min(len(passages), 650_000)
+    passages = passages.sample(n=sample_size, random_state=42).reset_index(drop=True)
+    passages["title"] = ""
+    return passages
 
 
 def _qrels(variant="dev"):
     qrels = msmarco_data._qrels(variant)
-    qrels = qrels[qrels["grade"] > 0].reset_index(drop=True)
-    queries = qrels[["query_id", "query"]].drop_duplicates().reset_index(drop=True)
-    sample_size = min(len(queries), 500)
-    sampled_queries = queries.sample(n=sample_size, random_state=42)
-    qrels = qrels[qrels["query_id"].isin(sampled_queries["query_id"])].reset_index(drop=True)
-    return qrels
+    corpus = globals().get("corpus")
+    if corpus is None:
+        corpus = _docs()
+        globals()["corpus"] = corpus
+    corpus_doc_ids = set(corpus["doc_id"].tolist())
+    return qrels[qrels["doc_id"].isin(corpus_doc_ids)].reset_index(drop=True)
 
 
 def __getattr__(name):
