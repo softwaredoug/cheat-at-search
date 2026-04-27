@@ -101,5 +101,5 @@ class Agent(ABC):
     """Use an MCP server to search for products"""
 
     @abstractmethod
-    def loop(self, prompt: str) -> SearchResults | DetailedSearchResults:
+    def loop(self, inputs=None) -> SearchResults | DetailedSearchResults:
         pass

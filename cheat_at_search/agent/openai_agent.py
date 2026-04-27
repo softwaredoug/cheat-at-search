@@ -150,14 +150,11 @@ class OpenAIAgent(Agent):
             logger.error("Error calling MCP search tool:", e)
             raise e
 
-    def loop(self, prompt: str = None, return_usage=False) -> SearchResults:
+    def loop(self, inputs=None, return_usage=False) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, (
             "response_model must be set for structured search results."
         )
-        inputs = None
-        if prompt is not None:
-            inputs = [{"role": "user", "content": prompt}]
         resp, _, total_tokens = self.chat(inputs=inputs)
         self.last_usage = resp.usage
         if return_usage:

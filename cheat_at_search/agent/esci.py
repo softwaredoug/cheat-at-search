@@ -415,7 +415,7 @@ Reranker code with NDCG {ndcg}:
                                 system_prompt=prompt,
                                 max_tokens=1_100_000,
                                 response_model=FinalMessage)
-    resp: FinalMessage = search_client.loop()
+    resp: FinalMessage = search_client.loop(inputs=None)
 
     if resp is None:
         resp = FinalMessage(message="No response from agent.", lessons=[])
