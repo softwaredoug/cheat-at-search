@@ -6,6 +6,8 @@ import pandas as pd
 from lxml.etree import ParserError
 from lxml import html
 
+from cheat_at_search.indexing import load_or_build_lexical_corpus
+
 
 logger = log_to_stdout("esci_data")
 
@@ -83,6 +85,7 @@ def __getattr__(name):
         return globals()[name]
     elif name == "corpus":
         ds = _docs()
+        ds = load_or_build_lexical_corpus(ds, "esci")
         globals()["corpus"] = ds
         return globals()[name]
     else:

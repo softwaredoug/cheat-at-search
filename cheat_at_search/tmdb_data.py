@@ -4,6 +4,8 @@ from pathlib import Path
 import tarfile
 import pandas as pd
 
+from cheat_at_search.indexing import load_or_build_lexical_corpus
+
 tmdb_path = Path(DATA_PATH) / "tmdb"
 
 logger = log_to_stdout("tmdb_data")
@@ -75,6 +77,7 @@ def __getattr__(name):
         return globals()[name]
     elif name == "corpus":
         ds = _corpus()
+        ds = load_or_build_lexical_corpus(ds, "tmdb")
         globals()["corpus"] = ds
         return globals()[name]
     elif name == "queries":

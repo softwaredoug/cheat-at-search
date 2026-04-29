@@ -3,6 +3,8 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import sys
+
+from cheat_at_search.indexing import load_or_build_lexical_corpus
 from cheat_at_search.data_dir import DATA_PATH, sync_git_repo
 
 
@@ -306,8 +308,10 @@ def __getattr__(name):
         ds = _queries()
     elif name == "corpus":
         ds = _corpus()
+        ds = load_or_build_lexical_corpus(ds, "wands")
     elif name == "products":
         ds = _corpus()
+        ds = load_or_build_lexical_corpus(ds, "wands")
     elif name == "enriched_products":
         ds = _enriched_products()
     elif name == "enriched_queries":

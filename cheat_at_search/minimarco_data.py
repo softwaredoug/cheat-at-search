@@ -2,6 +2,8 @@ from cheat_at_search.logger import log_to_stdout
 from cheat_at_search import msmarco_data
 import pandas as pd
 
+from cheat_at_search.indexing import load_or_build_lexical_corpus
+
 
 logger = log_to_stdout("minimarco_data")
 
@@ -21,6 +23,7 @@ def _qrels(variant="dev"):
     corpus = globals().get("corpus")
     if corpus is None:
         corpus = _docs()
+        corpus = load_or_build_lexical_corpus(corpus, "minimarco")
         globals()["corpus"] = corpus
     corpus_doc_ids = set(corpus["doc_id"].tolist())
     return qrels[qrels["doc_id"].isin(corpus_doc_ids)].reset_index(drop=True)
@@ -39,6 +42,7 @@ def __getattr__(name):
         return globals()[name]
     elif name == "corpus":
         ds = _docs()
+        ds = load_or_build_lexical_corpus(ds, "minimarco")
         globals()["corpus"] = ds
         return globals()[name]
     else:

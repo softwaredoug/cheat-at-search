@@ -4,6 +4,8 @@ from pathlib import Path
 import tarfile
 import pandas as pd
 
+from cheat_at_search.indexing import load_or_build_lexical_corpus
+
 
 msmarco_path = Path(ensure_data_subdir("msmarco"))
 
@@ -67,6 +69,7 @@ def __getattr__(name):
         return globals()[name]
     elif name == "corpus":
         ds = _docs()
+        ds = load_or_build_lexical_corpus(ds, "msmarco")
         globals()["corpus"] = ds
         return globals()[name]
     else:

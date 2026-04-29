@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from cheat_at_search.data_dir import ensure_data_subdir
+from cheat_at_search.indexing import load_or_build_lexical_corpus
 from cheat_at_search.logger import log_to_stdout
 
 
@@ -223,6 +224,7 @@ def __getattr__(name):
             logger.info("Loading BrowseComp-Plus corpus.")
             corpus = _load_corpus()
             corpus.to_parquet(corpus_path, index=False)
+        corpus = load_or_build_lexical_corpus(corpus, "browsecomp_plus")
         globals()["corpus"] = corpus
         return globals()[name]
     raise AttributeError(f"Module {__name__} has no attribute {name}")

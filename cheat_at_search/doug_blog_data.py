@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from cheat_at_search.data_dir import get_project_root
+from cheat_at_search.indexing import load_or_build_lexical_corpus
 from cheat_at_search.logger import log_to_stdout
 
 
@@ -55,6 +56,7 @@ def __getattr__(name):
         return globals()[name]
     if name == "corpus":
         ds = _docs()
+        ds = load_or_build_lexical_corpus(ds, "doug_blog")
         globals()["corpus"] = ds
         return globals()[name]
     raise AttributeError(f"Module {__name__} has no attribute {name}")
