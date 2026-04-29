@@ -61,3 +61,45 @@ def test_wands_minilm_embedding_cache(mounted_data_dir):
 
     for path in chunk_files:
         assert path.stat().st_mtime == mtimes[path]
+
+
+def test_wands_embeddings_match_direct_encoding(mounted_data_dir):
+    try:
+        import lzma  # noqa: F401
+    except ModuleNotFoundError:
+        pytest.skip("lzma module not available in this Python build")
+    sentence_transformers = pytest.importorskip("sentence_transformers")
+
+    corpus = wands_data.corpus
+    model = sentence_transformers.SentenceTransformer(DEFAULT_MODEL_NAME)
+    texts = [passage_fn(row) for _, row in corpus.iterrows()]
+    direct_embeddings = model.encode(
+        texts,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+    )
+
+    cached_embeddings = load_or_create_embeddings(
+        corpus,
+        passage_fn,
+        model_name=DEFAULT_MODEL_NAME,
+        chunk_size=5000,
+        show_progress=False,
+    )
+
+    assert direct_embeddings.shape == cached_embeddings.shape
+    assert np.allclose(direct_embeddings, cached_embeddings, rtol=1e-6, atol=1e-6)
+
+    queries = [
+        "red sofa",
+        "wood table",
+        "blue chair",
+    ]
+    query_embeddings = model.encode(
+        queries,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+    )
+    scores_direct = query_embeddings @ direct_embeddings.T
+    scores_cached = query_embeddings @ cached_embeddings.T
+    assert np.allclose(scores_direct, scores_cached, rtol=1e-6, atol=1e-6)
