@@ -42,7 +42,7 @@ def test_embeddings_cache_reuse(mock_load_model, mounted_data_dir):
         "description": ["alpha", "beta", "gamma"],
     })
 
-    first = load_or_create_embeddings(
+    first, _ = load_or_create_embeddings(
         corpus,
         passage_fn,
         model_name="test-model",
@@ -54,7 +54,7 @@ def test_embeddings_cache_reuse(mock_load_model, mounted_data_dir):
 
     dummy_second = DummyModel()
     mock_load_model.return_value = dummy_second
-    second = load_or_create_embeddings(
+    second, _ = load_or_create_embeddings(
         corpus,
         passage_fn,
         model_name="test-model",

@@ -32,7 +32,7 @@ def test_wands_minilm_embedding_cache(mounted_data_dir):
     model_name = DEFAULT_MODEL_NAME
     signature = _signature(corpus, model_name, passage_fn)
 
-    embeddings_first = load_or_create_embeddings(
+    embeddings_first, _ = load_or_create_embeddings(
         corpus,
         passage_fn,
         model_name=model_name,
@@ -49,7 +49,7 @@ def test_wands_minilm_embedding_cache(mounted_data_dir):
 
     mtimes = {path: path.stat().st_mtime for path in chunk_files}
 
-    embeddings_second = load_or_create_embeddings(
+    embeddings_second, _ = load_or_create_embeddings(
         corpus,
         passage_fn,
         model_name=model_name,
@@ -79,7 +79,7 @@ def test_wands_embeddings_match_direct_encoding(mounted_data_dir):
         convert_to_numpy=True,
     )
 
-    cached_embeddings = load_or_create_embeddings(
+    cached_embeddings, _ = load_or_create_embeddings(
         corpus,
         passage_fn,
         model_name=DEFAULT_MODEL_NAME,

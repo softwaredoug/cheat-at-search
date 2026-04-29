@@ -14,6 +14,7 @@ from cheat_at_search.logger import log_to_stdout
 
 
 logger = log_to_stdout("embeddings")
+_MODEL_REGISTRY: dict[tuple[str, str | None], object] = {}
 
 DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_CHUNK_SIZE = 10000
@@ -30,6 +31,16 @@ def _load_model(model_name: str, device: str | None = None):
     if device:
         return SentenceTransformer(model_name, device=device)
     return SentenceTransformer(model_name)
+
+
+def load_model(model_name: str, device: str | None = None):
+    key = (model_name, device)
+    model = _MODEL_REGISTRY.get(key)
+    if model is not None:
+        return model
+    model = _load_model(model_name, device=device)
+    _MODEL_REGISTRY[key] = model
+    return model
 
 
 def _passage_fn_id(passage_fn) -> str:
@@ -159,7 +170,7 @@ def load_or_create_embeddings(
                 continue
 
         if model is None:
-            model = _load_model(model_name, device=device)
+            model = load_model(model_name, device=device)
         texts = [passage_fn(row) for _, row in corpus.iloc[start:end].iterrows()]
         chunk = model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
         if chunk.ndim != 2:
@@ -191,4 +202,7 @@ def load_or_create_embeddings(
         })
         _save_manifest(signature, manifest)
 
-    return embeddings
+    if model is None:
+        model = _MODEL_REGISTRY.get((model_name, device))
+
+    return embeddings, model
