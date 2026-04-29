@@ -266,6 +266,9 @@ class SearchStrategy:
         # This method should be implemented by subclasses
         raise NotImplementedError("Subclasses should implement this method.")
 
+    def search_batch(self, queries, k):
+        raise NotImplementedError("Subclasses can implement this method for batch searching, or rely on the default single search implementation.")
+
     def answer(self, question):
         # This method should be implemented by subclasses
         raise NotImplementedError("Subclasses should implement this method.")
