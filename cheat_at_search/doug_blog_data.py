@@ -41,7 +41,52 @@ def _docs() -> pd.DataFrame:
 
 
 def _judgments() -> pd.DataFrame:
-    return pd.DataFrame(columns=["query_id", "query", "doc_id", "grade"])
+    bm25_doc_ids = [
+        111,
+        121,
+        155,
+        157,
+        158,
+        160,
+        768,
+        856,
+    ]
+    ltr_doc_ids = [
+        22,
+        41,
+        23,
+        68,
+        868,
+        871,
+        875,
+        876,
+        885,
+        892,
+        894,
+        899,
+        906,
+        931,
+        933,
+        935,
+        941,
+        956,
+    ]
+    rows = []
+    for doc_id in bm25_doc_ids:
+        rows.append({
+            "query_id": "bm25",
+            "query": "bm25",
+            "doc_id": doc_id,
+            "grade": 1,
+        })
+    for doc_id in ltr_doc_ids:
+        rows.append({
+            "query_id": "learning_to_rank",
+            "query": "learning to rank",
+            "doc_id": doc_id,
+            "grade": 1,
+        })
+    return pd.DataFrame(rows, columns=["query_id", "query", "doc_id", "grade"])
 
 
 def __getattr__(name):
