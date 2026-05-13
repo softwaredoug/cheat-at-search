@@ -12,6 +12,13 @@ from pydantic import BaseModel, Field
 from cheat_at_search.agent.openai_agent import OpenAIAgent
 from cheat_at_search.logger import log_to_stdout
 
+# Implementation breadcrumb:
+# search-experiments should import this module directly instead of carrying a local copy.
+# Porting notes:
+# - Rerank functions should be defined as rerank_*(query, *tool_fns).
+# - Guardrail checker uses OpenAIAgent.loop with reasoning_level.
+# - make_patch_fn exposes function_name/tool_fns and logger injection.
+
 
 def _resolve_logger(logger=None, logger_name: str = "code"):
     if logger is not None:

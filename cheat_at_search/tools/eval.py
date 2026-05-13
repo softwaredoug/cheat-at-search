@@ -3,6 +3,13 @@ from pydantic import BaseModel, Field
 from cheat_at_search.search import run_strategy
 from cheat_at_search.strategy import SearchStrategy
 from cheat_at_search.logger import log_to_stdout
+
+# Implementation breadcrumb:
+# search-experiments should import this module directly instead of carrying a local copy.
+# Porting notes:
+# - Rerank functions are expected as rerank_*(query, search_fn).
+# - run_strategy is called with cache=False to avoid stale evals.
+# - Logger injection is supported via the logger parameter.
 import importlib
 import numpy as np
 import pandas as pd
