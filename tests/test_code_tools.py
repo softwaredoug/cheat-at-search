@@ -39,7 +39,7 @@ def test_make_guardrail_checker(failing_code):
 def test_patch_code():
     tempdir = tempfile.mkdtemp()
     original_code = """
-def rerank_esci(search_esci, query):
+def rerank_esci(query, search_esci):
     q=query.strip(); locale='jp' if any('\u3040'<=c<='\u30ff' or '\u4e00'<=c<='\u9fff' for c in q) else 'us'
     stops={'el','la','los','las','para','con','en','de','y','del','un','una'}
     if locale!='jp' and (any(c in 'áéíóúñüÁÉÍÓÚÑÜ' for c in q) or any(w in q.lower().split() for w in stops)): locale='es'
@@ -71,7 +71,7 @@ def rerank_esci(search_esci, query):
     )
 
     edit = Edit(
-        description="Improve query normalization and handling of mixed alphanumeric tokens.",
+        intention="Improve query normalization and handling of mixed alphanumeric tokens.",
         anchor="    m={'mindcraft':'minecraft','alltech':'altec','perpex':'perspex','raided':'raid','womens':'women','sleve':'sleeve','micheal':'michael'}",
         block_until="return [d['id'] for d in docs]",
         text=edit_text,
@@ -86,6 +86,8 @@ def rerank_esci(search_esci, query):
         corpus=None,
         code_dir=tempdir,
         module_name="rerank_esci",
+        function_name="rerank_esci",
+        tool_fns=[_search_esci],
     )
     result = apply_patch(edit)
     assert result.success is True
