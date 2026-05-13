@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Note: This project uses Poetry for dependency management and test execution.
+Note: This python project uses Poetry for dependency management and test execution.
 
 ## How to commit
 
@@ -16,3 +16,7 @@ Note: This project uses Poetry for dependency management and test execution.
 - When patching in tests, prefer `unittest.mock.patch` decorators.
 - Prefer patch decorators over patch context managers.
 - Prefer patch decorators over pytest `monkeypatch` unless there is a specific need.
+
+## Docs / PRDs
+
+docs can be found in docs/ folder

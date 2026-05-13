@@ -1,15 +1,5 @@
-## Run agent search experiment
+## Utilities for cheat at search training + experiments
 
-From [this blog article](https://softwaredoug.com/blog/2025/10/06/how-much-does-reasoning-improve-search-quality)
+This repo is a set of helpers for loading datasets and running search experiments on them.
 
-On WANDS dataset
-
-```
-$ poetry run python -m cheat_at_search.agent.wands search_few_shot
-```
-
-On ESCI dataset
-
-```
-$ poetry run python -m cheat_at_search.agent.esci
-```
+Largely assuming you're using SearchArray for lexical, numpy for vector. And everything fits in memory.
