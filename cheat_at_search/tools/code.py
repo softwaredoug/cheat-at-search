@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import re
+import hashlib
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Dict, List, Literal, Optional, Tuple
@@ -98,6 +100,10 @@ class EvalResult(BaseModel):
     )
     current_code: Optional[str] = Field(
         None, description="The current reranker code after this call."
+    )
+    training_path: Optional[str] = Field(
+        None,
+        description="Relative path to training run logs under code_dir/training.",
     )
 
 
@@ -322,6 +328,61 @@ def make_patch_fn(
             + guardrail_doc_strs
         )
 
+    def _slugify_query(query: str) -> str:
+        normalized = re.sub(r"[^a-zA-Z0-9]+", "-", query.strip().lower()).strip("-")
+        if not normalized:
+            normalized = "query"
+        digest = hashlib.sha1(query.encode("utf-8")).hexdigest()[:8]
+        return f"{normalized[:40]}-{digest}"
+
+    def _write_training_logs(
+        code: str,
+        ndcg_deltas: dict[str, float],
+        results_df: pd.DataFrame,
+    ) -> str:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        training_root = os.path.join(code_dir, "training", timestamp)
+        os.makedirs(training_root, exist_ok=True)
+
+        reranker_path = os.path.join(training_root, "reranker.py")
+        with open(reranker_path, "w") as handle:
+            handle.write(code)
+
+        if "doc_id" not in results_df.columns and "product_id" in results_df.columns:
+            results_df = results_df.copy()
+            results_df["doc_id"] = results_df["product_id"]
+        for col in ["query", "rank", "doc_id", "title", "description"]:
+            if col not in results_df.columns:
+                results_df[col] = ""
+
+        query_paths = {}
+        for query in ndcg_deltas.keys():
+            query_slug = _slugify_query(query)
+            query_paths[query] = query_slug
+
+            query_dir = os.path.join(training_root, query_slug)
+            os.makedirs(query_dir, exist_ok=True)
+
+            query_results = results_df[results_df["query"] == query]
+            query_results = query_results[
+                ["query", "rank", "doc_id", "title", "description"]
+            ]
+            results_path = os.path.join(query_dir, "results.csv")
+            query_results.to_csv(results_path, index=False)
+
+        queries_rows = []
+        for query, delta in ndcg_deltas.items():
+            queries_rows.append({
+                "query": query,
+                "ndcg_delta": delta,
+                "query_path": query_paths[query],
+            })
+        queries_df = pd.DataFrame(queries_rows, columns=["query", "ndcg_delta", "query_path"])
+        queries_path = os.path.join(training_root, "queries.csv")
+        queries_df.to_csv(queries_path, index=False)
+
+        return os.path.relpath(training_root, code_dir)
+
     def revert_changes() -> str:
         """Undo the last patch by restoring from backup."""
         if not os.path.exists(backup_path):
@@ -441,7 +502,11 @@ def make_patch_fn(
                 return None
             code, existing_code, local_vars = _patch_code(edit)
             ndcgs_before: pd.Series = training_eval_fn(existing_code)
-            ndcgs_after: pd.Series = training_eval_fn(code)
+            results_df = None
+            try:
+                ndcgs_after, results_df = training_eval_fn(code, results=True)
+            except TypeError:
+                ndcgs_after = training_eval_fn(code)
             deltas: pd.Series = ndcgs_after - ndcgs_before
             delta_dict = deltas.to_dict()
             changed_queries = {}
@@ -476,6 +541,10 @@ def make_patch_fn(
                 )
             logger.warning(warning)
 
+            training_path = None
+            if results_df is not None:
+                training_path = _write_training_logs(code, delta_dict, results_df)
+
             return EvalResult(
                 success=True,
                 error_message=warning,
@@ -483,6 +552,7 @@ def make_patch_fn(
                 ndcg_before=ndcgs_before.mean(),
                 ndcg_after=ndcgs_after.mean(),
                 current_code=existing_code,
+                training_path=training_path,
             )
         except Exception as e:
             logger.info("Error evaluating patch: %s", e)
