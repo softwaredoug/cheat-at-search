@@ -174,16 +174,30 @@ def make_guardrail_checker(
 def make_run_path_grep_tool(
     run_path: Path,
     files: dict[str, str] | None = None,
+    module_name: str = "rerank_esci",
     logger=None,
 ) -> Callable[[str, str, int, int], dict]:
     base_path = Path(run_path).expanduser().resolve()
     logger = _resolve_logger(logger)
     files = files or {}
+    managed_files = {
+        f"{module_name}.py": "reranker source",
+        "queries.csv": "training query summary",
+    }
+    combined_files = {**managed_files, **files}
     files_doc = "\n".join(
-        f"- {filename} ({description})" for filename, description in files.items()
+        f"- {filename} ({description})"
+        for filename, description in combined_files.items()
     )
     if files_doc:
         files_doc = f"\n\nTypical files to inspect:\n{files_doc}"
+    training_layout_doc = (
+        "\n\nTraining run layout (when logging is enabled):\n"
+        "- training/<timestamp>/\n"
+        "  - reranker.py\n"
+        "  - queries.csv\n"
+        "  - <query_path>/results.csv"
+    )
 
     def grep_run_path(
         pattern: str,
@@ -249,7 +263,7 @@ def make_run_path_grep_tool(
         return {"matches": matches, "truncated": truncated, "skipped": skipped}
 
     grep_run_path.__name__ = "grep_run_path"
-    grep_run_path.__doc__ = f"""Search previous codegen run files for a regex pattern.{files_doc}
+    grep_run_path.__doc__ = f"""Search previous codegen run files for a regex pattern.{files_doc}{training_layout_doc}
 
     Args:
         pattern: Regex pattern to search for.
