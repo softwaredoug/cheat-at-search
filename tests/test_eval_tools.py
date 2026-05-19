@@ -90,6 +90,10 @@ def test_make_eval_guardrail_disables_cache(mock_run_strategy):
         num_queries=1,
         seed=1,
     )
-    ndcgs = eval_guardrail("def rerank_esci(query, search_fn): return [101]")
+    ndcgs, results_df = eval_guardrail(
+        "def rerank_esci(query, search_fn): return [101]",
+        results=True,
+    )
     assert ndcgs["q1"] == 0.2
+    assert results_df["query"].tolist() == ["q1"]
     assert mock_run_strategy.call_args.kwargs["cache"] is False

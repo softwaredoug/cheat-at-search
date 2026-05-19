@@ -233,7 +233,7 @@ def make_eval_guardrail(
     logger=None,
 ) -> callable:
 
-    def eval_guardrail(code: str) -> float:
+    def eval_guardrail(code: str, results: bool = False):
         """Evaluate on validation set to avoid overfitting. Returns query NDCGs."""
         strategy = CodeGenSearchStrategy(
             corpus,
@@ -242,13 +242,15 @@ def make_eval_guardrail(
             workers=workers,
             logger=logger,
         )
-        results = run_strategy(
+        results_df = run_strategy(
             strategy,
             judgments,
             num_queries=num_queries,
             seed=seed,
             cache=False,
         )
-        ndcgs = results.groupby('query')['ndcg'].mean()
+        ndcgs = results_df.groupby('query')['ndcg'].mean()
+        if results:
+            return ndcgs, results_df
         return ndcgs
     return eval_guardrail
