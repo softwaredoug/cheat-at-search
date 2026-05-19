@@ -173,10 +173,17 @@ def make_guardrail_checker(
 
 def make_run_path_grep_tool(
     run_path: Path,
+    files: dict[str, str] | None = None,
     logger=None,
 ) -> Callable[[str, str, int, int], dict]:
     base_path = Path(run_path).expanduser().resolve()
     logger = _resolve_logger(logger)
+    files = files or {}
+    files_doc = "\n".join(
+        f"- {filename} ({description})" for filename, description in files.items()
+    )
+    if files_doc:
+        files_doc = f"\n\nTypical files to inspect:\n{files_doc}"
 
     def grep_run_path(
         pattern: str,
@@ -185,12 +192,6 @@ def make_run_path_grep_tool(
         max_file_size_kb: int = 512,
     ) -> dict:
         """Search previous codegen run files for a regex pattern.
-
-        Typical files to inspect:
-        - rounds.jsonl (per-round summaries)
-        - codegen.log (training logs)
-        - reranker.py and reranker_round_*.py (generated code)
-        - metadata.json (run metadata)
 
         Args:
             pattern: Regex pattern to search for.
@@ -248,6 +249,14 @@ def make_run_path_grep_tool(
         return {"matches": matches, "truncated": truncated, "skipped": skipped}
 
     grep_run_path.__name__ = "grep_run_path"
+    grep_run_path.__doc__ = f"""Search previous codegen run files for a regex pattern.{files_doc}
+
+    Args:
+        pattern: Regex pattern to search for.
+        file_glob: Glob pattern under the run path to scan.
+        max_matches: Maximum number of matches to return.
+        max_file_size_kb: Skip files larger than this limit.
+    """
     return grep_run_path
 
 
