@@ -269,7 +269,10 @@ class Reranker:
         Pass edit=None to evaluate the current reranker without running guardrails.
         When edit is provided, guardrails run before evaluation.
         """
-        self.logger.info("Evaluating patch")
+        if edit is None:
+            self.logger.info("Evaluating current reranker")
+        else:
+            self.logger.info("Evaluating patch")
         existing_code = self._load_code()
 
         try:
@@ -432,4 +435,3 @@ def _make_eval_guardrail(
             return ndcgs, results_df
         return ndcgs
     return eval_guardrail
-

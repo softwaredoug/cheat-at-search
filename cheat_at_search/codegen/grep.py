@@ -102,6 +102,10 @@ def make_run_path_grep_tool(
                     if len(matches) >= max_matches:
                         truncated = True
                         break
+        if matches:
+            logger.info("!GREP Found %d matches", len(matches))
+        else:
+            logger.info("!GREP No matches found")
         return {"matches": matches, "truncated": truncated, "skipped": skipped}
 
     grep_run_path.__name__ = "grep_run_path"
