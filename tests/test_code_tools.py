@@ -1,4 +1,7 @@
-from cheat_at_search.tools.code import make_guardrail_checker, Reranker, Edit
+from cheat_at_search.codegen.code import make_guardrail_checker, Reranker, Edit
+from unittest.mock import patch
+import os
+import pandas as pd
 import pytest
 import tempfile
 
@@ -81,10 +84,270 @@ def rerank_esci(query, top_k, search_esci):
     def _search_esci(**kwargs):
         return [{"id": 1}, {"id": 2}]
 
-    _, _, apply_patch, _ = Reranker.build(
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1, 2],
+            "title": ["one", "two"],
+            "description": ["alpha", "beta"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+    reranker = Reranker(
         code_dir=tempdir,
         tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        validation_queries=None,
         module_name="rerank_esci",
     )
-    result = apply_patch(edit)
+    _, _, commit_patch, _ = reranker.tools()
+    result = commit_patch(edit)
     assert result.success is True
+
+
+def test_build_tool_docstrings():
+    tempdir = tempfile.mkdtemp()
+    filepath = f"{tempdir}/rerank_esci.py"
+    with open(filepath, "w") as f:
+        f.write("def rerank_esci(query, top_k, search_esci):\n    return []\n")
+
+    def _search_esci(**kwargs):
+        return []
+
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1],
+            "title": ["one"],
+            "description": ["alpha"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+
+    reranker = Reranker(
+        code_dir=tempdir,
+        tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        validation_queries=["q1"],
+        module_name="rerank_esci",
+    )
+    search, evaluate, commit_patch, grep = reranker.tools()
+
+    assert "reranker" in (search.__doc__ or "")
+    assert "training" in (evaluate.__doc__ or "")
+    assert "guardrails" in (evaluate.__doc__ or "")
+    assert "validation" in (commit_patch.__doc__ or "")
+    assert "regex pattern" in (grep.__doc__ or "")
+    assert "rerank_esci.py" in (grep.__doc__ or "")
+    assert "queries.csv" in (grep.__doc__ or "")
+
+
+@patch("cheat_at_search.codegen.code.run_strategy")
+def test_evaluate_without_edit_skips_guardrails(mock_run_strategy):
+    tempdir = tempfile.mkdtemp()
+    filepath = f"{tempdir}/rerank_esci.py"
+    with open(filepath, "w") as f:
+        f.write("def rerank_esci(query, top_k, search_esci):\n    return []\n")
+
+    def _search_esci(**kwargs):
+        return []
+
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1],
+            "title": ["one"],
+            "description": ["alpha"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+    mock_run_strategy.return_value = pd.DataFrame({
+        "query": ["q1"],
+        "ndcg": [0.5],
+    })
+
+    def guardrail(_text: str):
+        raise ValueError("guardrail should not run")
+
+    reranker = Reranker(
+        code_dir=tempdir,
+        tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        guardrail_fns=[guardrail],
+        validation_queries=None,
+        module_name="rerank_esci",
+    )
+    _, evaluate, _, _ = reranker.tools()
+    result = evaluate()
+    assert result.success is True
+
+
+@patch("cheat_at_search.codegen.code.run_strategy")
+def test_evaluate_writes_training_logs(mock_run_strategy):
+    tempdir = tempfile.mkdtemp()
+    filepath = f"{tempdir}/rerank_esci.py"
+    with open(filepath, "w") as f:
+        f.write("def rerank_esci(query, top_k, search_esci):\n    return []\n")
+
+    def _search_esci(**kwargs):
+        return []
+
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1],
+            "title": ["one"],
+            "description": ["alpha"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+    mock_run_strategy.return_value = pd.DataFrame({
+        "query": ["q1"],
+        "ndcg": [0.5],
+        "rank": [1],
+        "doc_id": [1],
+        "title": ["one"],
+        "description": ["alpha"],
+    })
+
+    reranker = Reranker(
+        code_dir=tempdir,
+        tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        validation_queries=None,
+        module_name="rerank_esci",
+    )
+    _, evaluate, _, _ = reranker.tools()
+    edit = Edit(
+        intention="test",
+        anchor="def rerank_esci",
+        block_until="return []",
+        text="def rerank_esci(query, top_k, search_esci):\n    return []",
+        action="replace",
+    )
+    result = evaluate(edit)
+    assert result.training_path
+    training_root = os.path.join(tempdir, result.training_path)
+    assert os.path.isdir(training_root)
+    assert os.path.isfile(os.path.join(training_root, "reranker.py"))
+    assert os.path.isfile(os.path.join(training_root, "queries.csv"))
+
+
+@patch("cheat_at_search.codegen.code.run_strategy")
+def test_commit_patch_rejects_without_validation_improvement(mock_run_strategy):
+    tempdir = tempfile.mkdtemp()
+    filepath = f"{tempdir}/rerank_esci.py"
+    with open(filepath, "w") as f:
+        f.write("def rerank_esci(query, top_k, search_esci):\n    return []\n")
+
+    def _search_esci(**kwargs):
+        return []
+
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1],
+            "title": ["one"],
+            "description": ["alpha"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+    mock_run_strategy.side_effect = [
+        pd.DataFrame({"query": ["q1"], "ndcg": [0.1]}),
+        pd.DataFrame({"query": ["q1"], "ndcg": [0.1]}),
+    ]
+
+    reranker = Reranker(
+        code_dir=tempdir,
+        tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        validation_queries=["q1"],
+        module_name="rerank_esci",
+        eval_margin=0.01,
+    )
+    _, _, commit_patch, _ = reranker.tools()
+    edit = Edit(
+        intention="test",
+        anchor="def rerank_esci",
+        block_until="return []",
+        text="def rerank_esci(query, top_k, search_esci):\n    return []",
+        action="replace",
+    )
+    result = commit_patch(edit)
+    assert result.success is False
+
+
+def test_current_code_uses_module_name():
+    tempdir = tempfile.mkdtemp()
+    filepath = f"{tempdir}/rerank_custom.py"
+    with open(filepath, "w") as f:
+        f.write("def rerank_custom(query, top_k, search_esci):\n    return []\n")
+
+    def _search_esci(**kwargs):
+        return []
+
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1],
+            "title": ["one"],
+            "description": ["alpha"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+    reranker = Reranker(
+        code_dir=tempdir,
+        tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        validation_queries=None,
+        module_name="rerank_custom",
+    )
+    assert "rerank_custom" in reranker.current_code()
