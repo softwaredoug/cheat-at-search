@@ -68,10 +68,12 @@ class CodeGenSearchStrategy(SearchStrategy):
             return rerank_fn(query, *self.tool_fns)
 
     def search(self, query, k=10):
-        if self.code:
-            rerank_fn = self._rerank_fn_from_code(self.code)
-        else:
-            rerank_fn = self._get_rerank_fn(self.module_name)
+        if not self.code:
+            raise ValueError(
+                "CodeGenSearchStrategy requires code to be provided; "
+                "module import is no longer used."
+            )
+        rerank_fn = self._rerank_fn_from_code(self.code)
 
         doc_ids = self._call_rerank(rerank_fn, query, k)[:k]
         if doc_ids and isinstance(doc_ids[0], (list, tuple)):
@@ -88,19 +90,6 @@ class CodeGenSearchStrategy(SearchStrategy):
                 continue
         scores = scores[:k]
         return top_k_ilocs, scores
-
-    @staticmethod
-    def _get_rerank_fn(module_name: str):
-        import importlib
-
-        mod = importlib.import_module(module_name)
-        importlib.reload(mod)
-        rerank_fn = None
-        for attr in dir(mod):
-            if attr.startswith("rerank_"):
-                rerank_fn = getattr(mod, attr)
-                break
-        return rerank_fn
 
     @staticmethod
     def _rerank_fn_from_code(code: str):
