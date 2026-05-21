@@ -258,7 +258,7 @@ class Reranker:
     def search(self, query: str, top_k: int = 10):
         """Run the current reranker and return the ranked doc IDs."""
         code = self.current_code()
-        rerank_fn = CodeGenSearchStrategy._rerank_fn_from_code(code)
+        rerank_fn = CodeGenSearchStrategy._rerank_fn_from_code(code, module_name=self.module_name)
         doc_ids = self._call_rerank(rerank_fn, query, top_k)
         if doc_ids and isinstance(doc_ids[0], (list, tuple)):
             doc_ids = [doc_id for doc_id, _ in doc_ids]

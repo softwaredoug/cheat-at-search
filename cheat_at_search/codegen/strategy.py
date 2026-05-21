@@ -73,7 +73,7 @@ class CodeGenSearchStrategy(SearchStrategy):
                 "CodeGenSearchStrategy requires code to be provided; "
                 "module import is no longer used."
             )
-        rerank_fn = self._rerank_fn_from_code(self.code)
+        rerank_fn = self._rerank_fn_from_code(self.code, module_name=self.module_name)
 
         doc_ids = self._call_rerank(rerank_fn, query, k)[:k]
         if doc_ids and isinstance(doc_ids[0], (list, tuple)):
@@ -92,12 +92,14 @@ class CodeGenSearchStrategy(SearchStrategy):
         return top_k_ilocs, scores
 
     @staticmethod
-    def _rerank_fn_from_code(code: str):
+    def _rerank_fn_from_code(code: str, module_name: Optional[str] = None):
         exec_globals = {}
         exec(code, exec_globals)
-        rerank_fn = None
-        for name, obj in exec_globals.items():
-            if name.startswith("rerank_"):
-                rerank_fn = obj
-                break
-        return rerank_fn
+        if module_name:
+            candidate = exec_globals.get(module_name)
+            if callable(candidate):
+                return candidate
+        raise ValueError(
+            "No rerank function found in code. Define a callable named "
+            f"'{module_name}'."
+        )
