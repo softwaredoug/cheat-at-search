@@ -1,6 +1,7 @@
 from cheat_at_search.codegen.code import make_guardrail_checker, Reranker, Edit
 from unittest.mock import patch
 import os
+from pathlib import Path
 import pandas as pd
 import pytest
 import tempfile
@@ -448,3 +449,48 @@ def test_search_uses_latest_code():
         f.write("def rerank_esci(query, top_k, search_esci):\n    return [2]\n")
 
     assert reranker.search("q1", top_k=1) == [2]
+
+
+def test_grep_handles_absolute_file_glob():
+    tempdir = tempfile.mkdtemp()
+    base_path = Path(tempdir).resolve()
+    training_dir = base_path / "training"
+    os.makedirs(training_dir, exist_ok=True)
+    target_path = training_dir / "queries.csv"
+    with open(target_path, "w") as f:
+        f.write("query,ndcg_delta,query_path\nq1,0.1,q1\n")
+
+    def _search_esci(**kwargs):
+        return []
+
+    corpus = pd.DataFrame(
+        {
+            "doc_id": [1],
+            "title": ["one"],
+            "description": ["alpha"],
+        }
+    )
+    judgments = pd.DataFrame(
+        {
+            "query_id": ["q1"],
+            "query": ["q1"],
+            "doc_id": [1],
+            "grade": [3],
+        }
+    )
+    reranker = Reranker(
+        code_dir=str(base_path),
+        tool_fns=[_search_esci],
+        corpus=corpus,
+        judgments=judgments,
+        training_queries=["q1"],
+        validation_queries=None,
+        module_name="rerank_esci",
+    )
+    _, _, _, grep = reranker.tools()
+
+    result = grep("q1", file_glob=str(target_path))
+
+    assert "error" not in result
+    assert result["matches"]
+    assert result["matches"][0]["file"].endswith("queries.csv")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Callable
@@ -62,6 +63,18 @@ def make_run_path_grep_tool(
             regex = re.compile(pattern)
         except re.error as exc:
             return {"matches": [], "error": f"invalid regex: {exc}"}
+        if Path(file_glob).is_absolute():
+            relpath = os.path.relpath(file_glob, base_path)
+            if relpath.startswith(".."):
+                return {
+                    "matches": [],
+                    "error": (
+                        "file_glob must be under the run path; "
+                        f"got absolute path {file_glob}"
+                    ),
+                }
+            file_glob = relpath
+
         logger.info(
             "!GREP Searching for pattern '%s' in files matching '%s' under %s...",
             pattern,
@@ -72,7 +85,11 @@ def make_run_path_grep_tool(
         matches = []
         skipped = []
         truncated = False
-        for path in sorted(base_path.rglob(file_glob)):
+        try:
+            paths = sorted(base_path.rglob(file_glob))
+        except NotImplementedError as exc:
+            return {"matches": [], "error": str(exc)}
+        for path in paths:
             if len(matches) >= max_matches:
                 truncated = True
                 break
