@@ -8,7 +8,7 @@ from cheat_at_search.tools.eval import CodeGenSearchStrategy, make_eval_fn, make
 
 def test_codegen_search_strategy_rerank_signature():
     code = """
-def rerank_esci(query, search_fn):
+def rerank_esci(query, top_k, search_fn):
     return search_fn(query)
 """
 
@@ -22,7 +22,13 @@ def rerank_esci(query, search_fn):
         "title": ["one", "two"],
         "description": ["alpha", "beta"],
     })
-    strategy = CodeGenSearchStrategy(corpus, search_fn=search_fn, code=code, workers=1)
+    strategy = CodeGenSearchStrategy(
+        corpus,
+        tool_fns=[search_fn],
+        module_name="rerank_esci",
+        code=code,
+        workers=1,
+    )
     top_k, scores = strategy.search("hello", k=2)
     assert top_k == [0, 1]
     assert len(scores) == 2
@@ -31,7 +37,7 @@ def rerank_esci(query, search_fn):
 @patch("cheat_at_search.tools.eval.run_strategy")
 def test_make_eval_fn_disables_cache(mock_run_strategy, tmp_path):
     corpus = pd.DataFrame({
-        "product_id": [101],
+        "doc_id": [101],
         "doc_id": [101],
         "title": ["one"],
         "description": ["alpha"],
@@ -39,11 +45,14 @@ def test_make_eval_fn_disables_cache(mock_run_strategy, tmp_path):
     judgments = pd.DataFrame({
         "query_id": ["q1"],
         "query": ["q1"],
-        "product_id": [101],
+        "doc_id": [101],
         "grade": [3],
     })
     code_path = Path(tmp_path) / "rerank_esci.py"
-    code_path.write_text("def rerank_esci(query, search_fn):\n    return [101]\n", encoding="utf-8")
+    code_path.write_text(
+        "def rerank_esci(query, top_k, search_fn):\n    return [101]\n",
+        encoding="utf-8",
+    )
 
     mock_run_strategy.return_value = pd.DataFrame({
         "query": ["q1"],
@@ -63,10 +72,10 @@ def test_make_eval_fn_disables_cache(mock_run_strategy, tmp_path):
     assert mock_run_strategy.call_args.kwargs["cache"] is False
 
 
-@patch("cheat_at_search.tools.eval.run_strategy")
+@patch("cheat_at_search.tools.code.run_strategy")
 def test_make_eval_guardrail_disables_cache(mock_run_strategy):
     corpus = pd.DataFrame({
-        "product_id": [101],
+        "doc_id": [101],
         "doc_id": [101],
         "title": ["one"],
         "description": ["alpha"],
@@ -74,7 +83,7 @@ def test_make_eval_guardrail_disables_cache(mock_run_strategy):
     judgments = pd.DataFrame({
         "query_id": ["q1"],
         "query": ["q1"],
-        "product_id": [101],
+        "doc_id": [101],
         "grade": [3],
     })
 
@@ -91,7 +100,7 @@ def test_make_eval_guardrail_disables_cache(mock_run_strategy):
         seed=1,
     )
     ndcgs, results_df = eval_guardrail(
-        "def rerank_esci(query, search_fn): return [101]",
+        "def rerank_esci(query, top_k, search_fn): return [101]",
         results=True,
     )
     assert ndcgs["q1"] == 0.2

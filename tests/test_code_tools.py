@@ -1,4 +1,4 @@
-from cheat_at_search.tools.code import make_guardrail_checker, make_patch_fn, Edit
+from cheat_at_search.tools.code import make_guardrail_checker, Reranker, Edit
 import pytest
 import tempfile
 
@@ -39,7 +39,7 @@ def test_make_guardrail_checker(failing_code):
 def test_patch_code():
     tempdir = tempfile.mkdtemp()
     original_code = """
-def rerank_esci(query, search_esci):
+def rerank_esci(query, top_k, search_esci):
     q=query.strip(); locale='jp' if any('\u3040'<=c<='\u30ff' or '\u4e00'<=c<='\u9fff' for c in q) else 'us'
     stops={'el','la','los','las','para','con','en','de','y','del','un','una'}
     if locale!='jp' and (any(c in 'áéíóúñüÁÉÍÓÚÑÜ' for c in q) or any(w in q.lower().split() for w in stops)): locale='es'
@@ -81,13 +81,10 @@ def rerank_esci(query, search_esci):
     def _search_esci(**kwargs):
         return [{"id": 1}, {"id": 2}]
 
-    apply_patch, _, _ = make_patch_fn(
-        search_fn=_search_esci,
-        corpus=None,
+    _, _, apply_patch, _ = Reranker.build(
         code_dir=tempdir,
-        module_name="rerank_esci",
-        function_name="rerank_esci",
         tool_fns=[_search_esci],
+        module_name="rerank_esci",
     )
     result = apply_patch(edit)
     assert result.success is True
