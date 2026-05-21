@@ -3,9 +3,45 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+from pandas.api.types import is_integer_dtype, is_string_dtype
 
 from cheat_at_search.codegen.validators import _resolve_logger
 from cheat_at_search.strategy import SearchStrategy
+
+
+def _coerce_doc_ids(doc_ids, doc_id_col):
+    target_type = None
+    if is_integer_dtype(doc_id_col.dtype):
+        target_type = int
+    elif is_string_dtype(doc_id_col.dtype):
+        target_type = str
+    else:
+        for value in doc_id_col:
+            if value is None:
+                continue
+            if isinstance(value, float) and np.isnan(value):
+                continue
+            if isinstance(value, (int, np.integer)):
+                target_type = int
+                break
+            if isinstance(value, str):
+                target_type = str
+                break
+    if target_type is None:
+        return doc_ids
+    coerced = []
+    for doc_id in doc_ids:
+        if target_type is int:
+            try:
+                coerced.append(int(doc_id))
+            except (TypeError, ValueError):
+                coerced.append(doc_id)
+        else:
+            try:
+                coerced.append(str(doc_id))
+            except Exception:
+                coerced.append(doc_id)
+    return coerced
 
 
 class CodeGenSearchStrategy(SearchStrategy):
@@ -40,6 +76,7 @@ class CodeGenSearchStrategy(SearchStrategy):
         doc_ids = self._call_rerank(rerank_fn, query, k)[:k]
         if doc_ids and isinstance(doc_ids[0], (list, tuple)):
             doc_ids = [doc_id for doc_id, _ in doc_ids]
+        doc_ids = _coerce_doc_ids(doc_ids, self.index["doc_id"])
         scores = np.arange(len(doc_ids), 0, -1)
         top_k_ilocs = []
         for doc_id in doc_ids:

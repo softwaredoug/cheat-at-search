@@ -33,6 +33,54 @@ def rerank_esci(query, top_k, search_fn):
     assert len(scores) == 2
 
 
+def test_codegen_search_strategy_coerces_string_doc_ids():
+    code = """
+def rerank_esci(query, top_k):
+    return ["101", "102"]
+"""
+    corpus = pd.DataFrame({
+        "doc_id": [101, 102],
+        "title": ["one", "two"],
+        "description": ["alpha", "beta"],
+    })
+    strategy = CodeGenSearchStrategy(
+        corpus,
+        tool_fns=[],
+        module_name="rerank_esci",
+        code=code,
+        workers=1,
+    )
+
+    top_k, scores = strategy.search("hello", k=2)
+
+    assert top_k == [0, 1]
+    assert len(scores) == 2
+
+
+def test_codegen_search_strategy_coerces_int_doc_ids():
+    code = """
+def rerank_esci(query, top_k):
+    return [101, 102]
+"""
+    corpus = pd.DataFrame({
+        "doc_id": ["101", "102"],
+        "title": ["one", "two"],
+        "description": ["alpha", "beta"],
+    })
+    strategy = CodeGenSearchStrategy(
+        corpus,
+        tool_fns=[],
+        module_name="rerank_esci",
+        code=code,
+        workers=1,
+    )
+
+    top_k, scores = strategy.search("hello", k=2)
+
+    assert top_k == [0, 1]
+    assert len(scores) == 2
+
+
 @patch("cheat_at_search.codegen.code.run_strategy")
 def test_make_eval_guardrail_disables_cache(mock_run_strategy):
     corpus = pd.DataFrame({
