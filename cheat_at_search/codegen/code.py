@@ -361,7 +361,7 @@ class Reranker:
     def commit_patch(self, edit: Edit) -> EditResult:
         """Apply a code patch if validation queries improve by the margin."""
         try:
-            self.logger.info("Applying patch with edits")
+            self.logger.info("Comitting patch with edits... pending validation")
             code, existing_code = self._patch_code(edit)
             edit_result = EditResult(
                 success=True, error_message=None, current_code=existing_code
