@@ -70,8 +70,10 @@ class OpenAIAgent(Agent):
         inputs=None,
         agent_state: Optional[dict] = None,
         return_usage=False,
+        logger=None,
     ) -> SearchResults:
         """Chat, handle any response."""
+        active_logger = logger or globals()["logger"]
         tool_call_logs = []
         tools = []
         for tool in self.search_tools.values():
@@ -102,11 +104,11 @@ class OpenAIAgent(Agent):
                 usage["input_tokens"] += resp.usage.input_tokens
                 usage["output_tokens"] += resp.usage.output_tokens
 
-                logger.debug("Usage: ", resp.usage)
+                active_logger.debug("Usage: ", resp.usage)
                 total_tokens = usage["input_tokens"] + usage["output_tokens"]
-                logger.info(f"Total tokens so far: {total_tokens}")
+                active_logger.info(f"Total tokens so far: {total_tokens}")
                 if self.max_tokens and total_tokens >= self.max_tokens:
-                    logger.info(
+                    active_logger.info(
                         f"Reached max tokens limit of {self.max_tokens}. Stopping further tool calls."
                     )
                     break
@@ -149,21 +151,31 @@ class OpenAIAgent(Agent):
             if return_usage:
                 resp.usage = usage
             if len(tool_call_logs) > 0:
-                logger.info("**** Search completed ****")
-                logger.info("Tool call summary:")
+                active_logger.info("**** Search completed ****")
+                active_logger.info("Tool call summary:")
                 for log in tool_call_logs:
-                    logger.info(f"Tool called: {log['tool_name']}")
+                    active_logger.info(f"Tool called: {log['tool_name']}")
             return resp, inputs, usage
         except Exception as e:
-            logger.error("Error calling MCP search tool:", e)
+            active_logger.error("Error calling MCP search tool:", e)
             raise e
 
-    def loop(self, inputs=None, agent_state=None, return_usage=False) -> SearchResults:
+    def loop(
+        self,
+        inputs=None,
+        agent_state=None,
+        return_usage=False,
+        logger=None,
+    ) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, (
             "response_model must be set for structured search results."
         )
-        resp, _, usage = self.chat(inputs=inputs, agent_state=agent_state)
+        resp, _, usage = self.chat(
+            inputs=inputs,
+            agent_state=agent_state,
+            logger=logger,
+        )
         self.last_usage = resp.usage
         if return_usage:
             return resp.output_parsed, usage
