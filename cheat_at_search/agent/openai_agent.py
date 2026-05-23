@@ -65,14 +65,19 @@ class OpenAIAgent(Agent):
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return md5(serialized.encode("utf-8")).hexdigest()
 
-    def chat(self, inputs=None, return_usage=False) -> SearchResults:
+    def chat(
+        self,
+        inputs=None,
+        agent_state: Optional[dict] = None,
+        return_usage=False,
+    ) -> SearchResults:
         """Chat, handle any response."""
         tool_call_logs = []
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
             tools.append(tool_spec)
-        total_tokens = 0
+        usage = {"input_tokens": 0, "output_tokens": 0, "num_tool_calls": 0}
         try:
             tool_calls_found = True
             while tool_calls_found:
@@ -94,9 +99,11 @@ class OpenAIAgent(Agent):
                 # Iterate over tool calls
                 inputs += resp.output
 
-                total_tokens += resp.usage.total_tokens
+                usage["input_tokens"] += resp.usage.input_tokens
+                usage["output_tokens"] += resp.usage.output_tokens
 
                 logger.debug("Usage: ", resp.usage)
+                total_tokens = usage["input_tokens"] + usage["output_tokens"]
                 logger.info(f"Total tokens so far: {total_tokens}")
                 if self.max_tokens and total_tokens >= self.max_tokens:
                     logger.info(
@@ -109,6 +116,7 @@ class OpenAIAgent(Agent):
                 for item in resp.output:
                     if item.type == "function_call":
                         tool_calls_found = True
+                        usage["num_tool_calls"] += 1
                         tool_name = item.name
                         if tool_name not in self.search_tools:
                             raise ValueError(
@@ -129,7 +137,7 @@ class OpenAIAgent(Agent):
                         fn_args: ToolArgsModel = ToolArgsModel.model_validate_json(
                             item.arguments
                         )
-                        py_resp, json_resp = tool_fn(fn_args)
+                        py_resp, json_resp = tool_fn(fn_args, agent_state=agent_state)
                         # 4. Provide function call results to the model
                         inputs.append(
                             {
@@ -139,24 +147,24 @@ class OpenAIAgent(Agent):
                             }
                         )
             if return_usage:
-                resp.usage = resp.usage
+                resp.usage = usage
             if len(tool_call_logs) > 0:
                 logger.info("**** Search completed ****")
                 logger.info("Tool call summary:")
                 for log in tool_call_logs:
                     logger.info(f"Tool called: {log['tool_name']}")
-            return resp, inputs, total_tokens
+            return resp, inputs, usage
         except Exception as e:
             logger.error("Error calling MCP search tool:", e)
             raise e
 
-    def loop(self, inputs=None, return_usage=False) -> SearchResults:
+    def loop(self, inputs=None, agent_state=None, return_usage=False) -> SearchResults:
         """Issue a 'search' and expect structured output response."""
         assert self.response_model is not None, (
             "response_model must be set for structured search results."
         )
-        resp, _, total_tokens = self.chat(inputs=inputs)
+        resp, _, usage = self.chat(inputs=inputs, agent_state=agent_state)
         self.last_usage = resp.usage
         if return_usage:
-            return resp.output_parsed, total_tokens
+            return resp.output_parsed, usage
         return resp.output_parsed

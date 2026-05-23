@@ -31,9 +31,7 @@ class Harness:
         call_count = 0
         while not stop:
             call_count += 1
-            resp, inputs, total_tokens = self.agent.chat(
-                inputs=inputs, return_usage=True
-            )
+            resp, inputs, usage = self.agent.chat(inputs=inputs, return_usage=True)
             # Call validators, append any
             invalid = False
             for validator in validators:
@@ -52,7 +50,7 @@ class Harness:
                 stop = stopper(resp, inputs, call_count)
                 if stop:
                     break
-        return resp, inputs, total_tokens
+        return resp, inputs, usage
 
     def config_hash(self) -> str:
         return self.agent.config_hash()

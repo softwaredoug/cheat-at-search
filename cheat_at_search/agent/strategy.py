@@ -26,6 +26,7 @@ class ReasoningSearchStrategy(SearchStrategy):
         self.system_prompt = system_prompt
         self.cache = None
         self.total_tokens = 0
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "num_tool_calls": 0}
         if cache:
             agent_hash = self.harness.config_hash()
             prompt_hash = md5(
@@ -64,9 +65,11 @@ class ReasoningSearchStrategy(SearchStrategy):
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": prompt},
         ]
-        resp, inputs, total_tokens = self.harness.run(inputs)
+        resp, inputs, usage = self.harness.run(inputs)
         search_results = getattr(resp, "output_parsed", resp)
-        self.total_tokens += total_tokens
+        self.total_tokens += usage["input_tokens"] + usage["output_tokens"]
+        for key in self.usage:
+            self.usage[key] += usage.get(key, 0)
         top_k = []
         scores = []
         for result in search_results.results[:k]:
