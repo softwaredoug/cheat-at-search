@@ -6,6 +6,7 @@ from openai import OpenAI
 from typing import Optional
 from hashlib import md5
 import json
+import textwrap
 
 
 logger = log_to_stdout("openai_search_client")
@@ -19,6 +20,7 @@ class OpenAIAgent(Agent):
         max_tokens: Optional[int] = None,
         response_model=SearchResults,
         reasoning_level: str = "medium",
+        summary: bool = True,
     ):
         self.search_tools = {tool.__name__: make_tool_adapter(tool) for tool in tools}
 
@@ -34,6 +36,7 @@ class OpenAIAgent(Agent):
         self.last_usage = None
         self.max_tokens = max_tokens
         self.reasoning_level = reasoning_level
+        self.summary = summary
 
     def config_hash(self) -> str:
         tool_specs = []
@@ -74,7 +77,6 @@ class OpenAIAgent(Agent):
     ) -> SearchResults:
         """Chat, handle any response."""
         active_logger = logger or globals()["logger"]
-        tool_call_logs = []
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
@@ -83,12 +85,16 @@ class OpenAIAgent(Agent):
         try:
             tool_calls_found = True
             while tool_calls_found:
+                reasoning = {
+                    "effort": self.reasoning_level,
+                    "summary": "auto" if self.summary else "none",
+                }
                 if self.response_model:
                     resp = self.openai.responses.parse(
                         model=self.model,
                         input=inputs,
                         tools=tools,
-                        reasoning={"effort": self.reasoning_level},
+                        reasoning=reasoning,
                         text_format=self.response_model,
                     )
                 else:
@@ -96,7 +102,7 @@ class OpenAIAgent(Agent):
                         model=self.model,
                         input=inputs,
                         tools=tools,
-                        reasoning={"effort": self.reasoning_level},
+                        reasoning=reasoning,
                     )
                 # Iterate over tool calls
                 inputs += resp.output
@@ -104,9 +110,22 @@ class OpenAIAgent(Agent):
                 usage["input_tokens"] += resp.usage.input_tokens
                 usage["output_tokens"] += resp.usage.output_tokens
 
-                active_logger.debug("Usage: ", resp.usage)
                 total_tokens = usage["input_tokens"] + usage["output_tokens"]
-                active_logger.info(f"Total tokens so far: {total_tokens}")
+                if self.summary:
+                    active_logger.info("--")
+                    active_logger.info("InpTok: %s", resp.usage.input_tokens)
+                    active_logger.info("OutTok: %s", resp.usage.output_tokens)
+                    for item in resp.output:
+                        if item.type == "reasoning":
+                            active_logger.info("Reasoning:")
+                            for summary_item in item.summary:
+                                active_logger.info(
+                                    "%s\n",
+                                    textwrap.fill(summary_item.text, 80),
+                                )
+                            item.summary = []
+
+                active_logger.debug("Usage: ", resp.usage)
                 if self.max_tokens and total_tokens >= self.max_tokens:
                     active_logger.info(
                         f"Reached max tokens limit of {self.max_tokens}. Stopping further tool calls."
@@ -129,17 +148,24 @@ class OpenAIAgent(Agent):
                         ToolArgsModel = tool[0]
                         tool_fn = tool[2]
 
-                        tool_call_logs.append(
-                            {
-                                "tool_name": tool_name,
-                                "arguments": item.arguments,
-                            }
+                        arg_preview = item.arguments or ""
+                        if len(arg_preview) > 60:
+                            arg_preview = f"{arg_preview[:57]}..."
+                        active_logger.info(
+                            "Tool called: %s args=%s",
+                            tool_name,
+                            arg_preview,
                         )
 
                         fn_args: ToolArgsModel = ToolArgsModel.model_validate_json(
                             item.arguments
                         )
                         py_resp, json_resp = tool_fn(fn_args, agent_state=agent_state)
+                        resp_preview = json_resp or ""
+                        if len(resp_preview) > 1000:
+                            resp_preview = f"{resp_preview[:997]}..."
+                            resp_preview = f"{resp_preview} (total {len(json_resp)} chars)"
+                        active_logger.info("Tool response: %s", resp_preview)
                         # 4. Provide function call results to the model
                         inputs.append(
                             {
@@ -150,11 +176,6 @@ class OpenAIAgent(Agent):
                         )
             if return_usage:
                 resp.usage = usage
-            if len(tool_call_logs) > 0:
-                active_logger.info("**** Search completed ****")
-                active_logger.info("Tool call summary:")
-                for log in tool_call_logs:
-                    active_logger.info(f"Tool called: {log['tool_name']}")
             return resp, inputs, usage
         except Exception as e:
             active_logger.error("Error calling MCP search tool:", e)
