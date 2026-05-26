@@ -18,7 +18,7 @@ class OpenAIAgent(Agent):
         tools,
         model: str,
         max_tokens: Optional[int] = None,
-        response_model=SearchResults,
+        response_model=None,
         reasoning_level: str = "medium",
         summary: bool = True,
     ):
@@ -77,6 +77,8 @@ class OpenAIAgent(Agent):
     ) -> SearchResults:
         """Chat, handle any response."""
         active_logger = logger or globals()["logger"]
+        if agent_state is not None:
+            agent_state["trace_logger"] = active_logger
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
