@@ -10,6 +10,8 @@ Note: This python project uses Poetry for dependency management and test executi
   - A longer paragraph describing the change.
   - A co-author line for Codex: `Co-authored-by: Codex <codex@openai.com>`.
 - Show the full commit message before committing.
+- Commits will run a pre-commit hook that runs all tests. If any test fails, the commit is rejected.
+- Try to fix code to address test failures
 
 ## Testing preferences
 
