@@ -36,9 +36,18 @@ pyright.enabled = false
 [tool.poetry.group.dev.dependencies]
 ipython = {version = "^9.3.0", python = ">=3.11"}
 pytest = "^8.4.1"
+pre-commit = "^4.0.1"
 
 [pycodestyle]
 max-line-length = 120
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: fast tests that avoid external services",
+    "integration: exercises real data/models or multi-module flows",
+    "e2e: calls live providers or full pipelines",
+    "benchmarks: long-running performance checks",
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
