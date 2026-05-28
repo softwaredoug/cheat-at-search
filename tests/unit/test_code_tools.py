@@ -1,4 +1,5 @@
 from cheat_at_search.codegen.code import make_guardrail_checker, Reranker, Edit
+from cheat_at_search.codegen.models import GuardrailResponse
 from unittest.mock import patch
 import os
 from pathlib import Path
@@ -25,7 +26,12 @@ failing_code_snippets = [
 
 
 @pytest.mark.parametrize("failing_code", failing_code_snippets)
-def test_make_guardrail_checker(failing_code):
+@patch("cheat_at_search.codegen.validators.OpenAIAgent")
+def test_make_guardrail_checker(mock_openai_agent, failing_code):
+    mock_openai_agent.return_value.loop.return_value = GuardrailResponse(
+        compliant=False,
+        issues=["Code overfits to specific typo replacements."],
+    )
     prompt = """
         You're going to look at code that reranks search queries.
 
@@ -37,7 +43,14 @@ def test_make_guardrail_checker(failing_code):
     """
     checker = make_guardrail_checker(prompt)
     result = checker(failing_code)
-    assert result is not None
+    assert result == "Code does not comply with guardrails:\nCode overfits to specific typo replacements."
+    mock_openai_agent.assert_called_once_with(
+        tools=[],
+        model="openai/gpt-5-mini",
+        response_model=GuardrailResponse,
+        reasoning_level="medium",
+    )
+    mock_openai_agent.return_value.loop.assert_called_once()
 
 
 def test_patch_code():
