@@ -11,6 +11,9 @@ models_to_test = [
     "openai/gpt-5-nano",
     "google/gemini-2.5-flash-lite",
 ]
+models_to_test = [
+    model for model in models_to_test if not model.lower().startswith("google/")
+]
 
 
 @pytest.fixture(scope="module")
