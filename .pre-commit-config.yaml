@@ -7,6 +7,12 @@ repos:
       - id: check-merge-conflict
   - repo: local
     hooks:
+      - id: poetry-check-lock
+        name: poetry lock is current
+        entry: poetry check --lock
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|poetry\.lock)$
       - id: pytest-unit
         name: pytest unit
         entry: poetry run pytest tests/unit
