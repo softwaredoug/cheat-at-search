@@ -9,6 +9,7 @@ from cheat_at_search.tokenizers import snowball_tokenizer
 
 
 logger = log_to_stdout("indexing")
+MAX_DOC_CHARS = 200000
 
 
 def _normalize_text_column(corpus: pd.DataFrame, column: str) -> pd.DataFrame:
@@ -19,14 +20,20 @@ def _normalize_text_column(corpus: pd.DataFrame, column: str) -> pd.DataFrame:
     return corpus
 
 
+def _truncate_text(series: pd.Series, max_chars: int = MAX_DOC_CHARS) -> pd.Series:
+    return series.astype(str).str.slice(0, max_chars)
+
+
 def _build_lexical_indexes(corpus: pd.DataFrame) -> pd.DataFrame:
+    title_text = _truncate_text(corpus["title"])
+    description_text = _truncate_text(corpus["description"])
     if "title_snowball" not in corpus.columns:
         corpus["title_snowball"] = SearchArray.index(
-            corpus["title"], tokenizer=snowball_tokenizer
+            title_text, tokenizer=snowball_tokenizer
         )
     if "description_snowball" not in corpus.columns:
         corpus["description_snowball"] = SearchArray.index(
-            corpus["description"], tokenizer=snowball_tokenizer
+            description_text, tokenizer=snowball_tokenizer
         )
     return corpus
 
