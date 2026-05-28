@@ -61,7 +61,7 @@ A user of SearchStrategy that want to evaluate it call `search_all`. Usually thi
 
 ### How its used
 
-Most users of SearchStrategy inherit from it and implement `search`. This returns top k indices (ie iloc) of relevant results 
+Most users of SearchStrategy inherit from it and implement `search`. This returns top k indices (ie iloc) of relevant results
 
 In some cases `search_batch` would be implemented. This is a batch version of search that takes in a list of queries and returns a list of lists of indices and scores. That's useful for things like embedding-based search where you can batch the embedding calls.
 
@@ -72,9 +72,9 @@ You'll notice that by default, search_all *caches*. That's useful to save time w
 
 ## Root data directory
 
-You'll notice that the repo allows mounting of a data directory (see data_dir.py). That's used throughout the repo for caching of different types of information. 
+You'll notice that the repo allows mounting of a data directory (see data_dir.py). That's used throughout the repo for caching of different types of information.
 
-The data directory lives under a consistent location. 
+The data directory lives under a consistent location.
 
 An environment variable, CHEAT_AT_SEARCH_DATA_PATH, can be used as the highest priority override.
 
@@ -93,12 +93,12 @@ from cheat_at_search.wands_data import corpus
 import pandas as pd
 
 # Indexing...
-corpus['title_snowball'] = SearchArray.index(corpus['title'], 
+corpus['title_snowball'] = SearchArray.index(corpus['title'],
                                              tokenizer=snowball_tokenezer)
 
 # BM25 score for every document for a given query
 query = "red shoes"
-tokenized_query = snowball_tokenezer(query) 
+tokenized_query = snowball_tokenezer(query)
 scores = np.zeros(len(corpus))
 for term in tokenized_query:
     scores += corpus['title_snowball'].array.score(term)
@@ -164,7 +164,7 @@ The default passage function puts title on the first line. Then description star
 
 The cache gets built in chunks iof 10K vectors at a time. Batched up via SentenceTransformers. This is to avoid memory issues when building the cache. And to allow resuming of the cache build if it gets interrupted. If the process gets interrupted, the already built chunks should be loaded and the build should resume from the next chunk that needs to be built.
 
-Cache lives under a dedicated location under the data directory. The cache key is built from the dataset name, model name and a hash of the passage_fn (since that can change the embeddings significantly). Each chunk is stored as a separate npy file with a consistent naming convention. 
+Cache lives under a dedicated location under the data directory. The cache key is built from the dataset name, model name and a hash of the passage_fn (since that can change the embeddings significantly). Each chunk is stored as a separate npy file with a consistent naming convention.
 
 Chunks are tracked via a manifest.
 
@@ -173,8 +173,8 @@ Chunks are tracked via a manifest.
 
 Rebuild if:
 
-   - If manifest signature/model mismatch or invalid JSON → rebuild.                     
-   - If chunk file shape is incompatible → rebuild that chunk and update manifest.       
+   - If manifest signature/model mismatch or invalid JSON → rebuild.
+   - If chunk file shape is incompatible → rebuild that chunk and update manifest.
 
 
 ## LLM Query / Doc Enrichment

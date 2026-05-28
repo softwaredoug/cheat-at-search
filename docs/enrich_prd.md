@@ -51,7 +51,7 @@ enricher = AutoEnricher(
 )
 ```
 
-Then usually its used in a function that will return 
+Then usually its used in a function that will return
 
 ```python
 def get_prompt_fully_qualified(query):
