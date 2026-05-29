@@ -37,6 +37,9 @@ jobs:
       - name: Run unit tests
         run: poetry run pytest tests/unit
 
+      - name: Run e2e tests
+        run: poetry run pytest tests/e2e
+
   integration-tests:
     runs-on: ubuntu-latest
     environment: openai-tests
