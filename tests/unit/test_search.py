@@ -316,6 +316,114 @@ def test_run_strategy_raises_for_strategy_missing_search():
         run_strategy(strategy, judgments, num_queries=1, seed=123)
 
 
+def test_run_strategy_raises_on_string_doc_ids():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 1, "query": "alpha", "doc_id": 20, "grade": 0},
+        ]
+    )
+
+    class StringIdStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search(self, query, k=10):
+            return ["0", "1"], [0.9, 0.1]
+
+    strategy = StringIdStrategy(corpus)
+
+    with pytest.raises(TypeError, match="non-integer key"):
+        run_strategy(strategy, judgments, num_queries=1, seed=123)
+
+
+def test_run_strategy_raises_on_batch_length_mismatch():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 2, "query": "beta", "doc_id": 20, "grade": 1},
+        ]
+    )
+
+    class BatchLengthMismatchStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search_batch(self, queries, k=10):
+            return [[0, 1]], [[0.9, 0.1], [0.8, 0.2]]
+
+    strategy = BatchLengthMismatchStrategy(corpus)
+
+    with pytest.raises(ValueError, match="search_batch must return top_k"):
+        run_strategy(strategy, judgments, num_queries=2, seed=123)
+
+
+def test_run_strategy_raises_on_batch_item_length_mismatch():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 2, "query": "beta", "doc_id": 20, "grade": 1},
+        ]
+    )
+
+    class BatchItemMismatchStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search_batch(self, queries, k=10):
+            return [[0, 1], [0]], [[0.9, 0.1], [0.8, 0.2]]
+
+    strategy = BatchItemMismatchStrategy(corpus)
+
+    with pytest.raises(ValueError, match="Length of values"):
+        run_strategy(strategy, judgments, num_queries=2, seed=123)
+
+
+def test_run_strategy_raises_on_batch_string_doc_ids():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 2, "query": "beta", "doc_id": 20, "grade": 1},
+        ]
+    )
+
+    class BatchStringIdStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search_batch(self, queries, k=10):
+            return [["0", "1"], ["1"]], [[0.9, 0.1], [0.8]]
+
+    strategy = BatchStringIdStrategy(corpus)
+
+    with pytest.raises(TypeError, match="non-integer key"):
+        run_strategy(strategy, judgments, num_queries=2, seed=123)
+
+
 def test_search_all_batched_fills_empty_results():
     corpus = pd.DataFrame(
         [

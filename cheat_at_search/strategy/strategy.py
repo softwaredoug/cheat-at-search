@@ -235,6 +235,10 @@ class SearchStrategy:
                     continue
                 batch_queries = batch["query"].tolist()
                 batch_top_k, batch_scores = self.search_batch(batch_queries, k)
+                if len(batch_top_k) != len(batch) or len(batch_scores) != len(batch):
+                    raise ValueError(
+                        "search_batch must return top_k and scores for each query"
+                    )
                 batch_results = SearchResultBatch()
                 for (_, query_row), top_k, scores in zip(
                     batch.iterrows(), batch_top_k, batch_scores
