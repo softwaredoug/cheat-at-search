@@ -1,21 +1,16 @@
-from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.wands_data import products
 from cheat_at_search.agent.openai_agent import OpenAIAgent
+from cheat_at_search.agent.search_client import SearchResults
 from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.harness import Harness
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal
-from openai import OpenAI
+from unittest.mock import patch
 from searcharray import SearchArray
 import numpy as np
 from pydantic import BaseModel, Field
 
-
-openai_key = key_for_provider("openai")
-
-client = OpenAI(
-    api_key=openai_key,
-)
+from .openai_responses_mock import MockOpenAIResponses, function_call
 
 products["product_name_snowball"] = SearchArray.index(
     products["product_name"], tokenizer=snowball_tokenizer
@@ -24,6 +19,13 @@ products["product_name_snowball"] = SearchArray.index(
 products["description_snowball"] = SearchArray.index(
     products["product_description"], tokenizer=snowball_tokenizer
 )
+
+
+def configure_mock_openai(mock_key_for_provider, mock_openai):
+    mock_key_for_provider.return_value = "test-openai-key"
+    mock_responses = MockOpenAIResponses()
+    mock_openai.return_value = mock_responses.client
+    return mock_responses
 
 
 def search_products(query: str, top_k: int = 5) -> List[Dict]:
@@ -157,11 +159,35 @@ def get_past_queries(original_user_query: str) -> List[SearchInteraction]:
     return []
 
 
-def test_calling_search_tool():
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_calling_search_tool(mock_key_for_provider, mock_openai):
     # thread, public_url = serve_tools(fns=[search_products])
     # time.sleep(1)
+    mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
 
-    search_client = OpenAIAgent(tools=[search_products], model="openai/gpt-5")
+    mock_agent_openai.queue_parse_response(
+        output=[
+            function_call(
+                "search_products",
+                {"query": "oversized sofa", "top_k": 5},
+            )
+        ]
+    )
+    mock_agent_openai.queue_parse_response(
+        payload={
+            "results": [
+                {"id": "0", "rank": 1},
+                {"id": "1", "rank": 2},
+            ]
+        }
+    )
+
+    search_client = OpenAIAgent(
+        tools=[search_products],
+        model="openai/gpt-5",
+        response_model=SearchResults,
+    )
     prompt = """
         Reason carefully to find furniture products that match the following description, returning top 10 best results.
 
@@ -177,9 +203,18 @@ def test_calling_search_tool():
         },
         {"role": "user", "content": prompt},
     ]
-    resp, _, _ = search_client.chat(inputs=inputs, return_usage=True)
+    resp, final_inputs, usage = search_client.chat(inputs=inputs, return_usage=True)
     results = resp.output_parsed
-    assert len(results.results) > 0
+    assert [result.id for result in results.results] == ["0", "1"]
+    assert usage["num_tool_calls"] == 1
+    assert final_inputs[-1]["type"] == "function_call_output"
+    assert "product_name" in final_inputs[-1]["output"]
+    mock_openai.assert_called_once_with(api_key="test-openai-key")
+    assert mock_agent_openai.client.responses.parse.call_count == 2
+    first_parse_kwargs = mock_agent_openai.client.responses.parse.call_args_list[0].kwargs
+    assert first_parse_kwargs["model"] == "gpt-5"
+    assert first_parse_kwargs["text_format"] is SearchResults
+    assert first_parse_kwargs["tools"][0]["name"] == "search_products"
 
 
 class PreferredSearchTool(BaseModel):
@@ -190,7 +225,17 @@ class PreferredSearchTool(BaseModel):
     reason: str = Field(..., description="The reason for preferring this search tool")
 
 
-def test_analyze_best_search_backend():
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_analyze_best_search_backend(mock_key_for_provider, mock_openai):
+    mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
+    mock_agent_openai.queue_parse_response(
+        payload={
+            "tool_name": "search_products",
+            "reason": "The product description search is more useful for this request.",
+        }
+    )
+
     system_prompt = """
         You are a helpful assistant that analyzes the best search tool for finding furniture products.
     """
@@ -218,9 +263,18 @@ def test_analyze_best_search_backend():
     resp, _, _ = search_client.chat(inputs=inputs, return_usage=True)
     preferred_tool = resp.output_parsed
     assert preferred_tool.tool_name in ["search_products", "alt_search_products"]
+    parse_kwargs = mock_agent_openai.client.responses.parse.call_args.kwargs
+    assert parse_kwargs["text_format"] is PreferredSearchTool
+    assert [tool["name"] for tool in parse_kwargs["tools"]] == [
+        "search_products",
+        "alt_search_products",
+    ]
 
 
-def test_reasoning_search_strategy():
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_reasoning_search_strategy(mock_key_for_provider, mock_openai):
+    mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
     system_prompt = """
         You are a helpful assistant that helps people find furniture products.
     """
@@ -232,11 +286,6 @@ def test_reasoning_search_strategy():
 
     """
 
-    search_client = OpenAIAgent(tools=[search_products], model="openai/gpt-5")
-    harness = Harness(search_client)
-    strategy = ReasoningSearchStrategy(
-        products, harness=harness, prompt=prompt, system_prompt=system_prompt
-    )
     queries = [
         "a couch for my really big butt",
         "a small chair for my tiny apartment",
@@ -244,7 +293,31 @@ def test_reasoning_search_strategy():
         "a table for a fancy dinner party",
         "a lamp for reading at night",
     ]
+    for _query in queries:
+        mock_agent_openai.queue_parse_response(
+            payload={
+                "results": [
+                    {"id": str(idx), "rank": idx + 1}
+                    for idx in range(5)
+                ]
+            }
+        )
+
+    search_client = OpenAIAgent(
+        tools=[search_products],
+        model="openai/gpt-5",
+        response_model=SearchResults,
+    )
+    harness = Harness(search_client)
+    strategy = ReasoningSearchStrategy(
+        products,
+        harness=harness,
+        prompt=prompt,
+        system_prompt=system_prompt,
+        cache=False,
+    )
     for query in queries:
         top_k, scores = strategy.search(query, k=5)
         assert len(top_k) == 5
         assert len(scores) == 5
+    assert mock_agent_openai.client.responses.parse.call_count == len(queries)
