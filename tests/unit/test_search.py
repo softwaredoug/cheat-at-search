@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from cheat_at_search.search import run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy.strategy import SearchStrategy
@@ -263,6 +264,56 @@ def test_search_all_accepts_numpy_results():
     results = strategy.search_all(queries, k=1)
 
     assert len(results) == 1
+
+
+def test_run_strategy_raises_on_mismatched_search_lengths():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 1, "query": "alpha", "doc_id": 20, "grade": 0},
+        ]
+    )
+
+    class BadLengthStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+        def search(self, query, k=10):
+            return [0, 1], [0.9]
+
+    strategy = BadLengthStrategy(corpus)
+
+    with pytest.raises(ValueError, match="Length of values"):
+        run_strategy(strategy, judgments, num_queries=1, seed=123)
+
+
+def test_run_strategy_raises_for_strategy_missing_search():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+        ]
+    )
+
+    class BadStrategy(SearchStrategy):
+        def __init__(self, corpus):
+            super().__init__(corpus)
+
+    strategy = BadStrategy(corpus)
+
+    with pytest.raises(NotImplementedError, match="Subclasses should implement"):
+        run_strategy(strategy, judgments, num_queries=1, seed=123)
 
 
 def test_search_all_batched_fills_empty_results():
