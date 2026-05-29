@@ -18,3 +18,8 @@ repos:
         entry: poetry run pytest tests/unit
         language: system
         pass_filenames: false
+      - id: pytest-e2e
+        name: pytest e2e
+        entry: poetry run pytest tests/e2e
+        language: system
+        pass_filenames: false
