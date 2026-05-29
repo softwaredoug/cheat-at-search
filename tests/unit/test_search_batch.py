@@ -3,16 +3,18 @@ import pandas as pd
 from cheat_at_search.strategy.strategy import SearchStrategy
 
 
-def test_search_all_uses_search_batch_esci():
-    from cheat_at_search import esci_data
-
-    corpus = esci_data.corpus
-    judgments = esci_data.judgments
-    queries = (
-        judgments[["query", "query_id"]]
-        .drop_duplicates()
-        .sample(n=20, random_state=123)
-        .reset_index(drop=True)
+def test_search_all_uses_search_batch_for_mocked_queries():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": idx, "title": f"document {idx}"}
+            for idx in range(10)
+        ]
+    )
+    queries = pd.DataFrame(
+        [
+            {"query_id": idx, "query": f"query {idx}"}
+            for idx in range(20)
+        ]
     )
 
     class DummyBatchStrategy(SearchStrategy):
