@@ -127,7 +127,7 @@ class DataframeEnricher:
         self.separator = separator
         if attrs is None:  # Inferred from the BaseModel
             output_cls = enricher.response_model
-            attrs = output_cls.__fields__.keys()
+            attrs = output_cls.model_fields.keys()
             attrs = set(attrs)  # Ensure unique attributes
             # Get properties too
             attrs = attrs.union(attr for attr in dir(output_cls) if isinstance(getattr(output_cls, attr), property))
