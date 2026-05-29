@@ -25,12 +25,12 @@ def snowball_tokenizer(text):
 
 
 def taxonomy_tokenizer(text):
-    # Turn "/" into a special token that won't get stemmed
-    text = text.replace('/', 'ddd')
     if text is float:
         return ''
     if text is None:
         return ''
+    # Turn "/" into a special token that won't get stemmed
+    text = text.replace('/', 'ddd')
     text = text.translate(all_trans).replace("'", " ")
     split = text.lower().split()
     return [stem_word(token)
