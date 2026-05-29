@@ -1,0 +1,42 @@
+0	qid:1	 # 70	rambo
+0	qid:2	 # 11	rocky
+0	qid:2	 # 70	rocky
+0	qid:3	 # 11	war games
+0	qid:8	 # 11	battlestar galactica
+1	qid:15	 # 11	star wars new hope
+0	qid:26	 # 15	kung fury
+1	qid:28	 # 24	kill bill
+0	qid:30	 # 24	pulp fiction
+0	qid:35	 # 65	the green mile
+1	qid:36	 # 13	forrest gump
+0	qid:39	 # 11	how to train your dragon 2
+1	qid:40	 # 11	star wars
+1	qid:43	 # 85	raiders lost ark
+1	qid:43	 # 87	raiders lost ark
+1	qid:43	 # 89	raiders lost ark
+0	qid:46	 # 75	sound of music
+1	qid:53	 # 85	raiders of the lost ark
+1	qid:53	 # 87	raiders of the lost ark
+1	qid:53	 # 89	raiders of the lost ark
+1	qid:54	 # 87	indiana jones
+1	qid:54	 # 89	indiana jones
+1	qid:54	 # 85	indiana jones
+1	qid:57	 # 13	forest gump
+0	qid:58	 # 11	wargames
+1	qid:59	 # 24	kill bill 2
+1	qid:67	 # 77	amnesia
+1	qid:68	 # 62	astronauts
+1	qid:68	 # 95	astronauts
+0	qid:70	 # 25	basketball
+0	qid:72	 # 2	buddy movie
+1	qid:79	 # 95	disaster
+1	qid:85	 # 11	futuristic
+1	qid:87	 # 24	gory
+0	qid:88	 # 19	heist
+0	qid:90	 # 82	hospital
+1	qid:95	 # 95	nasa
+1	qid:100	 # 11	robots
+0	qid:102	 # 20	screwball comedy
+1	qid:103	 # 85	snakes
+1	qid:103	 # 89	snakes
+1	qid:105	 # 28	vietnam war

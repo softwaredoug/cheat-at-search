@@ -1,0 +1,13 @@
+{
+  "datasets": [
+    "bc_plus",
+    "doug_blog",
+    "esci",
+    "minimarco",
+    "msmarco",
+    "tmdb",
+    "wands"
+  ],
+  "random_state": 42,
+  "sample_size": 100
+}
