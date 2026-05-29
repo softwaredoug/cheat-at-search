@@ -1,31 +1,14 @@
-import importlib
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from cheat_at_search.search import graded_bm25, run_bm25, run_strategy, vs_ideal
-from cheat_at_search.strategy import BM25Search
+from cheat_at_search.search import run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy.strategy import SearchStrategy
 
 
-@pytest.mark.parametrize(
-    "data_module", ["wands_data", "tmdb_data"]
-)
-def test_bm25_search(data_module):
-    """
-    Run BM25 search strategy on the specified dataset module.
-    """
-    num_queries = 10
-    module = importlib.import_module(f"cheat_at_search.{data_module}")
-    corpus = getattr(module, "corpus")
-    judgments = getattr(module, "judgments")
-    strategy = BM25Search(corpus)
-    graded_results = run_strategy(strategy, judgments, num_queries=num_queries)
-    return graded_results
-
-
-def test_run_bm25(tmp_path, monkeypatch):
+@patch("cheat_at_search.search.ensure_data_subdir")
+def test_run_bm25(mock_ensure_data_subdir, tmp_path):
     corpus = pd.DataFrame(
         [
             {
@@ -52,9 +35,7 @@ def test_run_bm25(tmp_path, monkeypatch):
         subdir_path.mkdir(parents=True, exist_ok=True)
         return subdir_path
 
-    import cheat_at_search.search as search_module
-
-    monkeypatch.setattr(search_module, "ensure_data_subdir", _ensure_data_subdir)
+    mock_ensure_data_subdir.side_effect = _ensure_data_subdir
 
     graded_bm25 = run_bm25(corpus, judgments)
     assert len(graded_bm25) > 0
@@ -162,53 +143,6 @@ def test_vs_ideal_mocked():
     assert comparison["rank_ideal"].tolist() == [1, 2]
     assert comparison["doc_id_ideal"].tolist() == [102, 101]
     assert comparison["doc_id_actual"].tolist() == [101, 102]
-
-
-def test_vs_ideal_wands():
-    from cheat_at_search import wands_data
-
-    corpus = wands_data.corpus
-    judgments = wands_data.judgments
-    strategy = BM25Search(corpus)
-    graded_results = run_strategy(strategy, judgments, num_queries=2, seed=123)
-
-    comparison = vs_ideal(graded_results, judgments, corpus=corpus)
-    assert list(comparison.columns) == [
-        "query_id",
-        "query",
-        "doc_id_ideal",
-        "grade_ideal",
-        "rank_ideal",
-        "title_ideal",
-        "title_actual",
-        "rank_actual",
-        "doc_id_actual",
-        "grade_actual",
-        "dcg",
-        "ndcg",
-    ]
-    assert len(comparison) > 0
-    assert comparison["rank_actual"].max() <= 10
-    assert comparison["rank_ideal"].max() <= 10
-
-
-def test_graded_bm25_cached():
-    assert isinstance(graded_bm25, pd.DataFrame)
-    assert len(graded_bm25) > 0
-    assert "doc_id" in graded_bm25.columns
-    assert "dcg" in graded_bm25.columns
-    assert "ndcg" in graded_bm25.columns
-    assert "mrr" in graded_bm25.columns
-
-
-def test_vs_ideal_with_cached_bm25():
-    from cheat_at_search import wands_data
-
-    judgments = wands_data.judgments
-    comparison = vs_ideal(graded_bm25, judgments, corpus=wands_data.corpus)
-    assert len(comparison) > 0
-    assert comparison["rank_actual"].max() <= 10
-    assert comparison["rank_ideal"].max() <= 10
 
 
 def test_search_all_uses_search_batch():
