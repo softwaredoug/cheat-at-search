@@ -321,3 +321,51 @@ def test_reasoning_search_strategy(mock_key_for_provider, mock_openai):
         assert len(top_k) == 5
         assert len(scores) == 5
     assert mock_agent_openai.client.responses.parse.call_count == len(queries)
+
+
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_agent_tool_error_is_returned_as_string(mock_key_for_provider, mock_openai):
+    mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
+
+    def failing_tool(query: str, top_k: int = 5) -> list[dict]:
+        """Always fails for testing."""
+        raise RuntimeError("tool failure")
+
+    mock_agent_openai.queue_parse_response(
+        output=[
+            function_call(
+                "failing_tool",
+                {"query": "oversized sofa", "top_k": 5},
+            )
+        ]
+    )
+    mock_agent_openai.queue_parse_response(
+        payload={
+            "results": [
+                {"id": "0", "rank": 1},
+                {"id": "1", "rank": 2},
+            ]
+        }
+    )
+
+    search_client = OpenAIAgent(
+        tools=[failing_tool],
+        model="openai/gpt-5",
+        response_model=SearchResults,
+    )
+
+    inputs = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that helps people find furniture products.",
+        },
+        {"role": "user", "content": "Find a couch"},
+    ]
+
+    resp, final_inputs, usage = search_client.chat(inputs=inputs, return_usage=True)
+
+    assert [result.id for result in resp.output_parsed.results] == ["0", "1"]
+    assert usage["num_tool_calls"] == 1
+    assert final_inputs[-1]["type"] == "function_call_output"
+    assert "tool failure" in final_inputs[-1]["output"]

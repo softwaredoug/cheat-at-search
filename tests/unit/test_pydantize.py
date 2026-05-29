@@ -103,3 +103,18 @@ def test_pydantize_agent_state_annotation_ignored():
     dict_result, _ = call_from_tool(args, agent_state=5)
     py_result = BarFoo.model_validate(dict_result)
     assert py_result == BarFoo(x="9-5", y=0.0)
+
+
+def test_pydantize_tool_errors_are_returned_as_strings():
+
+    def do_fail(a: int) -> str:
+        """Always raise an error for testing."""
+        raise ValueError("boom")
+
+    ArgsModel, _tool_spec, call_from_tool = make_tool_adapter(do_fail)
+
+    args = ArgsModel(a=7)
+    py_result, json_result = call_from_tool(args)
+
+    assert "boom" in py_result
+    assert "boom" in json_result

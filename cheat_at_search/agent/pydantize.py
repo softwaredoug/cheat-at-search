@@ -3,6 +3,7 @@ from pydantic import BaseModel, create_model
 from typing import Any, get_type_hints
 from pydantic.type_adapter import TypeAdapter
 import inspect
+import json
 
 
 def make_tool_adapter(
@@ -64,7 +65,11 @@ def make_tool_adapter(
             else:
                 kwargs[name] = val
 
-        result = func(*posargs, **kwargs)
+        try:
+            result = func(*posargs, **kwargs)
+        except Exception as exc:
+            error_text = f"Tool error: {type(exc).__name__}: {exc}"
+            return error_text, json.dumps(error_text)
 
         py_result = ret_adapter.dump_python(result)
         json_text = ret_adapter.dump_json(result).decode()

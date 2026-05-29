@@ -180,7 +180,7 @@ class OpenAIAgent(Agent):
                 resp.usage = usage
             return resp, inputs, usage
         except Exception as e:
-            active_logger.error("Error calling MCP search tool:", e)
+            active_logger.error("Error calling MCP search tool: %s", e)
             raise e
 
     def loop(
