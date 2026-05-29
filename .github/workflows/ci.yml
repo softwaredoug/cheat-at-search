@@ -45,6 +45,7 @@ jobs:
     environment: openai-tests
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CHEAT_AT_SEARCH_DATA_PATH: ${{ github.workspace }}/data
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,6 +67,16 @@ jobs:
           key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
           restore-keys: |
             poetry-${{ runner.os }}-
+
+      - name: Cache datasets
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CHEAT_AT_SEARCH_DATA_PATH }}
+            ~/.cache/huggingface
+          key: datasets-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            datasets-${{ runner.os }}-
 
       - name: Install dependencies
         run: poetry install --with dev
