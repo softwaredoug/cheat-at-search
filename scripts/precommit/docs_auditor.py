@@ -29,14 +29,14 @@ def main() -> int:
 
     print("Running docs auditor (this may take up to a minute)...")
 
-    # docs_auditor is a subagent, so we invoke the default primary agent
-    # with a message that triggers delegation to the subagent.
+    # docs_auditor is a primary agent; invoke it directly.
     cmd = [
         opencode,
         "run",
+        "--agent", "docs_auditor",
         "--dangerously-skip-permissions",
         "--format", "default",
-        "Run the docs_auditor subagent to audit docs/ and README.md for drift against the current codebase, tests, config, and CLI behavior. Report any blocking issues, warnings, or missing documentation.",
+        "Analyze README.md and docs/ for information thats out of date. Output 'all good' if no issues found.",
     ]
 
     try:
@@ -56,28 +56,13 @@ def main() -> int:
     output = result.stdout + result.stderr
     print(output)
 
-    # Check for blocking issues - handle multiple possible heading formats
-    has_blocking_section = (
-        "## Blocking issues" in output
-        or "## Blocking Issues" in output
-        or "### Blocking Issues" in output
-        or "### Blocking issues" in output
-    )
-    has_blocking_items = "DOCS-STALE-" in output
+    if "all good" in output.lower():
+        print("Docs audit passed.")
+        return 0
 
-    if has_blocking_section and has_blocking_items:
-        print()
-        print("ERROR: Docs audit found blocking issues. Please fix documentation drift before committing.")
-        return 1
-
-    # Check for stale status - handle both possible formats
-    if "Overall status: likely stale" in output or "Overall Docs Health: Likely stale" in output:
-        print()
-        print("ERROR: Docs audit reports 'likely stale' status. Please review and fix documentation.")
-        return 1
-
-    print("Docs audit passed.")
-    return 0
+    print()
+    print("ERROR: Docs audit did not return 'all good'. Please review the report above.")
+    return 1
 
 
 if __name__ == "__main__":
