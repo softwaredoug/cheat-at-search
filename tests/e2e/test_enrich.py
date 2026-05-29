@@ -1,4 +1,5 @@
 import tempfile
+from pathlib import Path
 from typing import Literal
 from unittest.mock import patch
 
@@ -91,6 +92,36 @@ def test_auto_enricher_debug_returns_metadata(mock_key_for_provider, mock_openai
     assert debug_meta.completion_tokens == 4
     assert debug_meta.response_id == "resp_debug_123"
     assert debug_meta.output == ColorEnrich(color="blue")
+
+
+@patch("cheat_at_search.enrich.cached_enrich_client.json.load")
+@patch("cheat_at_search.enrich.openai_enrich_client.OpenAI")
+@patch("cheat_at_search.enrich.openai_enrich_client.key_for_provider")
+def test_auto_enricher_recovers_from_corrupt_cache(
+    mock_key_for_provider,
+    mock_openai,
+    mock_json_load,
+):
+    mock_json_load.side_effect = ValueError("corrupt cache")
+    mock_responses = configure_mock_openai_enricher(mock_key_for_provider, mock_openai)
+    mock_responses.queue_parse_response(payload={"color": "blue"})
+
+    enricher = AutoEnricher(
+        model="openai/gpt-4.1-nano",
+        system_prompt="Classify product colors.",
+        response_model=ColorEnrich,
+    )
+
+    cache_path = Path(enricher.cached_enricher.cache_file)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text("{\"stale\": \"data\"}")
+
+    enricher.cached_enricher.load_cache()
+
+    assert not cache_path.exists()
+    assert enricher.enrich("What color is this product?\n\nblue sofa") == ColorEnrich(
+        color="blue"
+    )
 
 
 @patch("cheat_at_search.enrich.openai_enrich_client.OpenAI")
