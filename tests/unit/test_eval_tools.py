@@ -85,7 +85,6 @@ def rerank_esci(query, top_k):
 def test_make_eval_guardrail_disables_cache(mock_run_strategy):
     corpus = pd.DataFrame({
         "doc_id": [101],
-        "doc_id": [101],
         "title": ["one"],
         "description": ["alpha"],
     })

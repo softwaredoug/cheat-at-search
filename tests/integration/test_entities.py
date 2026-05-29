@@ -1,15 +1,16 @@
 import pytest
-import numpy as np
-
-pytest.importorskip("sentence_transformers", reason="sentence_transformers not installed")
-from sentence_transformers import SentenceTransformer
 
 from cheat_at_search.enrich.entities import Entities
+
+sentence_transformers = pytest.importorskip(
+    "sentence_transformers",
+    reason="sentence_transformers not installed",
+)
 
 
 @pytest.fixture(scope="module")
 def model():
-    return SentenceTransformer("all-MiniLM-L6-v2")
+    return sentence_transformers.SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def assert_embeddings_match_names(entities: Entities) -> None:

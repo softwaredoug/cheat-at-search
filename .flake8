@@ -11,4 +11,5 @@ ignore =
 
 per-file-ignores =
     scripts/*: T20
-    test/*: T20
+    tests/*: T20
+    cheat_at_search/codegen/code.py: F401,E303

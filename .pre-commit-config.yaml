@@ -13,6 +13,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^(pyproject\.toml|poetry\.lock)$
+      - id: flake8
+        name: flake8
+        entry: poetry run flake8
+        language: system
+        types: [python]
       - id: pytest-unit
         name: pytest unit
         entry: poetry run pytest tests/unit
