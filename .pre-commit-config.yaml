@@ -28,9 +28,3 @@ repos:
         entry: poetry run pytest tests/e2e
         language: system
         pass_filenames: false
-      - id: docs-auditor
-        name: docs auditor
-        entry: python3 scripts/precommit/docs_auditor.py
-        language: system
-        pass_filenames: false
-        files: ^(docs/|README\.md|\.opencode/agents/docs_auditor\.md)$

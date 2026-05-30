@@ -7,7 +7,7 @@ from cheat_at_search import data_dir
 def test_get_project_root():
     result = data_dir.get_project_root()
     assert isinstance(result, str)
-    assert "cheat-with-llms" in result or "cheat_at_search" in result
+    assert "cheat-at-search" in result or "cheat_at_search" in result
 
 
 @patch('cheat_at_search.data_dir.requests.get')
