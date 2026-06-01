@@ -84,6 +84,64 @@ def test_run_strategy_shuffles_queries_with_seed():
     pd.testing.assert_frame_equal(strategy.seen_queries, expected)
 
 
+def test_run_strategy_passes_batch_size_to_search_all():
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 1},
+            {"query_id": 2, "query": "bravo", "doc_id": 20, "grade": 1},
+        ]
+    )
+
+    class DummySearchStrategy:
+        def __init__(self):
+            self.batch_size = None
+
+        def search_all(self, queries, batch_size=100, **_kwargs):
+            self.batch_size = batch_size
+            return pd.DataFrame(
+                {
+                    "query_id": queries["query_id"].tolist(),
+                    "query": queries["query"].tolist(),
+                    "doc_id": [10, 20],
+                    "rank": [1, 1],
+                }
+            )
+
+    strategy = DummySearchStrategy()
+    run_strategy(strategy, judgments, batch_size=2)
+
+    assert strategy.batch_size == 2
+
+
+def test_run_strategy_passes_batch_size_to_answer_all():
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "answer": "A"},
+            {"query_id": 2, "query": "bravo", "answer": "B"},
+        ]
+    )
+
+    class DummyAnswerStrategy(SearchStrategy):
+        def __init__(self):
+            super().__init__(pd.DataFrame())
+            self.batch_size = None
+
+        def answer_all(self, queries, batch_size=100, **_kwargs):
+            self.batch_size = batch_size
+            return pd.DataFrame(
+                {
+                    "query_id": queries["query_id"].tolist(),
+                    "query": queries["query"].tolist(),
+                    "answer": ["ok"] * len(queries),
+                }
+            )
+
+    strategy = DummyAnswerStrategy()
+    run_strategy(strategy, judgments, batch_size=3, eval_answer=lambda *_: True)
+
+    assert strategy.batch_size == 3
+
+
 def test_vs_ideal_mocked():
     graded_results = pd.DataFrame(
         [

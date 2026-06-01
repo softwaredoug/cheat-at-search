@@ -21,6 +21,7 @@ def run_strategy(
     seed=42,
     sub_sample_n=None,
     sub_sample_seed=42,
+    batch_size=100,
     show_progress=True,
     cache=True,
     eval_answer=None,
@@ -65,6 +66,7 @@ def run_strategy(
             strategy,
             judgments,
             available_queries,
+            batch_size,
             show_progress,
             cache,
             eval_answer,
@@ -74,15 +76,24 @@ def run_strategy(
         strategy,
         judgments,
         available_queries,
+        batch_size,
         show_progress,
         cache,
     )
 
 
-def _run_search_path(strategy, judgments, available_queries, show_progress, cache):
+def _run_search_path(
+    strategy,
+    judgments,
+    available_queries,
+    batch_size,
+    show_progress,
+    cache,
+):
     max_grade = judgments["grade"].max()
     results = strategy.search_all(
         available_queries,
+        batch_size=batch_size,
         show_progress=show_progress,
         cache=cache,
     )
@@ -120,12 +131,14 @@ def _run_answer_path(
     strategy,
     judgments,
     available_queries,
+    batch_size,
     show_progress,
     cache,
     eval_answer_fn,
 ):
     results = strategy.answer_all(
         available_queries,
+        batch_size=batch_size,
         show_progress=show_progress,
         cache=cache,
     )
