@@ -5,12 +5,19 @@ from cheat_at_search.agent.strategy import ReasoningSearchStrategy
 from cheat_at_search.agent.harness import Harness
 from cheat_at_search.tokenizers import snowball_tokenizer
 from typing import List, Dict, Literal
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+import httpx
+import pytest
+from openai import BadRequestError
 from searcharray import SearchArray
 import numpy as np
 from pydantic import BaseModel, Field
 
-from .openai_responses_mock import MockOpenAIResponses, function_call
+from .openai_responses_mock import (
+    MockOpenAIResponses,
+    function_call,
+    responses_api_response,
+)
 
 products["product_name_snowball"] = SearchArray.index(
     products["product_name"], tokenizer=snowball_tokenizer
@@ -26,6 +33,51 @@ def configure_mock_openai(mock_key_for_provider, mock_openai):
     mock_responses = MockOpenAIResponses()
     mock_openai.return_value = mock_responses.client
     return mock_responses
+
+
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_responses_retry_on_exception(mock_key_for_provider, mock_openai):
+    mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
+    success_response = responses_api_response()
+    mock_agent_openai.client.responses.create = Mock(
+        side_effect=[Exception("boom"), success_response]
+    )
+
+    search_client = OpenAIAgent(
+        tools=[],
+        model="openai/gpt-5",
+    )
+
+    resp, _, _ = search_client.chat(inputs=[])
+
+    assert resp is success_response
+    assert mock_agent_openai.client.responses.create.call_count == 2
+
+
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_responses_no_retry_on_bad_request_400(
+    mock_key_for_provider, mock_openai
+):
+    mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    bad_request = BadRequestError(
+        "bad request",
+        response=httpx.Response(400, request=request),
+        body=None,
+    )
+    mock_agent_openai.client.responses.create = Mock(side_effect=bad_request)
+
+    search_client = OpenAIAgent(
+        tools=[],
+        model="openai/gpt-5",
+    )
+
+    with pytest.raises(BadRequestError):
+        search_client.chat(inputs=[])
+
+    assert mock_agent_openai.client.responses.create.call_count == 1
 
 
 def search_products(query: str, top_k: int = 5) -> List[Dict]:

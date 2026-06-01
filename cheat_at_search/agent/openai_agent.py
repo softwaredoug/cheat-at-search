@@ -2,7 +2,7 @@ from cheat_at_search.agent.search_client import Agent, SearchResults
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.pydantize import make_tool_adapter
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from typing import Optional
 from hashlib import md5
 import json
@@ -91,21 +91,12 @@ class OpenAIAgent(Agent):
                     "effort": self.reasoning_level,
                     "summary": "auto" if self.summary else "none",
                 }
-                if self.response_model:
-                    resp = self.openai.responses.parse(
-                        model=self.model,
-                        input=inputs,
-                        tools=tools,
-                        reasoning=reasoning,
-                        text_format=self.response_model,
-                    )
-                else:
-                    resp = self.openai.responses.create(
-                        model=self.model,
-                        input=inputs,
-                        tools=tools,
-                        reasoning=reasoning,
-                    )
+                resp = self._call_responses_with_retry(
+                    inputs=inputs,
+                    tools=tools,
+                    reasoning=reasoning,
+                    active_logger=active_logger,
+                )
                 # Iterate over tool calls
                 inputs += resp.output
 
@@ -182,6 +173,41 @@ class OpenAIAgent(Agent):
         except Exception as e:
             active_logger.error("Error calling MCP search tool: %s", e)
             raise e
+
+    def _call_responses_with_retry(self, inputs, tools, reasoning, active_logger):
+        attempts = 2
+        for attempt in range(1, attempts + 1):
+            try:
+                if self.response_model:
+                    return self.openai.responses.parse(
+                        model=self.model,
+                        input=inputs,
+                        tools=tools,
+                        reasoning=reasoning,
+                        text_format=self.response_model,
+                    )
+                return self.openai.responses.create(
+                    model=self.model,
+                    input=inputs,
+                    tools=tools,
+                    reasoning=reasoning,
+                )
+            except BadRequestError as exc:
+                if getattr(exc, "status_code", None) == 400:
+                    raise
+                if attempt == attempts:
+                    raise
+                active_logger.warning(
+                    "OpenAI responses call failed (%s). Retrying...",
+                    exc,
+                )
+            except Exception as exc:
+                if attempt == attempts:
+                    raise
+                active_logger.warning(
+                    "OpenAI responses call failed (%s). Retrying...",
+                    exc,
+                )
 
     def loop(
         self,
