@@ -1,5 +1,6 @@
 from importlib import resources
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -41,51 +42,25 @@ def _docs() -> pd.DataFrame:
 
 
 def _judgments() -> pd.DataFrame:
-    bm25_doc_ids = [
-        111,
-        121,
-        155,
-        157,
-        158,
-        160,
-        768,
-        856,
-    ]
-    ltr_doc_ids = [
-        22,
-        41,
-        23,
-        68,
-        868,
-        871,
-        875,
-        876,
-        885,
-        892,
-        894,
-        899,
-        906,
-        931,
-        933,
-        935,
-        941,
-        956,
+    docs = _docs()
+    query_specs = [
+        ("bm25", "bm25"),
+        ("learning_to_rank", "learning to rank"),
     ]
     rows = []
-    for doc_id in bm25_doc_ids:
-        rows.append({
-            "query_id": "bm25",
-            "query": "bm25",
-            "doc_id": doc_id,
-            "grade": 1,
-        })
-    for doc_id in ltr_doc_ids:
-        rows.append({
-            "query_id": "learning_to_rank",
-            "query": "learning to rank",
-            "doc_id": doc_id,
-            "grade": 1,
-        })
+    titles = docs["title"].astype(str)
+    for query_id, query in query_specs:
+        pattern = re.compile(r"\b" + re.escape(query) + r"\b", re.IGNORECASE)
+        matches = docs[titles.str.contains(pattern, na=False)]
+        for doc_id in matches["doc_id"]:
+            rows.append(
+                {
+                    "query_id": query_id,
+                    "query": query,
+                    "doc_id": doc_id,
+                    "grade": 1,
+                }
+            )
     return pd.DataFrame(rows, columns=["query_id", "query", "doc_id", "grade"])
 
 
