@@ -46,6 +46,14 @@ def _judgments() -> pd.DataFrame:
     query_specs = [
         ("bm25", "bm25"),
         ("learning_to_rank", "learning to rank"),
+        ("elasticsearch", "elasticsearch"),
+        ("ai", "ai"),
+        ("pandas", "pandas"),
+        ("search relevance", "search relevance"),
+        ("twitter", "twitter"),
+        ("json", "json"),
+        ("search_engine", "search engine"),
+        ("plugin", "plugin"),
     ]
     rows = []
     titles = docs["title"].astype(str)
