@@ -5,6 +5,7 @@ from cheat_at_search.agent.pydantize import make_tool_adapter
 from openai import BadRequestError, OpenAI
 from typing import Optional
 from hashlib import md5
+from time import sleep
 import json
 import textwrap
 
@@ -175,7 +176,7 @@ class OpenAIAgent(Agent):
             raise e
 
     def _call_responses_with_retry(self, inputs, tools, reasoning, active_logger):
-        attempts = 2
+        attempts = 3
         for attempt in range(1, attempts + 1):
             try:
                 if self.response_model:
@@ -201,6 +202,7 @@ class OpenAIAgent(Agent):
                     "OpenAI responses call failed (%s). Retrying...",
                     exc,
                 )
+                sleep(2 ** attempt)
             except Exception as exc:
                 if attempt == attempts:
                     raise
@@ -208,6 +210,7 @@ class OpenAIAgent(Agent):
                     "OpenAI responses call failed (%s). Retrying...",
                     exc,
                 )
+                sleep(2 ** attempt)
 
     def loop(
         self,

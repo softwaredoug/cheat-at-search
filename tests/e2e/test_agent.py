@@ -35,9 +35,14 @@ def configure_mock_openai(mock_key_for_provider, mock_openai):
     return mock_responses
 
 
+@patch("cheat_at_search.agent.openai_agent.sleep")
 @patch("cheat_at_search.agent.openai_agent.OpenAI")
 @patch("cheat_at_search.agent.openai_agent.key_for_provider")
-def test_responses_retry_on_exception(mock_key_for_provider, mock_openai):
+def test_responses_retry_on_exception(
+    mock_key_for_provider,
+    mock_openai,
+    mock_sleep,
+):
     mock_agent_openai = configure_mock_openai(mock_key_for_provider, mock_openai)
     success_response = responses_api_response()
     mock_agent_openai.client.responses.create = Mock(
@@ -53,6 +58,7 @@ def test_responses_retry_on_exception(mock_key_for_provider, mock_openai):
 
     assert resp is success_response
     assert mock_agent_openai.client.responses.create.call_count == 2
+    mock_sleep.assert_called_once()
 
 
 @patch("cheat_at_search.agent.openai_agent.OpenAI")
