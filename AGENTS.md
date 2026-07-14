@@ -1,5 +1,13 @@
 # AGENTS.md
 
+This project houses various retrieval datasets and tools to make experimentation + training easier.
+
+## Mandatory reading
+
+Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL THIS IS DONE.
+
+## Poetry, etc
+
 Note: This python project uses Poetry for dependency management and test execution.
 
 ## How to commit
