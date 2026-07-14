@@ -64,6 +64,9 @@ def dataset_fixtures(tmp_path, monkeypatch):
 
     monkeypatch.setattr(doug_blog_data.resources, "files", lambda _package: BlogResource())
 
+    doug_rag_data = importlib.import_module("cheat_at_search.doug_rag_data")
+    _clear_cached_attrs(doug_rag_data)
+
 
 @pytest.mark.parametrize(
     "data_module",
@@ -113,6 +116,13 @@ def test_bc_plus_judgments_include_answer():
     assert "answer" in judgments.columns
 
 
+def test_doug_rag_judgments_are_answer_only():
+    module = importlib.import_module("cheat_at_search.doug_rag_data")
+    judgments = getattr(module, "judgments")
+    assert list(judgments.columns) == ["query_id", "query", "answer"]
+    assert (judgments["answer"] == "").all()
+
+
 @pytest.mark.parametrize(
     "data_module",
     [
@@ -123,6 +133,7 @@ def test_bc_plus_judgments_include_answer():
         "wands_data",
         "tmdb_data",
         "doug_blog_data",
+        "doug_rag_data",
     ],
 )
 def test_lexical_indexes_score_arrays(data_module):
