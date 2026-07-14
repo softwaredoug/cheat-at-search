@@ -27,6 +27,10 @@ Note: This python project uses Poetry for dependency management and test executi
 - Prefer patch decorators over patch context managers.
 - Prefer patch decorators over pytest `monkeypatch` unless there is a specific need.
 
+## Respect human edits
+
+The user often makes edits in this repo. DO NOT overwrite their edits. If you need to make a change, please ask the user first.
+
 ## Docs / PRDs
 
 docs can be found in docs/ folder

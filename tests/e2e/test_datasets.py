@@ -120,7 +120,7 @@ def test_doug_rag_judgments_are_answer_only():
     module = importlib.import_module("cheat_at_search.doug_rag_data")
     judgments = getattr(module, "judgments")
     assert list(judgments.columns) == ["query_id", "query", "answer"]
-    assert (judgments["answer"] == "").all()
+    assert (judgments["answer"] != "").all()
 
 
 @pytest.mark.parametrize(
