@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml (>=6.0.3,<7.0.0)",
     "lxml (>=6.0.2,<7.0.0)",
     "datasets (>=4.8.4,<5.0.0)",
+    "platformdirs (>=4.0.0,<5.0.0)",
 ]
 
 [tool.poetry]

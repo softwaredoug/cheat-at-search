@@ -6,6 +6,7 @@ from cheat_at_search.logger import log_to_stdout
 import subprocess
 from pathlib import Path
 import requests
+from platformdirs import user_cache_dir
 
 
 logger = log_to_stdout(logger_name="data_dir")
@@ -27,7 +28,7 @@ if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
     DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
 else:
-    DATA_PATH = pathlib.Path(get_project_root()) / "data"
+    DATA_PATH = pathlib.Path(user_cache_dir("cheat-at-search"))
 
 
 def download_file(url, dest_path):

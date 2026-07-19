@@ -74,11 +74,13 @@ You'll notice that by default, search_all *caches*. That's useful to save time w
 
 You'll notice that the repo allows mounting of a data directory (see data_dir.py). That's used throughout the repo for caching of different types of information.
 
-The data directory lives under a consistent location.
+By default, the data directory uses the platform's per-user cache location for `cheat-at-search`. This is `~/Library/Caches/cheat-at-search` on macOS, `~/.cache/cheat-at-search` on Linux, and the equivalent local application cache directory on Windows. This gives separate repositories and projects a shared location for large datasets and derived indexes.
 
 An environment variable, CHEAT_AT_SEARCH_DATA_PATH, can be used as the highest priority override.
 
-If `mount` gets called, it changes the data directory. Usually this would be done before other processing. It can mount manual paths or, in a colab environment, attempt to mount google drive.
+If `mount` gets called, it changes the data directory and preserves the legacy mount behavior. Usually this would be done before other processing. It can mount manual paths or, in a colab environment, attempt to mount google drive. An explicit mount therefore takes precedence over the default and environment-selected paths.
+
+Changing the default does not migrate existing repository-local data. Set `CHEAT_AT_SEARCH_DATA_PATH` to an existing data directory when reusing a previously downloaded dataset.
 
 ## SearchArray
 

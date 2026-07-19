@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 
 import pytest
+from platformdirs import user_cache_dir
 
 from cheat_at_search import data_dir
 
@@ -129,8 +130,10 @@ def restore_data_path():
     data_dir.DATA_PATH = original_data_path
 
 
-def test_default_data_path_is_project_data_directory(restore_data_path):
-    expected = Path(data_dir.get_project_root()) / "data"
+def test_default_data_path_is_shared_user_cache_directory(monkeypatch, restore_data_path):
+    monkeypatch.delenv("CHEAT_AT_SEARCH_DATA_PATH", raising=False)
+    importlib.reload(data_dir)
+    expected = Path(user_cache_dir("cheat-at-search"))
 
     assert Path(data_dir.DATA_PATH) == expected
 
