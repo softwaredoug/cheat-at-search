@@ -1,6 +1,11 @@
 import os
+import importlib
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
+
+import pytest
+
 from cheat_at_search import data_dir
 
 
@@ -115,3 +120,72 @@ def test_key_for_provider_from_env():
 def test_data_path_accessible():
     assert hasattr(data_dir, 'DATA_PATH')
     assert data_dir.DATA_PATH is not None
+
+
+@pytest.fixture
+def restore_data_path():
+    original_data_path = data_dir.DATA_PATH
+    yield
+    data_dir.DATA_PATH = original_data_path
+
+
+def test_default_data_path_is_project_data_directory(restore_data_path):
+    expected = Path(data_dir.get_project_root()) / "data"
+
+    assert Path(data_dir.DATA_PATH) == expected
+
+
+def test_mount_manual_path_sets_data_path_and_subdirectories(tmp_path, restore_data_path):
+    manual_path = tmp_path / "mounted-data"
+
+    data_dir.mount(manual_path=str(manual_path), load_keys=False)
+
+    assert data_dir.DATA_PATH == manual_path
+    assert manual_path.is_dir()
+    assert data_dir.ensure_data_subdir("msmarco") == manual_path / "msmarco"
+
+
+def test_mount_local_uses_legacy_relative_path(tmp_path, monkeypatch, restore_data_path):
+    monkeypatch.chdir(tmp_path)
+
+    data_dir.mount(use_gdrive=False, load_keys=False)
+
+    expected = Path("cheat-at-search-data/")
+    assert data_dir.DATA_PATH == expected
+    assert (tmp_path / expected).is_dir()
+    assert data_dir.ensure_data_subdir("msmarco") == expected / "msmarco"
+
+
+def test_mount_google_drive_uses_legacy_path(restore_data_path):
+    google = MagicMock()
+    colab = MagicMock()
+    drive = MagicMock()
+    colab.drive = drive
+    google.colab = colab
+
+    with patch.dict(sys.modules, {"google": google, "google.colab": colab}):
+        with patch.object(data_dir.pathlib.Path, "exists", return_value=True):
+            data_dir.mount(use_gdrive=True, load_keys=False)
+
+    drive.mount.assert_called_once_with("/content/drive")
+    assert data_dir.DATA_PATH == "/content/drive/MyDrive/cheat-at-search-data/"
+
+
+def test_environment_data_path_overrides_default(tmp_path, restore_data_path):
+    with patch.dict(os.environ, {"CHEAT_AT_SEARCH_DATA_PATH": str(tmp_path)}):
+        reloaded_data_dir = importlib.reload(data_dir)
+        assert reloaded_data_dir.DATA_PATH == str(tmp_path)
+
+    importlib.reload(data_dir)
+
+
+def test_mount_overrides_environment_data_path(tmp_path, restore_data_path):
+    manual_path = tmp_path / "manual-data"
+
+    with patch.dict(os.environ, {"CHEAT_AT_SEARCH_DATA_PATH": str(tmp_path / "env-data")}):
+        importlib.reload(data_dir)
+        data_dir.mount(manual_path=str(manual_path), load_keys=False)
+
+        assert data_dir.DATA_PATH == manual_path
+
+    importlib.reload(data_dir)
