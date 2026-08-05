@@ -5,6 +5,7 @@ import inspect
 import json
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from tqdm import tqdm
@@ -115,14 +116,26 @@ def _save_manifest(signature: str, meta: dict) -> None:
         json.dump(meta, handle)
 
 
+def default_passage_fn(row: Any) -> str:
+    """Build the text used to embed one corpus row."""
+    title = row.get("title")
+    description = row.get("description", "")
+
+    if title:
+        return f"{title}\n\n{description}"
+    return description
+
+
 def load_or_create_embeddings(
     corpus,
-    passage_fn,
+    passage_fn=None,
     model_name: str = DEFAULT_MODEL_NAME,
     device: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     show_progress: bool = True,
 ):
+    if passage_fn is None:
+        passage_fn = default_passage_fn
     signature = _signature(corpus, model_name, passage_fn)
     passage_fn_id = _passage_fn_id(passage_fn)
     total_count = len(corpus)
