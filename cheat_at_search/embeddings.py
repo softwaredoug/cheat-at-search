@@ -5,7 +5,7 @@ import inspect
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import numpy as np
 from tqdm import tqdm
@@ -19,6 +19,19 @@ _MODEL_REGISTRY: dict[tuple[str, str | None], object] = {}
 
 DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_CHUNK_SIZE = 10000
+
+
+class NumpyArrayIterator:
+    """Iterate over vectors from a list of NumPy array paths."""
+
+    def __init__(self, paths: list[str]):
+        self._paths = paths
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        for path in self._paths:
+            array = np.load(path, mmap_mode="r")
+            for vector in array:
+                yield vector
 
 
 def _load_model(model_name: str, device: str | None = None):
@@ -157,9 +170,9 @@ def load_or_create_embeddings(
 
     num_chunks = int(math.ceil(total_count / chunk_size)) if chunk_size > 0 else 0
     dim = manifest.get("dim")
-    embeddings = None
     model = None
     completed = set(manifest.get("completed_chunks", []))
+    chunk_paths = []
 
     chunk_iter = range(num_chunks)
     if show_progress and num_chunks > 0:
@@ -176,10 +189,8 @@ def load_or_create_embeddings(
             if chunk.ndim == 2 and chunk.shape[0] == expected_rows:
                 if dim is None:
                     dim = int(chunk.shape[1])
-                if embeddings is None:
-                    embeddings = np.empty((total_count, dim), dtype=chunk.dtype)
-                embeddings[start:end] = chunk
                 completed.add(chunk_index)
+                chunk_paths.append(str(chunk_file))
                 continue
 
         if model is None:
@@ -190,11 +201,9 @@ def load_or_create_embeddings(
             chunk = np.asarray(chunk)
         if dim is None:
             dim = int(chunk.shape[1])
-        if embeddings is None:
-            embeddings = np.empty((total_count, dim), dtype=chunk.dtype)
-        embeddings[start:end] = chunk
         np.save(chunk_file, chunk)
         completed.add(chunk_index)
+        chunk_paths.append(str(chunk_file))
         manifest.update({
             "dim": dim,
             "count": total_count,
@@ -204,18 +213,16 @@ def load_or_create_embeddings(
         })
         _save_manifest(signature, manifest)
 
-    if embeddings is None:
-        embeddings = np.empty((total_count, dim or 0))
-        manifest.update({
-            "dim": dim,
-            "count": total_count,
-            "chunk_size": chunk_size,
-            "num_chunks": num_chunks,
-            "completed_chunks": sorted(completed),
-        })
-        _save_manifest(signature, manifest)
+    manifest.update({
+        "dim": dim,
+        "count": total_count,
+        "chunk_size": chunk_size,
+        "num_chunks": num_chunks,
+        "completed_chunks": sorted(completed),
+    })
+    _save_manifest(signature, manifest)
 
     if model is None:
         model = _MODEL_REGISTRY.get((model_name, device))
 
-    return embeddings, model
+    return NumpyArrayIterator(chunk_paths), model

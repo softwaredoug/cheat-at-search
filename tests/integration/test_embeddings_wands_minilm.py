@@ -40,6 +40,7 @@ def test_wands_minilm_embedding_cache(mounted_data_dir):
         show_progress=True,
     )
 
+    embeddings_first = np.stack(list(embeddings_first))
     assert isinstance(embeddings_first, np.ndarray)
     assert embeddings_first.shape[0] == len(corpus)
 
@@ -57,7 +58,7 @@ def test_wands_minilm_embedding_cache(mounted_data_dir):
         show_progress=True,
     )
 
-    assert np.array_equal(embeddings_first, embeddings_second)
+    assert np.array_equal(embeddings_first, np.stack(list(embeddings_second)))
 
     for path in chunk_files:
         assert path.stat().st_mtime == mtimes[path]
@@ -87,6 +88,7 @@ def test_wands_embeddings_match_direct_encoding(mounted_data_dir):
         show_progress=False,
     )
 
+    cached_embeddings = np.stack(list(cached_embeddings))
     assert direct_embeddings.shape == cached_embeddings.shape
     assert np.allclose(direct_embeddings, cached_embeddings, rtol=1e-6, atol=1e-6)
 

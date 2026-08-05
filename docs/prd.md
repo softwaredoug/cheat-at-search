@@ -148,13 +148,17 @@ def load_or_create_embeddings(
     device: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     show_progress: bool = True,
-) -> np.ndarray:
+) -> tuple[Iterable[np.ndarray], object | None]:
 
 
 Other parameters names here:
 
 - device - The device to run the embedding model on. For example, "mps", "cuda" or "cpu". If None, try "mps" then "cuda" then "cpu". Warn on cpu.
 - show_progress - Whether to show a progress bar when building the embeddings (ie tqdm). This can be helpful for large corpora.
+
+The function returns an iterator of individual embedding vectors and the model
+used to create them. The iterator loads one cached chunk at a time rather than
+assembling the full embedding matrix in memory.
 
 
 ### The default passage function

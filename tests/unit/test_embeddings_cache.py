@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from cheat_at_search.data_dir import mount, ensure_data_subdir
-from cheat_at_search.embeddings import load_or_create_embeddings
+from cheat_at_search.embeddings import NumpyArrayIterator, load_or_create_embeddings
 
 
 class DummyModel:
@@ -63,7 +63,7 @@ def test_embeddings_cache_reuse(mock_load_model, mounted_data_dir):
     )
     assert mock_load_model.call_count == 1
     assert dummy_second.calls == 0
-    assert np.array_equal(first, second)
+    assert np.array_equal(np.stack(list(first)), np.stack(list(second)))
 
     cache_dir = Path(ensure_data_subdir("embeddings"))
     manifests = list(cache_dir.glob("embeddings_*.manifest.json"))
@@ -113,3 +113,14 @@ def test_embeddings_require_doc_id(mounted_data_dir):
             chunk_size=1,
             show_progress=False,
         )
+
+
+def test_numpy_array_iterator_yields_vectors(tmp_path):
+    first_path = tmp_path / "first.npy"
+    second_path = tmp_path / "second.npy"
+    np.save(first_path, np.array([[1, 2], [3, 4]]))
+    np.save(second_path, np.array([[5, 6]]))
+
+    vectors = list(NumpyArrayIterator([str(first_path), str(second_path)]))
+
+    assert [vector.tolist() for vector in vectors] == [[1, 2], [3, 4], [5, 6]]
