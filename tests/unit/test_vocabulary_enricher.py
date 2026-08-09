@@ -19,7 +19,7 @@ class FakeEmbeddingModel:
 
 class FakeAutoEnricher:
     def __init__(self, **kwargs):
-        self.response = VocabularyResponse(root="crimson")
+        self.response = VocabularyResponse(value="crimson")
 
     def enrich(self, prompt):
         return self.response

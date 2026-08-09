@@ -1,14 +1,16 @@
 from typing import Optional
 
 import numpy as np
-from pydantic import RootModel
+from pydantic import BaseModel
 
 from .enrich import AutoEnricher
 from cheat_at_search.embeddings import DEFAULT_MODEL_NAME, load_model
 
 
-class VocabularyResponse(RootModel[str]):
-    """Structured string response used by the vocabulary enricher."""
+class VocabularyResponse(BaseModel):
+    """Structured response containing the value extracted by the LLM."""
+
+    value: str | None = None
 
 
 class VocabularyEnricher:
@@ -51,7 +53,7 @@ class VocabularyEnricher:
         if response is None:
             return None
 
-        value = response.root if isinstance(response, VocabularyResponse) else response
+        value = response.value if isinstance(response, VocabularyResponse) else response
         if isinstance(value, (list, tuple)):
             value = value[0] if value else None
         if not isinstance(value, str) or not value.strip():
