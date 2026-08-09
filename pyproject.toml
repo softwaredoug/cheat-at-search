@@ -22,8 +22,20 @@ dependencies = [
     "platformdirs (>=4.0.0,<5.0.0)",
 ]
 
-[tool.poetry]
-include = ["cheat_at_search/data/posts.json.gz"]
+[dependency-groups]
+dev = [
+    "ipython>=9.3.0; python_version >= '3.11'",
+    "pytest>=8.4.1,<9.0.0",
+    "pre-commit>=4.0.1,<5.0.0",
+    "flake8>=7.3.0,<8.0.0",
+    "pytest-cov>=5.0.0,<6.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["cheat_at_search*"]
+
+[tool.setuptools.package-data]
+cheat_at_search = ["data/posts.json.gz"]
 
 [tool.pylsp.plugins]
 mypy.enabled = true
@@ -33,13 +45,6 @@ yapf.enabled = false
 black.enabled = false
 pyright.enabled = false
 
-
-[tool.poetry.group.dev.dependencies]
-ipython = {version = "^9.3.0", python = ">=3.11"}
-pytest = "^8.4.1"
-pre-commit = "^4.0.1"
-flake8 = "^7.3.0"
-pytest-cov = "^5.0.0"
 
 [pycodestyle]
 max-line-length = 120
@@ -53,5 +58,5 @@ markers = [
 ]
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

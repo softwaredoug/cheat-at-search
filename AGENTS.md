@@ -6,9 +6,9 @@ This project houses various retrieval datasets and tools to make experimentation
 
 Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL THIS IS DONE.
 
-## Poetry, etc
+## uv, etc
 
-Note: This python project uses Poetry for dependency management and test execution.
+Note: This Python project uses uv for dependency management and test execution.
 
 ## How to commit
 

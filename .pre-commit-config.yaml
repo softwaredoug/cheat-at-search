@@ -7,24 +7,24 @@ repos:
       - id: check-merge-conflict
   - repo: local
     hooks:
-      - id: poetry-check-lock
-        name: poetry lock is current
-        entry: poetry check --lock
+      - id: uv-check-lock
+        name: uv lock is current
+        entry: uv lock --check
         language: system
         pass_filenames: false
-        files: ^(pyproject\.toml|poetry\.lock)$
+        files: ^(pyproject\.toml|uv\.lock)$
       - id: flake8
         name: flake8
-        entry: poetry run flake8
+        entry: uv run flake8
         language: system
         types: [python]
       - id: pytest-unit
         name: pytest unit
-        entry: poetry run pytest tests/unit
+        entry: uv run pytest tests/unit
         language: system
         pass_filenames: false
       - id: pytest-e2e
         name: pytest e2e
-        entry: poetry run pytest tests/e2e
+        entry: uv run pytest tests/e2e
         language: system
         pass_filenames: false
