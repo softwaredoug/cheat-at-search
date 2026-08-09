@@ -47,9 +47,9 @@ class VocabularyEnricher:
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         return embeddings / np.where(norms == 0, 1, norms)
 
-    def resolve(self, prompt: str) -> Optional[str]:
+    def resolve(self, prompt: str, force_refresh: bool = False) -> Optional[str]:
         """Return the closest vocabulary item for the model's extracted value."""
-        response = self.enricher.enrich(prompt)
+        response = self.enricher.enrich(prompt, force_refresh=force_refresh)
         if response is None:
             return None
 

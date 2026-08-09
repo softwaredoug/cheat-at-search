@@ -38,9 +38,9 @@ class AutoEnricher:
             raise ValueError(f"Provider {self.provider} is not supported. Supported providers are: ['openai', 'google']")
         self.cached_enricher = CachedEnrichClient(self.enricher)
 
-    def enrich(self, prompt: str) -> BaseModel:
+    def enrich(self, prompt: str, force_refresh: bool = False) -> BaseModel:
         """Enrich a single prompt, now, and cache the result."""
-        return self.cached_enricher.enrich(prompt)
+        return self.cached_enricher.enrich(prompt, force_refresh=force_refresh)
 
     def enrich_all(self, prompts: list[str], workers=5, batch_size=100) -> list[BaseModel]:
         """Enrich a list of prompts, using multiple threads, and cache the results."""

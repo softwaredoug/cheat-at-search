@@ -69,3 +69,14 @@ def test_cached_enrich_client(mounted_data_dir):
         result = cached_client_loaded.enrich(f"What color is this? {i}")
         colors_second_pass.append(result.color)
     assert colors_first_pass == colors_second_pass, "Cached results do not match after reloading cache"
+
+
+def test_cached_enrich_client_can_force_refresh(mounted_data_dir):
+    client = MockEnrichClient(colors=["red", "blue"])
+    cached_client = CachedEnrichClient(client)
+
+    assert cached_client.enrich("What color?").color == "red"
+    assert cached_client.enrich("What color?").color == "red"
+    assert cached_client.enrich("What color?", force_refresh=True).color == "blue"
+    assert cached_client.enrich("What color?").color == "blue"
+    assert client.call_count == 2

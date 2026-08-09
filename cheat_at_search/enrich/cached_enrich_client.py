@@ -75,9 +75,9 @@ class CachedEnrichClient(EnrichClient):
     def debug(self, prompt: str) -> Optional[DebugMetaData]:
         return self.enricher.debug(prompt)
 
-    def enrich(self, prompt: str) -> Optional[BaseModel]:
+    def enrich(self, prompt: str, force_refresh: bool = False) -> Optional[BaseModel]:
         prompt_key = self.prompt_key(prompt)
-        if prompt_key in self.cache:
+        if not force_refresh and prompt_key in self.cache:
             logger.debug(f"Cache hit for prompt: {prompt_key}")
             as_json = self.cache[prompt_key]
             return self.response_model.model_validate_json(as_json)
