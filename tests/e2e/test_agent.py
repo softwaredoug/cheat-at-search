@@ -261,10 +261,16 @@ def test_calling_search_tool(mock_key_for_provider, mock_openai):
         },
         {"role": "user", "content": prompt},
     ]
-    resp, final_inputs, usage = search_client.chat(inputs=inputs, return_usage=True)
+    active_logger = Mock()
+    resp, final_inputs, usage = search_client.chat(
+        inputs=inputs,
+        return_usage=True,
+        logger=active_logger,
+    )
     results = resp.output_parsed
     assert [result.id for result in results.results] == ["0", "1"]
     assert usage["num_tool_calls"] == 1
+    assert all(call.args[0] == "Usage: %s" for call in active_logger.debug.call_args_list)
     assert final_inputs[-1]["type"] == "function_call_output"
     assert "product_name" in final_inputs[-1]["output"]
     mock_openai.assert_called_once_with(api_key="test-openai-key")

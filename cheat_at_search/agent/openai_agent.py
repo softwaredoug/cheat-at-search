@@ -119,7 +119,7 @@ class OpenAIAgent(Agent):
                                 )
                             item.summary = []
 
-                active_logger.debug("Usage: ", resp.usage)
+                active_logger.debug("Usage: %s", resp.usage)
                 if self.max_tokens and total_tokens >= self.max_tokens:
                     active_logger.info(
                         f"Reached max tokens limit of {self.max_tokens}. Stopping further tool calls."
