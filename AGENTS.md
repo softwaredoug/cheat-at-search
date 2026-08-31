@@ -6,6 +6,11 @@ This project houses various retrieval datasets and tools to make experimentation
 
 Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL THIS IS DONE.
 
+## Local skills
+
+This project has local skills in .opencode/ directory, you should treat those as important to follow. Particularly
+for comitting
+
 ## uv, etc
 
 Note: This Python project uses uv for dependency management and test execution.
