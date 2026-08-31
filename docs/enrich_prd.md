@@ -75,3 +75,44 @@ That's useful wrapper because now we can just apply this to dataframe of queries
 ```python
 queries['classification'] = queries['query'].apply(fully_classified)
 ```
+
+## Vocabulary enricher
+
+One common enrichment use case is to map a query into a controlled vocabulary. We might do that by sending a large Literal to OpenAI. But we might also
+do that by the following 2 step process
+
+1. Instantiate an AutoEnricher. Have it just return a str.
+2. Compare cosine similarity of generated item to embeddings of the vocabulary
+
+For example,
+
+System prompt: You assist by extracting colors from queries
+User prompt: Extract the color from this query: "crimson chair"
+Vocaburaly: ["red", "blue", "green", "yellow", "black", "white"]
+
+LLM returns "crimson"
+
+Then we can compare the embedding of "crimson" to the embeddings of the vocabulary and return the closest match, likely "red".
+
+The LLM may return no match, ie
+
+System prompt: You assist by extracting colors from queries
+User prompt: Extract the color from this query: "chair"
+Vocaburaly: ["red", "blue", "green", "yellow", "black", "white"]
+
+LLM returns [] or None or ""
+
+So we don't try to resolve, and just return None
+
+The VocabualryEnricher class wraps AutoEnricher to provide this functionality.
+
+It takes at construction
+
+- Same params as AutoEnricher
+- A list of vocabulary items
+
+Then it exposes a method
+
+- `resolve(prompt: str) -> Optional[str]`
+
+Whatever the LLM returns from prompt (should be a string) will be resolved to the closest vocaburaly item and returned.
