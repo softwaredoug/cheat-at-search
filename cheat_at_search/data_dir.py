@@ -160,9 +160,14 @@ def mount(use_gdrive=True, manual_path=None, load_keys=True):
             if not pathlib.Path(DATA_PATH).exists():
                 logger.info(f"Creating Google Drive data directory: {DATA_PATH}")
                 pathlib.Path(DATA_PATH).mkdir(parents=True, exist_ok=True)
-        except ImportError:
+        except (ImportError, ModuleNotFoundError):
             logger.error("Google Colab drive module not found. Ensure you're running this in Google Colab.")
             raise
+    elif user_cache_dir:
+        DATA_PATH = pathlib.Path(user_cache_dir("cheat-at-search"))
+        if not DATA_PATH.exists():
+            logger.info(f"Creating cache data directory: {DATA_PATH}")
+            DATA_PATH.mkdir(parents=True, exist_ok=True)
     else:
         path_directory = pathlib.Path('cheat-at-search-data/')
         if not path_directory.exists():

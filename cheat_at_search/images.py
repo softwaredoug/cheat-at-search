@@ -99,14 +99,14 @@ class OpenAIImageGenerator:
             raise RuntimeError(f"Batch {batch.id} failed.")
         return batch.id
 
-    async def await_branch(self, batch_id: str, output_file_path: str) -> None:
+    async def await_batch(self, batch_id: str, output_file_path: str, poll_every=60) -> None:
         print(f"Awaiting batch {batch_id} completion...")
         while True:
             batch = self.openai.batches.retrieve(batch_id)
             if batch.status in ["completed", "failed"]:
                 break
             print(f"Batch {batch_id} status: {batch.status}. Waiting for completion...")
-            await asyncio.sleep(60 * 5)  # Wait for 5 minutes before checking again
+            await asyncio.sleep(poll_every)  # Wait for 5 minutes before checking again
         if batch.status == "failed":
             raise RuntimeError(f"Batch {batch_id} failed.")
         elif batch.status == "completed":
@@ -147,6 +147,23 @@ class OpenAIImageGenerator:
             f.write(image_data)
 
 
+def files_to_gcs(images_dir: str) -> None:
+    """Upload images from images_dir to GCS bucket."""
+    project = os.environ["GCLOUD_TRAINING_PROJECT"]
+    bucket = "product-ai-images"
+    prefix = "wands/images/"
+    from google.cloud import storage
+
+    client = storage.Client(project=project)
+    bucket = client.bucket(bucket)
+
+    for image_file in os.listdir(images_dir):
+        if image_file.endswith(".png"):
+            blob = bucket.blob(os.path.join(prefix, image_file))
+            blob.upload_from_filename(os.path.join(images_dir, image_file))
+            print(f"Uploaded {image_file} to {bucket}")
+
+
 def main(images_dir, batch_size=10, num_batches=1, force=False):
     """Write images to images_dir for every wands product."""
     # Example usage
@@ -177,7 +194,7 @@ def main(images_dir, batch_size=10, num_batches=1, force=False):
                                              num_products=batch_size,
                                              file_path=in_file(batch_idx))
             batch_id = generator.submit_batch(in_file(batch_idx))
-            submitted_batches.append(batch_id)
+            submitted_batches.append((batch_id, batch_idx))
         if (batch_idx + batch_size) >= (num_batches * batch_size):
             break
 
@@ -186,12 +203,11 @@ def main(images_dir, batch_size=10, num_batches=1, force=False):
         async def runner():
             processed_files = []
             tasks = {}
-            for idx, batch_id in enumerate(submitted_batches):
-                idx = idx * batch_size
+            for idx, (batch_id, batch_idx) in enumerate(submitted_batches):
                 op_file = out_file(batch_idx)
                 print(f"Output saved to {op_file}")
-                task = asyncio.create_task(generator.await_branch(batch_id, op_file))
-                tasks[task] = (batch_id, op_file)
+                task = asyncio.create_task(generator.await_batch(batch_id, op_file))
+                tasks[task] = (batch_id, batch_idx, op_file)
 
             pending = set(tasks.keys())
             while pending:
@@ -199,7 +215,7 @@ def main(images_dir, batch_size=10, num_batches=1, force=False):
                                                    return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
                     await task
-                    processed_files.append(tasks[task][1])
+                    processed_files.append(tasks[task][-1])
             return processed_files
         return asyncio.run(runner())
 
@@ -210,7 +226,9 @@ def main(images_dir, batch_size=10, num_batches=1, force=False):
         generator.process_output_batch(processed_path, images_dir)
         print(f"{processed_path} images written to {images_dir}")
 
+    # files_to_gcs(images_dir)
+
 
 if __name__ == "__main__":
     images_dir = ensure_data_subdir("images")
-    main(images_dir, batch_size=100, num_batches=10)
+    main(images_dir, batch_size=100, num_batches=100)

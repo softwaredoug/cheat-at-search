@@ -148,12 +148,12 @@ def test_mount_manual_path_sets_data_path_and_subdirectories(tmp_path, restore_d
     assert data_dir.ensure_data_subdir("msmarco") == manual_path / "msmarco"
 
 
-def test_mount_local_uses_legacy_relative_path(tmp_path, monkeypatch, restore_data_path):
+def test_mount_local_uses_cache_dir(tmp_path, monkeypatch, restore_data_path):
     monkeypatch.chdir(tmp_path)
 
     data_dir.mount(use_gdrive=False, load_keys=False)
 
-    expected = Path("cheat-at-search-data/")
+    expected = Path(user_cache_dir("cheat-at-search"))
     assert data_dir.DATA_PATH == expected
     assert (tmp_path / expected).is_dir()
     assert data_dir.ensure_data_subdir("msmarco") == expected / "msmarco"
