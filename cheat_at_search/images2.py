@@ -21,7 +21,8 @@ class WandsImageTask(ImageGenerationTask):
         title: str,
         description: str,
         bucket,
-        model: str = "gpt-image-1.5",
+        model: str = "gpt-image-1",
+        verify_png=False,
     ):
         prompt = (
             "You generate images of e-commerce products for display in search results. "
@@ -32,6 +33,7 @@ class WandsImageTask(ImageGenerationTask):
         )
         super().__init__(id=str(doc_id), prompt=prompt, model=model, quality="low")
         self.bucket = bucket
+        self.verify_png = verify_png
 
     @property
     def blob_name(self) -> str:

@@ -79,6 +79,7 @@ def test_generation_tasks_serialize_requests():
 
     assert image_json["custom_id"] == "doc-1"
     assert image_json["url"] == "/v1/images/generations"
+    assert image_json["body"]["model"] == "gpt-image-1"
     assert image_json["body"]["quality"] == "low"
     assert text_json["custom_id"] == "query-1"
     assert text_json["url"] == "/v1/responses"
