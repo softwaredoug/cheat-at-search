@@ -162,11 +162,32 @@ class BatchProcessor:
         with input_path.open("rb") as input_file:
             print(f"Uploading batch {batch_number} input file: {input_path}")
             uploaded = await self.openai.files.create(file=input_file, purpose="batch")
+        while True:
+            uploaded_status = await self.openai.files.retrieve(uploaded.id)
+            print(f"Uploaded input file {uploaded.id} status: {uploaded_status.status}")
+            if uploaded_status.status == "processed":
+                break
+            if uploaded_status.status in {"failed", "error", "cancelled"}:
+                raise RuntimeError(
+                    f"Uploaded input file {uploaded.id} failed with status "
+                    f"{uploaded_status.status}."
+                )
+            await asyncio.sleep(10)
         batch = await self.openai.batches.create(
             input_file_id=uploaded.id,
             endpoint=next(iter(endpoints)),
             completion_window="24h",
         )
+        try:
+            await self.openai.files.delete(uploaded.id)
+            print(f"Deleted uploaded input file {uploaded.id}.")
+        except Exception as exc:
+            logger.error("Could not delete uploaded input file %s: %s", uploaded.id, exc)
+        try:
+            input_path.unlink()
+            print(f"Deleted local batch input file: {input_path}")
+        except Exception as exc:
+            logger.error("Could not delete local batch input file %s: %s", input_path, exc)
         print(f"Submitted batch {batch.id} with {len(tasks)} tasks.")
         return batch.id
 
@@ -201,11 +222,17 @@ class BatchProcessor:
         print(f"Checking batch {batch_id}...")
         batch = await self.openai.batches.retrieve(batch_id)
         status = batch.status
-        task_ids = db.loc[db["batch_id"] == batch_id, "task_id"].tolist()
+        task_ids = db.loc[
+            (db["batch_id"] == batch_id) & db["task_id"].isin(tasks_by_id),
+            "task_id",
+        ].tolist()
         print(f"Batch {batch_id} status: {status} ({len(task_ids)} tasks)")
         if status in {"failed", "expired", "cancelled"}:
             logger.error("OpenAI batch %s ended with status %s", batch_id, status)
-            db.loc[db["batch_id"] == batch_id, "status"] = "failed"
+            db.loc[
+                (db["batch_id"] == batch_id) & db["task_id"].isin(tasks_by_id),
+                "status",
+            ] = "failed"
             return db
         if status != "completed":
             return db
@@ -221,6 +248,15 @@ class BatchProcessor:
         for task_id, success in zip(task_ids, results):
             print(f"Task {task_id}: {'done' if success else 'failed'}")
             db.loc[db["task_id"] == task_id, "status"] = "done" if success else "failed"
+        batch_task_ids = db.loc[db["batch_id"] == batch_id, "task_id"]
+        if set(batch_task_ids).issubset(tasks_by_id):
+            try:
+                await self.openai.files.delete(batch.output_file_id)
+                print(f"Deleted output file {batch.output_file_id}.")
+            except Exception as exc:
+                logger.error(
+                    "Could not delete output file %s: %s", batch.output_file_id, exc
+                )
         return db
 
     async def process(
@@ -281,7 +317,10 @@ class BatchProcessor:
 
         finish_semaphore = asyncio.Semaphore(finish_concurrency)
         while True:
-            active_batch_ids = db.loc[db["status"].isin(_ACTIVE_STATUSES), "batch_id"].unique()
+            active_rows = db["status"].isin(_ACTIVE_STATUSES) & db["task_id"].isin(
+                task_by_id
+            )
+            active_batch_ids = db.loc[active_rows, "batch_id"].unique()
             if not len(active_batch_ids):
                 break
             batch_results = await asyncio.gather(
@@ -292,9 +331,9 @@ class BatchProcessor:
                     for batch_id in active_batch_ids
                 )
             )
-            for batch_result in batch_results:
-                batch_ids = batch_result["batch_id"].isin(active_batch_ids)
-                db.loc[batch_ids, "status"] = batch_result.loc[batch_ids, "status"]
+            for batch_id, batch_result in zip(active_batch_ids, batch_results):
+                batch_rows = db["batch_id"] == batch_id
+                db.loc[batch_rows, "status"] = batch_result.loc[batch_rows, "status"]
             self._save_db(db)
             if db["status"].isin(_ACTIVE_STATUSES).any():
                 print(f"Waiting {poll_seconds} seconds before checking again...")

@@ -24,6 +24,8 @@ def run_async(test_fn):
 def mock_openai(batch_ids=("batch-1",)):
     client = MagicMock()
     client.files.create = AsyncMock(return_value=SimpleNamespace(id="file-1"))
+    client.files.retrieve = AsyncMock(return_value=SimpleNamespace(status="processed"))
+    client.files.delete = AsyncMock()
     client.batches.create = AsyncMock(
         side_effect=[SimpleNamespace(id=batch_id) for batch_id in batch_ids]
     )
@@ -115,6 +117,27 @@ def test_done_csv_row_is_reopened_when_task_is_not_done(tmp_path):
     assert result.iloc[0]["status"] == "done"
 
 
+def test_submission_waits_for_uploaded_file_to_be_processed(tmp_path):
+    @patch("cheat_at_search.batch.asyncio.sleep", new_callable=AsyncMock)
+    async def scenario(sleep):
+        client = mock_openai()
+        client.files.retrieve.side_effect = [
+            SimpleNamespace(status="uploaded"),
+            SimpleNamespace(status="processed"),
+        ]
+        configure_completed_batch(client, ["a"])
+
+        result = await BatchProcessor(client, tmp_path).process(
+            [RecordingTask("a")], batch_size=1, poll_seconds=0
+        )
+
+        assert result.iloc[0]["status"] == "done"
+        sleep.assert_awaited_once_with(10)
+        client.batches.create.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
 @run_async
 async def test_process_submits_final_partial_batch_and_finishes_by_custom_id(tmp_path):
     client = mock_openai(batch_ids=("batch-1", "batch-2"))
@@ -126,12 +149,15 @@ async def test_process_submits_final_partial_batch_and_finishes_by_custom_id(tmp
     )
 
     assert client.batches.create.await_count == 2
+    assert client.files.retrieve.await_count == 2
+    assert client.files.delete.await_count == 4
     assert [call.kwargs["endpoint"] for call in client.batches.create.await_args_list] == [
         "/v1/responses",
         "/v1/responses",
     ]
     assert result["status"].tolist() == ["done", "done", "done"]
     assert all(task.finished for task in tasks)
+    assert not list(tmp_path.glob("batch_*.jsonl"))
     saved = pd.read_csv(tmp_path / "batch_status.csv", dtype=str)
     assert saved[["task_id", "batch_id", "status"]].to_dict("records") == [
         {"task_id": "a", "batch_id": "batch-1", "status": "done"},
@@ -190,6 +216,32 @@ async def test_process_resumes_active_batch_without_resubmitting(tmp_path):
     assert client.batches.retrieve.await_args.args == ("old-batch",)
     assert result.iloc[0]["status"] == "done"
     assert task.finished
+
+
+@run_async
+async def test_process_ignores_active_tasks_outside_current_workload(tmp_path):
+    pd.DataFrame(
+        [
+            {"task_id": "current", "batch_id": "old-batch", "status": "submitted"},
+            {"task_id": "outside", "batch_id": "old-batch", "status": "submitted"},
+        ]
+    ).to_csv(tmp_path / "batch_status.csv", index=False)
+    client = mock_openai()
+    client.batches.retrieve.return_value = SimpleNamespace(
+        status="completed", output_file_id="output-1"
+    )
+    client.files.content.return_value = SimpleNamespace(
+        text=json.dumps(output_for("current"))
+    )
+    task = RecordingTask("current")
+
+    result = await BatchProcessor(client, tmp_path).process([task], poll_seconds=0)
+
+    client.batches.create.assert_not_awaited()
+    client.batches.retrieve.assert_awaited_once_with("old-batch")
+    assert task.finished
+    assert result["status"].tolist() == ["done", "submitted"]
+    client.files.delete.assert_not_awaited()
 
 
 @run_async

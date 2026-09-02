@@ -86,3 +86,8 @@ Task completion should be idempotent because a process may stop after an
 external side effect succeeds but before its CSV status is persisted.
 
 All tasks within one submitted batch must target the same OpenAI endpoint.
+
+After a batch is submitted successfully, its local JSONL input file and
+uploaded OpenAI input file are deleted. After every task in a completed batch
+has been processed, the OpenAI output file is deleted. Cleanup errors are
+logged while preserving the task ledger.

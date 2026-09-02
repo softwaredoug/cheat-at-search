@@ -52,13 +52,17 @@ class WandsImageTask(ImageGenerationTask):
             print(f"Task {self.id}: image does not exist")
             return False
         try:
-            from PIL import Image
+            if self.verify_png:
+                from PIL import Image
 
-            with Image.open(BytesIO(blob.download_as_bytes())) as image:
-                image.verify()
-                is_png = image.format == "PNG"
-                print(f"Task {self.id}: image exists and PNG validation is {is_png}")
-                return is_png
+                with Image.open(BytesIO(blob.download_as_bytes())) as image:
+                    image.verify()
+                    is_png = image.format == "PNG"
+                    print(f"Task {self.id}: image exists and PNG validation is {is_png}")
+                    return is_png
+            else:
+                print(f"Task {self.id}: image exists, skipping PNG validation")
+                return True
         except Exception:
             print(f"Task {self.id}: image exists but PNG validation failed")
             return False
