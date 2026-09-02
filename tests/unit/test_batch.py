@@ -2,10 +2,12 @@ import asyncio
 import base64
 import functools
 import json
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
+from PIL import Image
 
 from cheat_at_search.batch import BatchProcessor, BatchTask
 from cheat_at_search.batch import ImageGenerationTask, TextGenerationTask
@@ -93,6 +95,23 @@ def test_processor_constructs_async_openai_client(key_for_provider, async_openai
 
     key_for_provider.assert_called_once_with("openai")
     async_openai.assert_called_once_with(api_key="test-key")
+
+
+def test_done_csv_row_is_reopened_when_task_is_not_done(tmp_path):
+    status_path = tmp_path / "batch_status.csv"
+    pd.DataFrame(
+        [{"task_id": "a", "batch_id": "old-batch", "status": "done"}]
+    ).to_csv(status_path, index=False)
+    client = mock_openai()
+    configure_completed_batch(client, ["a"])
+    task = RecordingTask("a")
+
+    result = asyncio.run(
+        BatchProcessor(client, tmp_path).process([task], batch_size=1, poll_seconds=0)
+    )
+
+    client.batches.create.assert_awaited_once()
+    assert result.iloc[0]["status"] == "done"
 
 
 @run_async
@@ -203,11 +222,38 @@ async def test_missing_output_is_failed_and_logged(tmp_path, caplog):
     assert "No output returned for batch task missing" in caplog.text
 
 
-def test_image_finish_writes_decoded_file(tmp_path):
+def test_image_finish_uploads_valid_png_and_is_done_checks_bucket():
     from cheat_at_search.images2 import WandsImageTask
 
-    task = WandsImageTask("doc-1", "Chair", "A chair", tmp_path)
-    encoded = base64.b64encode(b"image-bytes").decode()
+    image_buffer = BytesIO()
+    Image.new("RGB", (1, 1)).save(image_buffer, format="PNG")
+    png_bytes = image_buffer.getvalue()
+
+    class Blob:
+        def __init__(self):
+            self.data = None
+
+        def exists(self):
+            return self.data is not None
+
+        def download_as_bytes(self):
+            return self.data
+
+        def upload_from_string(self, data, content_type):
+            assert content_type == "image/png"
+            self.data = data
+
+    class Bucket:
+        def __init__(self):
+            self.blob_instance = Blob()
+
+        def blob(self, name):
+            assert name == "wands/images/doc-1.png"
+            return self.blob_instance
+
+    bucket = Bucket()
+    task = WandsImageTask("doc-1", "Chair", "A chair", bucket)
+    encoded = base64.b64encode(png_bytes).decode()
     output = {
         "response": {
             "status_code": 200,
@@ -217,4 +263,4 @@ def test_image_finish_writes_decoded_file(tmp_path):
 
     assert asyncio.run(task.finish(output))
     assert task.is_done()
-    assert task.image_path.read_bytes() == b"image-bytes"
+    assert bucket.blob_instance.data == png_bytes

@@ -46,7 +46,9 @@ behavior.
 `BatchProcessor.process(tasks, batch_size=100)` materializes the iterable,
 validates unique task IDs, and then:
 
-1. Marks externally completed tasks as `done`.
+1. Calls `is_done()` for every task. An externally completed task is marked
+   `done`; a stale CSV `done` status is changed to `pending` when the task is
+   not actually complete.
 2. Skips tasks already marked `done` or associated with an active submitted
    batch.
 3. Retries tasks whose latest CSV status is `failed`, `expired`, or

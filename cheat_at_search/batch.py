@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _STATUS_COLUMNS = ["task_id", "batch_id", "status"]
 _RETRYABLE_STATUSES = {"failed", "expired", "cancelled"}
 _ACTIVE_STATUSES = {"submitted", "in_progress"}
+_PENDING_STATUS = "pending"
 
 
 class BatchTask:
@@ -245,6 +246,10 @@ class BatchProcessor:
             if done_by_id[task_id]:
                 existing = db["task_id"] == task_id
                 db.loc[existing, "status"] = "done"
+            else:
+                existing = db[db["task_id"] == task_id]
+                if not existing.empty and existing.iloc[-1]["status"] == "done":
+                    db.loc[existing.index[-1], "status"] = _PENDING_STATUS
 
         pending: list[BatchTask] = []
         for task in task_list:
@@ -265,7 +270,13 @@ class BatchProcessor:
                 logger.error("Could not submit batch: %s", batch_id)
                 print(f"Batch submission failed: {batch_id}")
                 continue
-            db = self._append_tasks(db, batch, str(batch_id))
+            for task in batch:
+                task_rows = db[db["task_id"] == str(task.id)]
+                if task_rows.empty:
+                    db = self._append_tasks(db, [task], str(batch_id))
+                else:
+                    db.loc[task_rows.index[-1], "batch_id"] = str(batch_id)
+                    db.loc[task_rows.index[-1], "status"] = "submitted"
         self._save_db(db)
 
         finish_semaphore = asyncio.Semaphore(finish_concurrency)
