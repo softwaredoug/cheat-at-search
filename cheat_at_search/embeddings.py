@@ -6,6 +6,8 @@ import json
 import math
 from pathlib import Path
 from typing import Any, Iterator
+from io import BytesIO
+import requests
 
 import numpy as np
 from tqdm import tqdm
@@ -139,9 +141,23 @@ def default_passage_fn(row: Any) -> str:
     return description
 
 
+def default_image_fn(row: Any):
+    """Build the image used to embed one corpus row."""
+    from PIL import Image
+    image_url = row.get("image_url")
+
+    if not image_url:
+        raise ValueError("Row must include 'image_path' for image embedding.")
+
+    response = requests.get(image_url)
+    response.raise_for_status()
+
+    return Image.open(BytesIO(response.content))
+
+
 def load_or_create_embeddings(
     corpus,
-    passage_fn=None,
+    passage_fn=None,   # Construct a text passage or an image
     model_name: str = DEFAULT_MODEL_NAME,
     device: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
@@ -195,8 +211,11 @@ def load_or_create_embeddings(
 
         if model is None:
             model = load_model(model_name, device=device)
-        texts = [passage_fn(row) for _, row in corpus.iloc[start:end].iterrows()]
-        chunk = model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
+        bodies = []
+        if passage_fn:
+            bodies = [passage_fn(row) for _, row in corpus.iloc[start:end].iterrows()]
+
+        chunk = model.encode(bodies, show_progress_bar=False, convert_to_numpy=True)
         if chunk.ndim != 2:
             chunk = np.asarray(chunk)
         if dim is None:
