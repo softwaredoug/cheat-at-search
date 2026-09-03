@@ -120,10 +120,17 @@ def _remote_path(signature: str, filename: str) -> str:
     return f"embeddings/{signature}/{filename}"
 
 
+def _disable_hf_progress_bars() -> None:
+    from huggingface_hub.utils import disable_progress_bars
+
+    disable_progress_bars()
+
+
 def _remote_file_exists(repo_id: str, filename: str) -> bool:
     """Check a public or authenticated dataset repository for one file."""
     from huggingface_hub import HfApi
 
+    _disable_hf_progress_bars()
     try:
         files = HfApi().list_repo_files(repo_id=repo_id, repo_type="dataset")
     except Exception as exc:
@@ -136,6 +143,7 @@ def _download_remote_file(repo_id: str, remote_path: str, local_path: Path) -> b
     """Download one remote cache file, returning False when it is unavailable."""
     from huggingface_hub import hf_hub_download
 
+    _disable_hf_progress_bars()
     try:
         downloaded_path = hf_hub_download(
             repo_id=repo_id,
@@ -156,6 +164,7 @@ def _upload_remote_file(repo_id: str, local_path: Path, remote_path: str) -> boo
     """Upload one cache file when a Hugging Face token is available."""
     from huggingface_hub import HfApi, get_token
 
+    _disable_hf_progress_bars()
     if get_token() is None:
         return False
     try:
