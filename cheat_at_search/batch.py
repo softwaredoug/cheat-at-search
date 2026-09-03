@@ -179,11 +179,6 @@ class BatchProcessor:
             completion_window="24h",
         )
         try:
-            await self.openai.files.delete(uploaded.id)
-            print(f"Deleted uploaded input file {uploaded.id}.")
-        except Exception as exc:
-            logger.error("Could not delete uploaded input file %s: %s", uploaded.id, exc)
-        try:
             input_path.unlink()
             print(f"Deleted local batch input file: {input_path}")
         except Exception as exc:
@@ -248,15 +243,6 @@ class BatchProcessor:
         for task_id, success in zip(task_ids, results):
             print(f"Task {task_id}: {'done' if success else 'failed'}")
             db.loc[db["task_id"] == task_id, "status"] = "done" if success else "failed"
-        batch_task_ids = db.loc[db["batch_id"] == batch_id, "task_id"]
-        if set(batch_task_ids).issubset(tasks_by_id):
-            try:
-                await self.openai.files.delete(batch.output_file_id)
-                print(f"Deleted output file {batch.output_file_id}.")
-            except Exception as exc:
-                logger.error(
-                    "Could not delete output file %s: %s", batch.output_file_id, exc
-                )
         return db
 
     async def process(

@@ -87,7 +87,6 @@ external side effect succeeds but before its CSV status is persisted.
 
 All tasks within one submitted batch must target the same OpenAI endpoint.
 
-After a batch is submitted successfully, its local JSONL input file and
-uploaded OpenAI input file are deleted. After every task in a completed batch
-has been processed, the OpenAI output file is deleted. Cleanup errors are
-logged while preserving the task ledger.
+After a batch is submitted successfully, its local JSONL input file is deleted.
+Uploaded OpenAI input and output files are retained. Cleanup errors for local
+files are logged while preserving the task ledger.

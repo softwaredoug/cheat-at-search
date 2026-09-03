@@ -177,14 +177,15 @@ def files_to_gcs(images_dir: str) -> None:
     for image_file in os.listdir(images_dir):
         if image_file.endswith(".png") and image_file not in past_upload_success:
             filenames.append(image_file)
-    results = transfer_manager.upload_files(
+    results = transfer_manager.upload_many_from_filenames(
         bucket,
         filenames,
         source_directory=images_dir,
         blob_name_prefix=prefix,
         max_workers=10,
+        skip_if_exists=True,
         worker_type=transfer_manager.THREAD,
-        content_type="image/png",
+        upload_kwargs={"content_type": "image/png"},
     )
 
     for filename, result in zip(filenames, results):

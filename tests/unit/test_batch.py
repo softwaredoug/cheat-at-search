@@ -65,7 +65,7 @@ def output_for(task_id):
 
 def configure_completed_batch(client, task_ids):
     client.batches.retrieve.return_value = SimpleNamespace(
-        status="completed", output_file_id="output-1"
+        status="completed", input_file_id="file-1", output_file_id="output-1"
     )
     client.files.content.return_value = SimpleNamespace(
         text="\n".join(json.dumps(output_for(task_id)) for task_id in task_ids)
@@ -150,7 +150,7 @@ async def test_process_submits_final_partial_batch_and_finishes_by_custom_id(tmp
 
     assert client.batches.create.await_count == 2
     assert client.files.retrieve.await_count == 2
-    assert client.files.delete.await_count == 4
+    client.files.delete.assert_not_awaited()
     assert [call.kwargs["endpoint"] for call in client.batches.create.await_args_list] == [
         "/v1/responses",
         "/v1/responses",
@@ -203,7 +203,7 @@ async def test_process_resumes_active_batch_without_resubmitting(tmp_path):
     ).to_csv(status_path, index=False)
     client = mock_openai()
     client.batches.retrieve.return_value = SimpleNamespace(
-        status="completed", output_file_id="output-1"
+        status="completed", input_file_id="file-1", output_file_id="output-1"
     )
     client.files.content.return_value = SimpleNamespace(
         text=json.dumps(output_for("a"))
