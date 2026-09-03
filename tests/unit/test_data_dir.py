@@ -25,6 +25,26 @@ def test_download_file_skips_if_exists(mock_exists, mock_requests_get):
     mock_requests_get.assert_not_called()
 
 
+def test_datadir_is_path():
+    assert isinstance(data_dir.DATA_PATH, Path)
+
+
+def test_envvar_datadir_sets_to_path():
+    with patch.dict(os.environ, {"CHEAT_AT_SEARCH_DATA_PATH": "/tmp/foo"}):
+        importlib.reload(data_dir)
+        assert isinstance(data_dir.DATA_PATH, Path)
+
+
+def test_mount_uses_path_no_gdrive():
+    data_dir.mount(use_gdrive=False)
+    assert isinstance(data_dir.DATA_PATH, Path)
+
+
+def test_override_mount_gdrive_uses_path():
+    data_dir.mount(manual_path="/tmp/foo")
+    assert isinstance(data_dir.DATA_PATH, Path)
+
+
 @patch('cheat_at_search.data_dir.requests.get')
 @patch('builtins.open', new_callable=mock_open)
 def test_download_file_downloads_when_missing(mock_file_open, mock_requests_get):
@@ -171,13 +191,13 @@ def test_mount_google_drive_uses_legacy_path(restore_data_path):
             data_dir.mount(use_gdrive=True, load_keys=False)
 
     drive.mount.assert_called_once_with("/content/drive")
-    assert data_dir.DATA_PATH == "/content/drive/MyDrive/cheat-at-search-data/"
+    assert data_dir.DATA_PATH == Path("/content/drive/MyDrive/cheat-at-search-data/")
 
 
 def test_environment_data_path_overrides_default(tmp_path, restore_data_path):
     with patch.dict(os.environ, {"CHEAT_AT_SEARCH_DATA_PATH": str(tmp_path)}):
         reloaded_data_dir = importlib.reload(data_dir)
-        assert reloaded_data_dir.DATA_PATH == str(tmp_path)
+        assert reloaded_data_dir.DATA_PATH == Path(tmp_path)
 
     importlib.reload(data_dir)
 

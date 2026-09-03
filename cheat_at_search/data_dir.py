@@ -25,10 +25,10 @@ def get_project_root():
 
 
 if os.environ.get("CHEAT_AT_SEARCH_DATA_PATH"):
-    DATA_PATH = os.environ["CHEAT_AT_SEARCH_DATA_PATH"]
+    DATA_PATH = Path(os.environ["CHEAT_AT_SEARCH_DATA_PATH"])
     logger.info(f"Using WANDS data path from environment variable: {DATA_PATH}")
 else:
-    DATA_PATH = pathlib.Path(user_cache_dir("cheat-at-search"))
+    DATA_PATH = pathlib.Path(user_cache_dir("cheat-at-search", ensure_exists=True))
 
 
 def download_file(url, dest_path):
@@ -146,6 +146,7 @@ def mount(use_gdrive=True, manual_path=None, load_keys=True):
         use_grive: If True, mount using grive; otherwise, use 'cheat-at-search-data/' directory.
     """
     global DATA_PATH
+    cache_dir = pathlib.Path(user_cache_dir("cheat-at-search", ensure_exists=True))
     if manual_path:
         if not pathlib.Path(manual_path).exists():
             logger.info(f"Creating manual data directory: {manual_path}")
@@ -156,15 +157,15 @@ def mount(use_gdrive=True, manual_path=None, load_keys=True):
         try:
             from google.colab import drive
             drive.mount('/content/drive')
-            DATA_PATH = '/content/drive/MyDrive/cheat-at-search-data/'
-            if not pathlib.Path(DATA_PATH).exists():
+            DATA_PATH = Path('/content/drive/MyDrive/cheat-at-search-data/')
+            if not DATA_PATH.exists():
                 logger.info(f"Creating Google Drive data directory: {DATA_PATH}")
-                pathlib.Path(DATA_PATH).mkdir(parents=True, exist_ok=True)
+                DATA_PATH.mkdir(parents=True, exist_ok=True)
         except (ImportError, ModuleNotFoundError):
             logger.error("Google Colab drive module not found. Ensure you're running this in Google Colab.")
             raise
-    elif user_cache_dir:
-        DATA_PATH = pathlib.Path(user_cache_dir("cheat-at-search"))
+    elif cache_dir:
+        DATA_PATH = cache_dir
         if not DATA_PATH.exists():
             logger.info(f"Creating cache data directory: {DATA_PATH}")
             DATA_PATH.mkdir(parents=True, exist_ok=True)
