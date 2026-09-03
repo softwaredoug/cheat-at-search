@@ -25,6 +25,13 @@ def passage_fn(row):
     return f"{row['title']} {row['description']}".strip()
 
 
+def download_remote_file(repo_id, remote_path, local_path):
+    if remote_path.endswith(".manifest.json"):
+        return False
+    np.save(local_path, np.zeros((2, 3), dtype=np.float32))
+    return True
+
+
 @pytest.fixture(scope="function")
 def mounted_data_dir():
     data_dir = tempfile.mkdtemp()
@@ -32,8 +39,17 @@ def mounted_data_dir():
     return Path(data_dir)
 
 
+@patch("cheat_at_search.embeddings._upload_remote_file", return_value=False)
+@patch("cheat_at_search.embeddings._remote_file_exists", return_value=False)
+@patch("cheat_at_search.embeddings._download_remote_file", return_value=False)
 @patch("cheat_at_search.embeddings._load_model")
-def test_embeddings_cache_reuse(mock_load_model, mounted_data_dir):
+def test_embeddings_cache_reuse(
+    mock_load_model,
+    mock_download_remote_file,
+    mock_remote_file_exists,
+    mock_upload_remote_file,
+    mounted_data_dir,
+):
     dummy = DummyModel()
     mock_load_model.return_value = dummy
     corpus = pd.DataFrame({
@@ -70,8 +86,17 @@ def test_embeddings_cache_reuse(mock_load_model, mounted_data_dir):
     assert len(manifests) == 1
 
 
+@patch("cheat_at_search.embeddings._upload_remote_file", return_value=False)
+@patch("cheat_at_search.embeddings._remote_file_exists", return_value=False)
+@patch("cheat_at_search.embeddings._download_remote_file", return_value=False)
 @patch("cheat_at_search.embeddings._load_model")
-def test_embeddings_cache_changes_with_model(mock_load_model, mounted_data_dir):
+def test_embeddings_cache_changes_with_model(
+    mock_load_model,
+    mock_download_remote_file,
+    mock_remote_file_exists,
+    mock_upload_remote_file,
+    mounted_data_dir,
+):
     dummy = DummyModel()
     mock_load_model.return_value = dummy
     corpus = pd.DataFrame({
@@ -100,7 +125,8 @@ def test_embeddings_cache_changes_with_model(mock_load_model, mounted_data_dir):
     assert len(manifests) == 2
 
 
-def test_embeddings_require_doc_id(mounted_data_dir):
+@patch("cheat_at_search.embeddings._download_remote_file", return_value=False)
+def test_embeddings_require_doc_id(mock_download_remote_file, mounted_data_dir):
     corpus = pd.DataFrame({
         "title": ["one"],
         "description": ["alpha"],
@@ -124,3 +150,78 @@ def test_numpy_array_iterator_yields_vectors(tmp_path):
     vectors = list(NumpyArrayIterator([str(first_path), str(second_path)]))
 
     assert [vector.tolist() for vector in vectors] == [[1, 2], [3, 4], [5, 6]]
+
+
+@patch("cheat_at_search.embeddings._upload_remote_file", return_value=True)
+@patch("cheat_at_search.embeddings._remote_file_exists", return_value=False)
+@patch("cheat_at_search.embeddings._download_remote_file", return_value=False)
+@patch("cheat_at_search.embeddings._load_model")
+def test_local_chunks_are_uploaded(
+    mock_load_model,
+    mock_download_remote_file,
+    mock_remote_file_exists,
+    mock_upload_remote_file,
+    mounted_data_dir,
+):
+    dummy = DummyModel()
+    mock_load_model.return_value = dummy
+    corpus = pd.DataFrame({
+        "doc_id": [1, 2, 3],
+        "title": ["one", "two", "three"],
+        "description": ["", "", ""],
+    })
+
+    load_or_create_embeddings(
+        corpus,
+        passage_fn,
+        model_name="test-model",
+        chunk_size=2,
+        show_progress=False,
+        remote_repo_id=None,
+    )
+    mock_upload_remote_file.reset_mock()
+
+    load_or_create_embeddings(
+        corpus,
+        passage_fn,
+        model_name="test-model",
+        chunk_size=2,
+        show_progress=False,
+    )
+
+    uploaded_paths = [call.args[2] for call in mock_upload_remote_file.call_args_list]
+    assert any(path.endswith("_chunk_0.npy") for path in uploaded_paths)
+    assert any(path.endswith("_chunk_1.npy") for path in uploaded_paths)
+
+
+@patch("cheat_at_search.embeddings._upload_remote_file", return_value=False)
+@patch("cheat_at_search.embeddings._remote_file_exists", return_value=True)
+@patch("cheat_at_search.embeddings._download_remote_file", side_effect=download_remote_file)
+@patch("cheat_at_search.embeddings._load_model")
+@patch.dict("cheat_at_search.embeddings._MODEL_REGISTRY", {}, clear=True)
+def test_remote_chunks_are_restored(
+    mock_load_model,
+    mock_download_remote_file,
+    mock_remote_file_exists,
+    mock_upload_remote_file,
+    mounted_data_dir,
+):
+    dummy = DummyModel()
+    mock_load_model.return_value = dummy
+    corpus = pd.DataFrame({
+        "doc_id": [1, 2],
+        "title": ["one", "two"],
+        "description": ["", ""],
+    })
+
+    embeddings, model = load_or_create_embeddings(
+        corpus,
+        passage_fn,
+        model_name="test-model",
+        chunk_size=2,
+        show_progress=False,
+    )
+
+    assert model is dummy
+    assert dummy.calls == 0
+    assert np.stack(list(embeddings)).shape == (2, 3)

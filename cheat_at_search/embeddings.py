@@ -5,6 +5,7 @@ import inspect
 import json
 import math
 from pathlib import Path
+import shutil
 from typing import Any, Iterator
 from io import BytesIO
 import requests
@@ -21,6 +22,7 @@ _MODEL_REGISTRY: dict[tuple[str, str | None], object] = {}
 
 DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_CHUNK_SIZE = 10000
+DEFAULT_HF_CACHE_REPO = "softwaredoug/training-embeddings"
 
 
 class NumpyArrayIterator:
@@ -44,9 +46,16 @@ def _load_model(model_name: str, device: str | None = None):
             "sentence-transformers is required for embedding search. "
             "Install it with `poetry add sentence-transformers` or `pip install sentence-transformers`."
         ) from exc
+    # Keep CLIP preprocessing stable so cached image vectors do not change
+    # when Transformers changes its default processor implementation.
+    processor_kwargs = {"use_fast": False} if "clip" in model_name.lower() else None
     if device:
-        return SentenceTransformer(model_name, device=device)
-    return SentenceTransformer(model_name)
+        return SentenceTransformer(
+            model_name,
+            device=device,
+            processor_kwargs=processor_kwargs,
+        )
+    return SentenceTransformer(model_name, processor_kwargs=processor_kwargs)
 
 
 def load_model(model_name: str, device: str | None = None):
@@ -107,6 +116,61 @@ def _chunk_path(signature: str, chunk_index: int) -> Path:
     return _cache_root() / f"embeddings_{signature}_chunk_{chunk_index}.npy"
 
 
+def _remote_path(signature: str, filename: str) -> str:
+    return f"embeddings/{signature}/{filename}"
+
+
+def _remote_file_exists(repo_id: str, filename: str) -> bool:
+    """Check a public or authenticated dataset repository for one file."""
+    from huggingface_hub import HfApi
+
+    try:
+        files = HfApi().list_repo_files(repo_id=repo_id, repo_type="dataset")
+    except Exception as exc:
+        logger.warning("Unable to check Hugging Face cache: %s", exc)
+        return False
+    return filename in files
+
+
+def _download_remote_file(repo_id: str, remote_path: str, local_path: Path) -> bool:
+    """Download one remote cache file, returning False when it is unavailable."""
+    from huggingface_hub import hf_hub_download
+
+    try:
+        downloaded_path = hf_hub_download(
+            repo_id=repo_id,
+            filename=remote_path,
+            repo_type="dataset",
+        )
+    except Exception as exc:
+        logger.warning("Unable to download Hugging Face cache file %s: %s", remote_path, exc)
+        return False
+
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    if Path(downloaded_path) != local_path:
+        shutil.copyfile(downloaded_path, local_path)
+    return True
+
+
+def _upload_remote_file(repo_id: str, local_path: Path, remote_path: str) -> bool:
+    """Upload one cache file when a Hugging Face token is available."""
+    from huggingface_hub import HfApi, get_token
+
+    if get_token() is None:
+        return False
+    try:
+        HfApi().upload_file(
+            path_or_fileobj=str(local_path),
+            path_in_repo=remote_path,
+            repo_id=repo_id,
+            repo_type="dataset",
+        )
+    except Exception as exc:
+        logger.warning("Unable to upload Hugging Face cache file %s: %s", remote_path, exc)
+        return False
+    return True
+
+
 def _load_manifest(signature: str, model_name: str, passage_fn_id: str):
     manifest_path = _manifest_path(signature)
     if not manifest_path.exists():
@@ -149,8 +213,17 @@ def default_image_fn(row: Any):
     if not image_url:
         raise ValueError("Row must include 'image_path' for image embedding.")
 
-    response = requests.get(image_url)
-    response.raise_for_status()
+    try:
+        response = requests.get(image_url)
+        response.raise_for_status()
+    except (requests.RequestException, requests.HTTPError) as e:
+        placeholder_image = "https://storage.googleapis.com/product-ai-images/wands/images/placeholder.png"
+        if response.status_code < 500:
+            print(f"Failed to fetch image from {image_url}: {e}")
+            print(f"Using placeholder image instead: {placeholder_image}")
+            response = requests.get(placeholder_image)
+        else:
+            raise e
 
     return Image.open(BytesIO(response.content))
 
@@ -162,12 +235,21 @@ def load_or_create_embeddings(
     device: str | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     show_progress: bool = True,
+    remote_repo_id: str | None = DEFAULT_HF_CACHE_REPO,
 ):
     if passage_fn is None:
         passage_fn = default_passage_fn
     signature = _signature(corpus, model_name, passage_fn)
     passage_fn_id = _passage_fn_id(passage_fn)
     total_count = len(corpus)
+    manifest_path = _manifest_path(signature)
+
+    if remote_repo_id and not manifest_path.exists():
+        _download_remote_file(
+            remote_repo_id,
+            _remote_path(signature, manifest_path.name),
+            manifest_path,
+        )
 
     manifest = _load_manifest(signature, model_name, passage_fn_id)
     if manifest is None:
@@ -207,7 +289,24 @@ def load_or_create_embeddings(
                     dim = int(chunk.shape[1])
                 completed.add(chunk_index)
                 chunk_paths.append(str(chunk_file))
+                if remote_repo_id:
+                    remote_chunk = _remote_path(signature, chunk_file.name)
+                    if not _remote_file_exists(remote_repo_id, remote_chunk):
+                        _upload_remote_file(remote_repo_id, chunk_file, remote_chunk)
                 continue
+
+        if remote_repo_id:
+            remote_chunk = _remote_path(signature, chunk_file.name)
+            if _remote_file_exists(remote_repo_id, remote_chunk):
+                if _download_remote_file(remote_repo_id, remote_chunk, chunk_file):
+                    chunk = np.load(chunk_file)
+                    if chunk.ndim == 2 and chunk.shape[0] == expected_rows:
+                        if dim is None:
+                            dim = int(chunk.shape[1])
+                        completed.add(chunk_index)
+                        chunk_paths.append(str(chunk_file))
+                        continue
+                    chunk_file.unlink(missing_ok=True)
 
         if model is None:
             model = load_model(model_name, device=device)
@@ -231,6 +330,17 @@ def load_or_create_embeddings(
             "completed_chunks": sorted(completed),
         })
         _save_manifest(signature, manifest)
+        if remote_repo_id:
+            _upload_remote_file(
+                remote_repo_id,
+                chunk_file,
+                _remote_path(signature, chunk_file.name),
+            )
+            _upload_remote_file(
+                remote_repo_id,
+                manifest_path,
+                _remote_path(signature, manifest_path.name),
+            )
 
     manifest.update({
         "dim": dim,
@@ -240,8 +350,14 @@ def load_or_create_embeddings(
         "completed_chunks": sorted(completed),
     })
     _save_manifest(signature, manifest)
+    if remote_repo_id:
+        _upload_remote_file(
+            remote_repo_id,
+            manifest_path,
+            _remote_path(signature, manifest_path.name),
+        )
 
     if model is None:
-        model = _MODEL_REGISTRY.get((model_name, device))
+        model = load_model(model_name, device=device)
 
     return NumpyArrayIterator(chunk_paths), model
