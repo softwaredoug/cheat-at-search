@@ -7,7 +7,18 @@ import pandas as pd
 import pytest
 
 from cheat_at_search.data_dir import mount, ensure_data_subdir
-from cheat_at_search.embeddings import NumpyArrayIterator, load_or_create_embeddings
+from cheat_at_search.embeddings import (
+    DEFAULT_CLIP_MODEL,
+    DEFAULT_HF_CACHE_REPO,
+    DEFAULT_IMAGE_CHUNK_SIZE,
+    DEFAULT_MODEL_NAME,
+    NumpyArrayIterator,
+    clip_image_embeddings,
+    default_image_fn,
+    default_passage_fn,
+    load_or_create_embeddings,
+    text_embeddings,
+)
 
 
 class DummyModel:
@@ -225,3 +236,43 @@ def test_remote_chunks_are_restored(
     assert model is dummy
     assert dummy.calls == 0
     assert np.stack(list(embeddings)).shape == (2, 3)
+
+
+@patch("cheat_at_search.embeddings.load_or_create_embeddings")
+def test_clip_image_embeddings_forwards_defaults(mock_load):
+    expected = (object(), object())
+    mock_load.return_value = expected
+    corpus = pd.DataFrame()
+
+    result = clip_image_embeddings(corpus, device="mps", show_progress=False)
+
+    assert result == expected
+    mock_load.assert_called_once_with(
+        corpus,
+        passage_fn=default_image_fn,
+        model_name=DEFAULT_CLIP_MODEL,
+        device="mps",
+        show_progress=False,
+        chunk_size=DEFAULT_IMAGE_CHUNK_SIZE,
+        remote_repo_id=DEFAULT_HF_CACHE_REPO,
+    )
+
+
+@patch("cheat_at_search.embeddings.load_or_create_embeddings")
+def test_text_embeddings_forwards_defaults(mock_load):
+    expected = (object(), object())
+    mock_load.return_value = expected
+    corpus = pd.DataFrame()
+
+    result = text_embeddings(corpus, device="cpu", show_progress=False, chunk_size=4)
+
+    assert result == expected
+    mock_load.assert_called_once_with(
+        corpus,
+        passage_fn=default_passage_fn,
+        model_name=DEFAULT_MODEL_NAME,
+        device="cpu",
+        show_progress=False,
+        chunk_size=4,
+        remote_repo_id=DEFAULT_HF_CACHE_REPO,
+    )

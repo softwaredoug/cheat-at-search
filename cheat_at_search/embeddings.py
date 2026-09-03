@@ -370,3 +370,51 @@ def load_or_create_embeddings(
         model = load_model(model_name, device=device)
 
     return NumpyArrayIterator(chunk_paths), model
+
+
+DEFAULT_CLIP_MODEL = "sentence-transformers/clip-ViT-B-32"
+DEFAULT_IMAGE_CHUNK_SIZE = 128
+
+
+def clip_image_embeddings(
+    corpus,
+    device: str | None = None,
+    model_name: str = DEFAULT_CLIP_MODEL,
+    show_progress: bool = True,
+    passage_fn=default_image_fn,
+    chunk_size: int = DEFAULT_IMAGE_CHUNK_SIZE,
+    remote_repo_id: str | None = DEFAULT_HF_CACHE_REPO,
+):
+    """Convenience function for embedding images from a corpus given defaults."""
+    image_embeddings, model = load_or_create_embeddings(
+        corpus,
+        passage_fn=passage_fn,
+        model_name=model_name,
+        device=device,
+        show_progress=show_progress,
+        chunk_size=chunk_size,
+        remote_repo_id=remote_repo_id,
+    )
+    return image_embeddings, model
+
+
+def text_embeddings(
+    corpus,
+    device: str | None = None,
+    model_name: str = DEFAULT_MODEL_NAME,
+    show_progress: bool = True,
+    passage_fn=default_passage_fn,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    remote_repo_id: str | None = DEFAULT_HF_CACHE_REPO,
+):
+    """Convenience function for embedding text from a corpus given defaults."""
+    text_embeddings, model = load_or_create_embeddings(
+        corpus,
+        passage_fn=passage_fn,
+        model_name=model_name,
+        device=device,
+        show_progress=show_progress,
+        chunk_size=chunk_size,
+        remote_repo_id=remote_repo_id,
+    )
+    return text_embeddings, model
