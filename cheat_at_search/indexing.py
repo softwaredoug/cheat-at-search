@@ -48,7 +48,9 @@ def load_or_build_lexical_corpus(corpus: pd.DataFrame, dataset_name: str) -> pd.
     if cache_path.exists():
         cached = pd.read_pickle(cache_path)
         if "title_snowball" in cached.columns and "description_snowball" in cached.columns:
-            return cached
+            corpus['title_snowball'] = cached['title_snowball']
+            corpus['description_snowball'] = cached['description_snowball']
+            return corpus
         logger.info(
             "Cached lexical corpus for %s missing snowball columns; rebuilding.",
             dataset_name,

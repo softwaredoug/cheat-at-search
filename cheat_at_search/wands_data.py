@@ -81,6 +81,8 @@ def _corpus():
     df["category"] = df["category"].str.strip()
     df["sub_category"] = df["sub_category"].str.strip()
     df["cat_subcat"] = df["category"] + " / " + df["sub_category"]
+    base_image_url = "https://storage.googleapis.com/product-ai-images/wands/images/"
+    df['image_url'] = base_image_url + df['product_id'].astype(str) + ".png"
 
     return df
 
