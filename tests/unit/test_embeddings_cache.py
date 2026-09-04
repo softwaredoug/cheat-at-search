@@ -162,6 +162,9 @@ def test_numpy_array_iterator_yields_vectors(tmp_path):
 
     assert [vector.tolist() for vector in vectors] == [[1, 2], [3, 4], [5, 6]]
 
+    mmap_vectors = list(NumpyArrayIterator([str(first_path)], mmap=True))
+    assert [vector.tolist() for vector in mmap_vectors] == [[1, 2], [3, 4]]
+
 
 @patch("cheat_at_search.embeddings._upload_remote_file", return_value=True)
 @patch("cheat_at_search.embeddings._remote_file_exists", return_value=False)

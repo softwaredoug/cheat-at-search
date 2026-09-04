@@ -28,14 +28,15 @@ DEFAULT_HF_CACHE_REPO = "softwaredoug/training-embeddings"
 class NumpyArrayIterator:
     """Iterate over vectors from a list of NumPy array paths."""
 
-    def __init__(self, paths: list[str]):
+    def __init__(self, paths: list[str], mmap: bool = False):
         self._paths = paths
+        self._mmap = mmap
 
     def __iter__(self) -> Iterator[np.ndarray]:
         for path in self._paths:
-            # Load chunks normally so yielded vectors do not retain open mmap
-            # file descriptors while callers materialize the full index.
-            array = np.load(path)
+            # Normal loading avoids retaining mmap file descriptors while
+            # callers materialize the full index.
+            array = np.load(path, mmap_mode="r" if self._mmap else None)
             for vector in array:
                 yield vector
 
