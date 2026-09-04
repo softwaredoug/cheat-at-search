@@ -33,7 +33,9 @@ class NumpyArrayIterator:
 
     def __iter__(self) -> Iterator[np.ndarray]:
         for path in self._paths:
-            array = np.load(path, mmap_mode="r")
+            # Load chunks normally so yielded vectors do not retain open mmap
+            # file descriptors while callers materialize the full index.
+            array = np.load(path)
             for vector in array:
                 yield vector
 
@@ -252,8 +254,37 @@ def load_or_create_embeddings(
     passage_fn_id = _passage_fn_id(passage_fn)
     total_count = len(corpus)
     manifest_path = _manifest_path(signature)
+    manifest = _load_manifest(signature, model_name, passage_fn_id)
 
-    if remote_repo_id and not manifest_path.exists():
+    effective_chunk_size = chunk_size
+    if manifest is not None:
+        effective_chunk_size = int(manifest.get("chunk_size", chunk_size))
+    local_num_chunks = (
+        int(math.ceil(total_count / effective_chunk_size))
+        if effective_chunk_size > 0
+        else 0
+    )
+    local_complete = True
+    for chunk_index in range(local_num_chunks):
+        chunk_file = _chunk_path(signature, chunk_index)
+        expected_rows = min(
+            effective_chunk_size,
+            total_count - chunk_index * effective_chunk_size,
+        )
+        if not chunk_file.exists():
+            local_complete = False
+            break
+        chunk = np.load(chunk_file)
+        if chunk.ndim != 2 or chunk.shape[0] != expected_rows:
+            local_complete = False
+            break
+
+    # A complete local cache is authoritative and should not cause network
+    # access merely to check or populate the remote cache.
+    if local_complete:
+        remote_repo_id = None
+
+    if remote_repo_id and manifest is None:
         _download_remote_file(
             remote_repo_id,
             _remote_path(signature, manifest_path.name),

@@ -167,7 +167,7 @@ def test_numpy_array_iterator_yields_vectors(tmp_path):
 @patch("cheat_at_search.embeddings._remote_file_exists", return_value=False)
 @patch("cheat_at_search.embeddings._download_remote_file", return_value=False)
 @patch("cheat_at_search.embeddings._load_model")
-def test_local_chunks_are_uploaded(
+def test_complete_local_chunks_skip_remote_cache(
     mock_load_model,
     mock_download_remote_file,
     mock_remote_file_exists,
@@ -190,6 +190,7 @@ def test_local_chunks_are_uploaded(
         show_progress=False,
         remote_repo_id=None,
     )
+    mock_remote_file_exists.reset_mock()
     mock_upload_remote_file.reset_mock()
 
     load_or_create_embeddings(
@@ -200,9 +201,8 @@ def test_local_chunks_are_uploaded(
         show_progress=False,
     )
 
-    uploaded_paths = [call.args[2] for call in mock_upload_remote_file.call_args_list]
-    assert any(path.endswith("_chunk_0.npy") for path in uploaded_paths)
-    assert any(path.endswith("_chunk_1.npy") for path in uploaded_paths)
+    mock_remote_file_exists.assert_not_called()
+    mock_upload_remote_file.assert_not_called()
 
 
 @patch("cheat_at_search.embeddings._upload_remote_file", return_value=False)
