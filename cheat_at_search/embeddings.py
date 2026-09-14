@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.logger import log_to_stdout
+from cheat_at_search.passage_fn import default_passage_fn
 
 
 logger = log_to_stdout("embeddings")
@@ -205,16 +206,6 @@ def _save_manifest(signature: str, meta: dict) -> None:
     manifest_path = _manifest_path(signature)
     with manifest_path.open("w", encoding="utf-8") as handle:
         json.dump(meta, handle)
-
-
-def default_passage_fn(row: Any) -> str:
-    """Build the text used to embed one corpus row."""
-    title = row.get("title")
-    description = row.get("description", "")
-
-    if title:
-        return f"{title}\n\n{description}"
-    return description
 
 
 def default_image_fn(row: Any):
