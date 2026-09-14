@@ -3,6 +3,7 @@ from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.pydantize import make_tool_adapter
 from openai import BadRequestError, OpenAI
+from pydantic import BaseModel
 from typing import Optional
 from hashlib import md5
 from time import sleep
@@ -11,6 +12,19 @@ import textwrap
 
 
 logger = log_to_stdout("openai_search_client")
+
+
+def _maybe_get_image_input(tool_output) -> dict | None:
+    if isinstance(tool_output, dict):
+        image_url = tool_output.get("image_url")
+    elif isinstance(tool_output, BaseModel):
+        image_url = getattr(tool_output, "image_url", None)
+    else:
+        return None
+
+    if not isinstance(image_url, str) or not image_url.strip():
+        return None
+    return {"type": "input_image", "image_url": image_url}
 
 
 class OpenAIAgent(Agent):
@@ -22,6 +36,7 @@ class OpenAIAgent(Agent):
         response_model=None,
         reasoning_level: str = "medium",
         summary: bool = True,
+        process_images: bool = False,
     ):
         self.search_tools = {tool.__name__: make_tool_adapter(tool) for tool in tools}
 
@@ -38,6 +53,7 @@ class OpenAIAgent(Agent):
         self.max_tokens = max_tokens
         self.reasoning_level = reasoning_level
         self.summary = summary
+        self.process_images = process_images
 
     def config_hash(self) -> str:
         tool_specs = []
@@ -64,6 +80,7 @@ class OpenAIAgent(Agent):
             "response_model": response_model,
             "max_tokens": self.max_tokens,
             "reasoning_level": self.reasoning_level,
+            "process_images": self.process_images,
             "tools": tool_specs,
         }
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -160,7 +177,7 @@ class OpenAIAgent(Agent):
                             resp_preview = f"{resp_preview[:997]}..."
                             resp_preview = f"{resp_preview} (total {len(json_resp)} chars)"
                         active_logger.info("Tool response: %s", resp_preview)
-                        # 4. Provide function call results to the model
+                        # Provide the original function result to the model unchanged.
                         inputs.append(
                             {
                                 "type": "function_call_output",
@@ -168,6 +185,15 @@ class OpenAIAgent(Agent):
                                 "output": json_resp,
                             }
                         )
+                        if self.process_images:
+                            image_input = _maybe_get_image_input(py_resp)
+                            if image_input is not None:
+                                inputs.append(
+                                    {
+                                        "role": "user",
+                                        "content": [image_input],
+                                    }
+                                )
             if return_usage:
                 resp.usage = usage
             return resp, inputs, usage
