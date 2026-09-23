@@ -13,7 +13,7 @@ logger = log_to_stdout("openai_enrich_client")
 
 class OpenAIEnricher(EnrichClient):
     def __init__(self, response_model: BaseModel, model: str, system_prompt: str = None,
-                 temperature: float = 0.0, verbosity: str = 'low',
+                 temperature: Optional[float] = None, verbosity: str = 'low',
                  reasoning_effort: str = 'minimal'):
         super().__init__(response_model=response_model)
         self.provider = model.split('/')[0]
@@ -68,12 +68,14 @@ class OpenAIEnricher(EnrichClient):
                     verbosity=self.verbosity
                 )
             else:
-                response = self.client.responses.parse(
-                    model=self.model,
-                    temperature=self.temperature,
-                    input=prompts,
-                    text_format=self.response_model
-                )
+                parse_kwargs = {
+                    "model": self.model,
+                    "input": prompts,
+                    "text_format": self.response_model,
+                }
+                if self.temperature is not None:
+                    parse_kwargs["temperature"] = self.temperature
+                response = self.client.responses.parse(**parse_kwargs)
             response_id = response.id
             prev_response_id = response_id
             num_input_tokens = response.usage.input_tokens

@@ -168,6 +168,26 @@ def test_auto_enricher_literal_respects_structured_output(mock_key_for_provider,
 
 @patch("cheat_at_search.enrich.openai_enrich_client.OpenAI")
 @patch("cheat_at_search.enrich.openai_enrich_client.key_for_provider")
+def test_auto_enricher_omits_none_temperature(mock_key_for_provider, mock_openai):
+    mock_responses = configure_mock_openai_enricher(mock_key_for_provider, mock_openai)
+    mock_responses.queue_parse_response(payload={"color": "blue"})
+
+    enricher = AutoEnricher(
+        model="openai/gpt-4.1-nano",
+        system_prompt="Classify product colors.",
+        response_model=ColorEnrich,
+        temperature=None,
+    )
+
+    assert enricher.enrich("What color is this product?\n\nblue sofa") == ColorEnrich(
+        color="blue"
+    )
+    parse_kwargs = mock_responses.client.responses.parse.call_args.kwargs
+    assert "temperature" not in parse_kwargs
+
+
+@patch("cheat_at_search.enrich.openai_enrich_client.OpenAI")
+@patch("cheat_at_search.enrich.openai_enrich_client.key_for_provider")
 def test_auto_enricher_enrich_all_basic(mock_key_for_provider, mock_openai):
     mock_responses = configure_mock_openai_enricher(mock_key_for_provider, mock_openai)
     mock_responses.client.responses.parse.side_effect = color_response_from_prompt

@@ -29,7 +29,7 @@ class AutoEnricher:
             self.enricher = OpenAIEnricher(response_model=response_model,
                                            model=model,
                                            system_prompt=self.system_prompt,
-                                           temperature=temperature if temperature is not None else 0.0)
+                                           temperature=temperature)
         elif self.provider == 'google':
             self.enricher = GoogleEnrichClient(response_model=response_model,
                                                model=model,
