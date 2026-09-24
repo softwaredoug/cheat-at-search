@@ -2,7 +2,6 @@ from cheat_at_search.logger import log_to_stdout
 from .cached_enrich_client import CachedEnrichClient
 from .enrich_client import DebugMetaData
 from .openai_enrich_client import OpenAIEnricher
-from .google_enrich_client import GoogleEnrichClient
 from typing import Optional
 from pydantic import BaseModel
 from typing import Tuple
@@ -30,12 +29,8 @@ class AutoEnricher:
                                            model=model,
                                            system_prompt=self.system_prompt,
                                            temperature=temperature)
-        elif self.provider == 'google':
-            self.enricher = GoogleEnrichClient(response_model=response_model,
-                                               model=model,
-                                               system_prompt=self.system_prompt)
         else:
-            raise ValueError(f"Provider {self.provider} is not supported. Supported providers are: ['openai', 'google']")
+            raise ValueError(f"Provider {self.provider} is not supported. Supported provider: 'openai'")
         self.cached_enricher = CachedEnrichClient(self.enricher)
 
     def enrich(self, prompt: str, force_refresh: bool = False) -> BaseModel:

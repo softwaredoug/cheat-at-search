@@ -27,7 +27,7 @@ class EnrichClient(ABC):
 
 ## Core Implementations
 
-We implement google / openai enrichments.
+We implement OpenAI enrichment.
 
 They take a prompt and return a structured response (the pydantic BaseModel instance)
 
@@ -41,7 +41,7 @@ A wrapper implementation `CachedEnrichClient` stores the responses in a cache fo
 
 ## AutoEnricher
 
-Much of the work to enrich is actually done via the AutoEnricher class. It wraps the openai / google in a cached enricher - instantiating depending on model type passed.
+Much of the work to enrich is actually done via the AutoEnricher class. It wraps OpenAI in a cached enricher.
 
 ```
 enricher = AutoEnricher(
