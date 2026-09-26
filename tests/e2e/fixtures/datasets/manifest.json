@@ -5,6 +5,8 @@
     "esci",
     "minimarco",
     "msmarco",
+    "scifact",
+    "trec_covid",
     "tmdb",
     "wands"
   ],

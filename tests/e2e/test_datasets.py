@@ -67,6 +67,22 @@ def dataset_fixtures(tmp_path, monkeypatch):
     doug_rag_data = importlib.import_module("cheat_at_search.doug_rag_data")
     _clear_cached_attrs(doug_rag_data)
 
+    scifact_data = importlib.import_module("cheat_at_search.scifact_data")
+    _clear_cached_attrs(scifact_data)
+    monkeypatch.setattr(
+        scifact_data,
+        "download_scifact",
+        lambda: FIXTURE_ROOT / "scifact",
+    )
+
+    trec_covid_data = importlib.import_module("cheat_at_search.trec_covid_data")
+    _clear_cached_attrs(trec_covid_data)
+    monkeypatch.setattr(
+        trec_covid_data,
+        "download_trec_covid",
+        lambda: FIXTURE_ROOT / "trec_covid",
+    )
+
 
 @pytest.mark.parametrize(
     "data_module",
@@ -77,6 +93,8 @@ def dataset_fixtures(tmp_path, monkeypatch):
         "wands_data",
         "tmdb_data",
         "doug_blog_data",
+        "scifact_data",
+        "trec_covid_data",
     ],
 )
 def test_common_imports(data_module):
@@ -134,6 +152,8 @@ def test_doug_rag_judgments_are_answer_only():
         "tmdb_data",
         "doug_blog_data",
         "doug_rag_data",
+        "scifact_data",
+        "trec_covid_data",
     ],
 )
 def test_lexical_indexes_score_arrays(data_module):

@@ -281,6 +281,54 @@ def build_bc_plus_fixture(output_dir: Path, sample_size: int, random_state: int)
     corpus_sample.to_parquet(fixture_dir / "corpus.parquet", index=False)
 
 
+def build_scifact_fixture(output_dir: Path, sample_size: int, random_state: int) -> None:
+    from cheat_at_search import scifact_data
+
+    source_dir = scifact_data.download_scifact()
+    fixture_dir = output_dir / "scifact"
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+
+    corpus = scifact_data._load_corpus(source_dir)
+    queries = scifact_data._load_queries(source_dir)
+    judgments = scifact_data._load_judgments(source_dir, queries)
+    corpus_sample = _sample(corpus, sample_size, random_state)
+    sampled_doc_ids = set(corpus_sample["doc_id"])
+    judgments_sample = judgments[judgments["doc_id"].isin(sampled_doc_ids)]
+    sampled_query_ids = set(judgments_sample["query_id"])
+    queries_sample = queries[queries["query_id"].isin(sampled_query_ids)]
+
+    corpus_sample.to_json(fixture_dir / "corpus.jsonl", orient="records", lines=True)
+    queries_sample.to_json(fixture_dir / "queries.jsonl", orient="records", lines=True)
+    (fixture_dir / "qrels").mkdir(exist_ok=True)
+    judgments_sample.rename(
+        columns={"query_id": "query-id", "doc_id": "corpus-id", "grade": "score"}
+    ).to_csv(fixture_dir / "qrels" / "test.tsv", sep="\t", index=False)
+
+
+def build_trec_covid_fixture(output_dir: Path, sample_size: int, random_state: int) -> None:
+    from cheat_at_search import trec_covid_data
+
+    source_dir = trec_covid_data.download_trec_covid()
+    fixture_dir = output_dir / "trec_covid"
+    fixture_dir.mkdir(parents=True, exist_ok=True)
+
+    corpus = trec_covid_data._load_corpus(source_dir)
+    queries = trec_covid_data._load_queries(source_dir)
+    judgments = trec_covid_data._load_judgments(source_dir, queries)
+    corpus_sample = _sample(corpus, sample_size, random_state)
+    sampled_doc_ids = set(corpus_sample["doc_id"])
+    judgments_sample = judgments[judgments["doc_id"].isin(sampled_doc_ids)]
+    sampled_query_ids = set(judgments_sample["query_id"])
+    queries_sample = queries[queries["query_id"].isin(sampled_query_ids)]
+
+    corpus_sample.to_json(fixture_dir / "corpus.jsonl", orient="records", lines=True)
+    queries_sample.to_json(fixture_dir / "queries.jsonl", orient="records", lines=True)
+    (fixture_dir / "qrels").mkdir(exist_ok=True)
+    judgments_sample.rename(
+        columns={"query_id": "query-id", "doc_id": "corpus-id", "grade": "score"}
+    ).to_csv(fixture_dir / "qrels" / "test.tsv", sep="\t", index=False)
+
+
 BUILDERS = {
     "msmarco": build_msmarco_fixture,
     "minimarco": build_minimarco_fixture,
@@ -289,6 +337,8 @@ BUILDERS = {
     "tmdb": build_tmdb_fixture,
     "doug_blog": build_doug_blog_fixture,
     "bc_plus": build_bc_plus_fixture,
+    "scifact": build_scifact_fixture,
+    "trec_covid": build_trec_covid_fixture,
 }
 
 
