@@ -70,11 +70,22 @@ def _load_judgments(dataset_path: Path, queries: pd.DataFrame, split: str = "tes
     return judgments[["query_id", "query", "doc_id", "grade"]]
 
 
+def _normalize_ids(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    for column in columns:
+        if column in frame.columns:
+            frame[column] = frame[column].astype(str)
+    return frame
+
+
 def _load_cached_dataset(dataset_path: Path, cache_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     queries_path = cache_dir / "queries.parquet"
     judgments_path = cache_dir / "judgments.parquet"
     if queries_path.exists() and judgments_path.exists():
-        return pd.read_parquet(queries_path), pd.read_parquet(judgments_path)
+        queries = _normalize_ids(pd.read_parquet(queries_path), ["query_id"])
+        judgments = _normalize_ids(
+            pd.read_parquet(judgments_path), ["query_id", "doc_id"]
+        )
+        return queries, judgments
 
     queries = _load_queries(dataset_path)
     judgments = _load_judgments(dataset_path, queries)
@@ -98,6 +109,7 @@ def __getattr__(name):
         corpus_path = cache_dir / "corpus.parquet"
         if corpus_path.exists():
             corpus = pd.read_parquet(corpus_path)
+            corpus = _normalize_ids(corpus, ["doc_id"])
         else:
             corpus = _load_corpus(dataset_path)
             corpus.to_parquet(corpus_path, index=False)
