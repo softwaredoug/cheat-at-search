@@ -25,7 +25,7 @@ def snowball_tokenizer(text):
 
 
 def taxonomy_tokenizer(text):
-    if text is float:
+    if isinstance(text, float):
         return ''
     if text is None:
         return ''
@@ -38,7 +38,7 @@ def taxonomy_tokenizer(text):
 
 
 def ws_tokenizer(text):
-    if text is float:
+    if isinstance(text, float):
         return ''
     if text is None:
         return ''

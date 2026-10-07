@@ -62,7 +62,7 @@ def test_taxonomy_tokenizer_none_returns_empty_string():
 
 
 def test_taxonomy_tokenizer_float_returns_empty_string():
-    result = taxonomy_tokenizer(float)
+    result = taxonomy_tokenizer(1.0)
     assert result == ""
 
 
@@ -91,7 +91,7 @@ def test_ws_tokenizer_none_returns_empty_string():
 
 
 def test_ws_tokenizer_float_returns_empty_string():
-    result = ws_tokenizer(float)
+    result = ws_tokenizer(1.0)
     assert result == ""
 
 
