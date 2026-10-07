@@ -11,10 +11,31 @@ from openai import OpenAI, APIError
 logger = log_to_stdout("openai_enrich_client")
 
 
+_DEFAULT_REASONING_EFFORT_BY_MODEL = {
+    "gpt-5": "minimal",
+    "gpt-5-mini": "minimal",
+    "gpt-5-nano": "minimal",
+    "gpt-5.1": "none",
+    "gpt-5.2": "none",
+    "gpt-5.4": "none",
+    "gpt-5.4-mini": "none",
+    "gpt-5.4-nano": "none",
+}
+
+
+def _default_reasoning_effort(model: str) -> Optional[str]:
+    """Choose the lowest documented reasoning effort for known GPT-5 models."""
+    for model_name, effort in _DEFAULT_REASONING_EFFORT_BY_MODEL.items():
+        # Also match dated model snapshots without matching unrelated variants.
+        if model == model_name or model.startswith(f"{model_name}-20"):
+            return effort
+    return None
+
+
 class OpenAIEnricher(EnrichClient):
     def __init__(self, response_model: BaseModel, model: str, system_prompt: str = None,
-                 temperature: Optional[float] = None, verbosity: str = 'low',
-                 reasoning_effort: str = 'minimal'):
+                 temperature: Optional[float] = None, verbosity: Optional[str] = 'low',
+                 reasoning_effort: Optional[str] = None):
         super().__init__(response_model=response_model)
         self.provider = model.split('/')[0]
         self.model = model.split('/')[-1]
@@ -22,8 +43,12 @@ class OpenAIEnricher(EnrichClient):
             raise ValueError(f"Provider {self.provider} is not supported. This client only supports OpenAI.")
         self.system_prompt = system_prompt
         self.temperature = temperature
-        self.verbosity = verbosity
-        self.reasoning_effort = reasoning_effort
+        self.verbosity = verbosity if verbosity is not None else 'low'
+        self.reasoning_effort = (
+            reasoning_effort
+            if reasoning_effort is not None
+            else _default_reasoning_effort(self.model)
+        )
         self.last_exception = None
 
         openai_key = key_for_provider(self.provider)
@@ -36,21 +61,27 @@ class OpenAIEnricher(EnrichClient):
 
     def str_hash(self):
         output_schema_hash = md5(json.dumps(self.response_model.model_json_schema(mode='serialization')).encode()).hexdigest()
-        return md5(f"{self.model}_{self.system_prompt}_{self.temperature}_{output_schema_hash}".encode()).hexdigest()
+        cache_signature = (
+            f"{self.model}_{self.system_prompt}_{self.temperature}_"
+            f"{self.reasoning_effort}_{self.verbosity}_{output_schema_hash}"
+        )
+        return md5(cache_signature.encode()).hexdigest()
 
     def get_num_tokens(self, prompt: str) -> Tuple[int, int]:
         """Run the response directly and return teh number of tokens"""
         cls_value, num_input_tokens, num_output_tokens = self.enrich(prompt, return_num_tokens=True)
         return num_input_tokens, num_output_tokens
 
-    def _gpt5_call(self, inputs: list[str], reasoning_effort: str, verbosity: str):
-        response = self.client.responses.parse(
-            model=self.model,
-            reasoning={"effort": reasoning_effort},
-            input=inputs,
-            text_format=self.response_model,
-            text={"verbosity": verbosity}
-        )
+    def _gpt5_call(self, inputs: list[str], reasoning_effort: Optional[str], verbosity: str):
+        parse_kwargs = {
+            "model": self.model,
+            "input": inputs,
+            "text_format": self.response_model,
+            "text": {"verbosity": verbosity},
+        }
+        if reasoning_effort is not None:
+            parse_kwargs["reasoning"] = {"effort": reasoning_effort}
+        response = self.client.responses.parse(**parse_kwargs)
         return response
 
     def _enrich(self, prompt: str) -> Tuple[Optional[BaseModel], Optional[DebugMetaData]]:

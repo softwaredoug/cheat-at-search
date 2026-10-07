@@ -28,7 +28,9 @@ class AutoEnricher:
             self.enricher = OpenAIEnricher(response_model=response_model,
                                            model=model,
                                            system_prompt=self.system_prompt,
-                                           temperature=temperature)
+                                           temperature=temperature,
+                                           reasoning_effort=reasoning_effort,
+                                           verbosity=verbosity)
         else:
             raise ValueError(f"Provider {self.provider} is not supported. Supported provider: 'openai'")
         self.cached_enricher = CachedEnrichClient(self.enricher)
