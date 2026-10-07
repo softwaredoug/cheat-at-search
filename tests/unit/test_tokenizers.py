@@ -34,7 +34,7 @@ def test_snowball_tokenizer_none_returns_empty_string():
 
 
 def test_snowball_tokenizer_float_returns_empty_string():
-    result = snowball_tokenizer(float)
+    result = snowball_tokenizer(1.0)
     assert result == ""
 
 

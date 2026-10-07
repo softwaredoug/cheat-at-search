@@ -13,7 +13,7 @@ def stem_word(word):
 
 
 def snowball_tokenizer(text):
-    if text is float:
+    if isinstance(text, float):
         return ''
     if text is None:
         return ''
