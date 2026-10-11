@@ -2,7 +2,12 @@ from typing import Optional
 
 import pandas as pd
 
-from cheat_at_search.eval import grade_answers, grade_results, reciprocal_rank
+from cheat_at_search.eval import (
+    grade_answers,
+    grade_results,
+    pointwise_agreement,
+    reciprocal_rank,
+)
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
 from cheat_at_search.strategy import BM25Search
@@ -25,6 +30,7 @@ def run_strategy(
     show_progress=True,
     cache=True,
     eval_answer=None,
+    include_agreement=False,
 ):
     available_queries = judgments[["query", "query_id"]].drop_duplicates()
 
@@ -79,6 +85,7 @@ def run_strategy(
         batch_size,
         show_progress,
         cache,
+        include_agreement,
     )
 
 
@@ -89,6 +96,7 @@ def _run_search_path(
     batch_size,
     show_progress,
     cache,
+    include_agreement,
 ):
     max_grade = judgments["grade"].max()
     results = strategy.search_all(
@@ -103,6 +111,11 @@ def _run_search_path(
         max_grade=max_grade,
         k=10,
     )
+
+    if include_agreement and "score" not in results.columns:
+        raise ValueError(
+            "include_agreement was enabled but search results have no 'score' column."
+        )
 
     if len(graded):
         idcg = graded["idcg"].iloc[0]
@@ -119,10 +132,15 @@ def _run_search_path(
         graded = graded.merge(dcgs, on=["query", "query_id"])
         graded = graded.merge(ndcgs, on=["query", "query_id"])
         graded = graded.merge(mrrs, on=["query", "query_id"])
+        if include_agreement:
+            agreements = pointwise_agreement(graded)
+            graded = graded.merge(agreements, on=["query", "query_id"])
     else:
         graded["dcg"] = 0
         graded["ndcg"] = 0
         graded["mrr"] = 0
+        if include_agreement:
+            graded["agreement"] = pd.Series(dtype=float)
 
     return graded
 

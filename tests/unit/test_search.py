@@ -537,3 +537,56 @@ def test_run_strategy_empty_results_zero_metrics():
 
     assert graded["ndcg"].tolist() == [0]
     assert graded["mrr"].tolist() == [0]
+
+
+def test_run_strategy_reports_pointwise_agreement_with_tolerance_and_ignores_empty_placeholder():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+            {"doc_id": 30, "title": "gamma"},
+            {"doc_id": 40, "title": "delta"},
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 1, "query": "alpha", "doc_id": 20, "grade": 1},
+            {"query_id": 1, "query": "alpha", "doc_id": 30, "grade": 0},
+            {"query_id": 2, "query": "beta", "doc_id": 10, "grade": 2},
+        ]
+    )
+
+    class PointwiseStrategy(SearchStrategy):
+        def search(self, query, k=10):
+            if query == "alpha":
+                # doc_id 40 is unjudged and is treated as grade 0.
+                return [0, 1, 2, 3], [2 + 1e-7, 0.8, 0.2, 0]
+            return [], []
+
+    graded = run_strategy(
+        PointwiseStrategy(corpus),
+        judgments,
+        seed=None,
+        include_agreement=True,
+    )
+    agreements = graded.groupby("query")["agreement"].first().to_dict()
+
+    assert agreements["alpha"] == pytest.approx(0.5)
+    assert agreements["beta"] == 0
+    assert graded.loc[graded["doc_id"] == -1, "agreement"].tolist() == [0]
+
+
+def test_run_strategy_does_not_report_agreement_unless_enabled():
+    corpus = pd.DataFrame([{"doc_id": 10, "title": "alpha"}])
+    judgments = pd.DataFrame(
+        [{"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2}]
+    )
+
+    class PointwiseStrategy(SearchStrategy):
+        def search(self, query, k=10):
+            return [0], [2]
+
+    graded = run_strategy(PointwiseStrategy(corpus), judgments, seed=None)
+
+    assert "agreement" not in graded.columns

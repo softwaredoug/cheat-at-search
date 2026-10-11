@@ -66,3 +66,41 @@ def reciprocal_rank(graded_results: pd.DataFrame, max_grade: int) -> pd.DataFram
     all_queries = graded_results[["query", "query_id"]].drop_duplicates()
     rr = rr.reindex(all_queries.set_index(["query", "query_id"]).index, fill_value=0)
     return rr.reset_index()
+
+
+def pointwise_agreement(
+    graded_results: pd.DataFrame, rtol: float = 1e-5, atol: float = 1e-8
+) -> pd.DataFrame:
+    """Compute per-query accuracy of predicted scores against judged grades."""
+    if graded_results.empty:
+        return pd.DataFrame(columns=["query", "query_id", "agreement"])
+    if "score" not in graded_results.columns:
+        raise ValueError("graded_results must include a 'score' column for agreement.")
+
+    all_queries = graded_results[["query", "query_id"]].drop_duplicates()
+    # SearchStrategy uses doc_id=-1 for a synthetic row when a query has no hits.
+    # That row is not a grade prediction and must not count as a correct grade-0 hit.
+    actual_results = graded_results[
+        graded_results["doc_id"].notna() & graded_results["doc_id"].ne(-1)
+    ].copy()
+
+    if not actual_results.empty:
+        predicted_grades = pd.to_numeric(
+            actual_results["score"], errors="coerce"
+        ).to_numpy(dtype=float)
+        actual_grades = pd.to_numeric(
+            actual_results["grade"], errors="coerce"
+        ).to_numpy(dtype=float)
+        actual_results["_agrees"] = np.isclose(
+            predicted_grades,
+            actual_grades,
+            rtol=rtol,
+            atol=atol,
+        )
+        agreements = actual_results.groupby(["query", "query_id"])["_agrees"].mean()
+    else:
+        agreements = pd.Series(dtype=float, name="agreement")
+
+    query_index = all_queries.set_index(["query", "query_id"]).index
+    agreements = agreements.reindex(query_index, fill_value=0).rename("agreement")
+    return agreements.reset_index()
