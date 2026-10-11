@@ -5,6 +5,7 @@ import pandas as pd
 from cheat_at_search.eval import (
     grade_answers,
     grade_results,
+    pairwise_agreement,
     pointwise_agreement,
     reciprocal_rank,
 )
@@ -31,6 +32,7 @@ def run_strategy(
     cache=True,
     eval_answer=None,
     include_agreement=False,
+    include_pairwise_agreement=False,
 ):
     available_queries = judgments[["query", "query_id"]].drop_duplicates()
 
@@ -86,6 +88,7 @@ def run_strategy(
         show_progress,
         cache,
         include_agreement,
+        include_pairwise_agreement,
     )
 
 
@@ -97,6 +100,7 @@ def _run_search_path(
     show_progress,
     cache,
     include_agreement,
+    include_pairwise_agreement,
 ):
     max_grade = judgments["grade"].max()
     results = strategy.search_all(
@@ -112,9 +116,9 @@ def _run_search_path(
         k=10,
     )
 
-    if include_agreement and "score" not in results.columns:
+    if (include_agreement or include_pairwise_agreement) and "score" not in results.columns:
         raise ValueError(
-            "include_agreement was enabled but search results have no 'score' column."
+            "An agreement metric was enabled but search results have no 'score' column."
         )
 
     if len(graded):
@@ -135,12 +139,17 @@ def _run_search_path(
         if include_agreement:
             agreements = pointwise_agreement(graded)
             graded = graded.merge(agreements, on=["query", "query_id"])
+        if include_pairwise_agreement:
+            pairwise_agreements = pairwise_agreement(graded)
+            graded = graded.merge(pairwise_agreements, on=["query", "query_id"])
     else:
         graded["dcg"] = 0
         graded["ndcg"] = 0
         graded["mrr"] = 0
         if include_agreement:
             graded["agreement"] = pd.Series(dtype=float)
+        if include_pairwise_agreement:
+            graded["pairwise_agreement"] = pd.Series(dtype=float)
 
     return graded
 

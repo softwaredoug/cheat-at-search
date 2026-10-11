@@ -590,3 +590,40 @@ def test_run_strategy_does_not_report_agreement_unless_enabled():
     graded = run_strategy(PointwiseStrategy(corpus), judgments, seed=None)
 
     assert "agreement" not in graded.columns
+
+
+def test_run_strategy_reports_pairwise_agreement_over_top_ten():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": doc_id, "title": f"doc {doc_id}"}
+            for doc_id in range(12)
+        ]
+    )
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "ordered", "doc_id": doc_id, "grade": grade}
+            for doc_id, grade in enumerate([3, 2, 0, 1] + [0] * 8 + [10, 10])
+        ]
+        + [
+            {"query_id": 2, "query": "empty", "doc_id": 0, "grade": 1},
+        ]
+    )
+
+    class PairwiseStrategy(SearchStrategy):
+        def search(self, query, k=10):
+            if query == "ordered":
+                # The final two documents rank below the top 10 and must not count.
+                return list(range(12)), list(range(12, 0, -1))
+            return [], []
+
+    graded = run_strategy(
+        PairwiseStrategy(corpus),
+        judgments,
+        seed=None,
+        include_pairwise_agreement=True,
+    )
+    metrics = graded.groupby("query")["pairwise_agreement"].first().to_dict()
+
+    # Of the 45 pairs in the top 10, only doc 2 vs doc 3 is discordant.
+    assert metrics["ordered"] == pytest.approx(44 / 45)
+    assert metrics["empty"] == 0

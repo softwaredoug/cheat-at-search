@@ -104,3 +104,62 @@ def pointwise_agreement(
     query_index = all_queries.set_index(["query", "query_id"]).index
     agreements = agreements.reindex(query_index, fill_value=0).rename("agreement")
     return agreements.reset_index()
+
+
+def pairwise_agreement(
+    graded_results: pd.DataFrame, rtol: float = 1e-5, atol: float = 1e-8
+) -> pd.DataFrame:
+    """Compute per-query agreement of score and grade ordering over result pairs.
+
+    Each distinct document pair is considered once in result-rank order, with
+    the higher-ranked document as A. Pairs agree when A's score and grade are
+    both at least B's, allowing floating-point tolerance for ties.
+    """
+    if graded_results.empty:
+        return pd.DataFrame(columns=["query", "query_id", "pairwise_agreement"])
+    if "score" not in graded_results.columns:
+        raise ValueError(
+            "graded_results must include a 'score' column for pairwise agreement."
+        )
+
+    query_metrics = []
+    for (query, query_id), query_results in graded_results.groupby(
+        ["query", "query_id"], sort=False
+    ):
+        actual_results = query_results[
+            query_results["doc_id"].notna() & query_results["doc_id"].ne(-1)
+        ].sort_values("rank")
+        scores = pd.to_numeric(actual_results["score"], errors="coerce").to_numpy(
+            dtype=float
+        )
+        grades = pd.to_numeric(actual_results["grade"], errors="coerce").to_numpy(
+            dtype=float
+        )
+        doc_ids = actual_results["doc_id"].to_numpy()
+
+        total_pairs = 0
+        agreeing_pairs = 0
+        for index_a in range(len(actual_results)):
+            for index_b in range(index_a + 1, len(actual_results)):
+                if doc_ids[index_a] == doc_ids[index_b]:
+                    continue
+                total_pairs += 1
+                score_order_agrees = scores[index_a] >= scores[index_b] or np.isclose(
+                    scores[index_a], scores[index_b], rtol=rtol, atol=atol
+                )
+                grade_order_agrees = grades[index_a] >= grades[index_b] or np.isclose(
+                    grades[index_a], grades[index_b], rtol=rtol, atol=atol
+                )
+                if score_order_agrees and grade_order_agrees:
+                    agreeing_pairs += 1
+
+        agreement = agreeing_pairs / total_pairs if total_pairs else 0.0
+        query_metrics.append(
+            {
+                "query": query,
+                "query_id": query_id,
+                "pairwise_agreement": agreement,
+            }
+        )
+
+    return pd.DataFrame(query_metrics)
