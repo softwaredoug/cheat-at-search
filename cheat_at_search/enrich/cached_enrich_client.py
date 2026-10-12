@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 from pydantic import BaseModel
 from time import perf_counter
 import json
+import tempfile
 
 
 logger = log_to_stdout(logger_name="cached_enrich_client")
@@ -45,14 +46,33 @@ class CachedEnrichClient(EnrichClient):
             self.cache = {}
 
     def save_cache(self):
+        local_copy = self.cache.copy()
+        temp_file = None
         try:
-            with open(self.cache_file, 'w') as f:
-                json.dump(self.cache, f)
-        except KeyboardInterrupt:
-            logger.warning("Cache saving interrupted. Retrying save before raising exception.")
-            with open(self.cache_file, 'w') as f:
-                json.dump(self.cache, f)
-            raise
+            with tempfile.NamedTemporaryFile(
+                mode='w',
+                encoding='utf-8',
+                dir=self.cache_path,
+                prefix=f".{os.path.basename(self.cache_file)}.",
+                suffix='.tmp',
+                delete=False,
+            ) as f:
+                temp_file = f.name
+                json.dump(local_copy, f)
+            os.replace(temp_file, self.cache_file)
+            temp_file = None
+            return True
+        except Exception as e:
+            logger.error(f"Error saving cache file {self.cache_file}: {str(e)}")
+            return False
+        finally:
+            if temp_file is not None:
+                try:
+                    os.remove(temp_file)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    logger.warning(f"Could not remove temporary cache file {temp_file}: {str(e)}")
 
     def delete_cache(self):
         """Delete the cache file and clear the in-memory cache."""
@@ -87,9 +107,9 @@ class CachedEnrichClient(EnrichClient):
             self.cache[prompt_key] = enriched_data.model_dump_json()
         now = perf_counter()
         if now - self.last_cache_save_time > 60:
-            self.save_cache()
-            logger.debug("Cache saved to disk.")
-            self.last_cache_save_time = perf_counter()
+            if self.save_cache():
+                logger.debug("Cache saved to disk.")
+                self.last_cache_save_time = perf_counter()
         return enriched_data
 
     def str_hash(self) -> str:

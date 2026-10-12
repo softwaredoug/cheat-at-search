@@ -5,6 +5,11 @@ import pytest
 from cheat_at_search.data_dir import mount
 import tempfile
 from typing import Optional
+import json
+from concurrent.futures import ThreadPoolExecutor
+from json import dump as real_json_dump
+from threading import Event
+from unittest.mock import patch
 
 from cheat_at_search.logger import log_to_stdout
 
@@ -80,3 +85,54 @@ def test_cached_enrich_client_can_force_refresh(mounted_data_dir):
     assert cached_client.enrich("What color?", force_refresh=True).color == "blue"
     assert cached_client.enrich("What color?").color == "blue"
     assert client.call_count == 2
+
+
+@patch("cheat_at_search.enrich.cached_enrich_client.json.dump")
+def test_save_cache_uses_snapshot_and_atomic_replace(mock_dump, mounted_data_dir):
+    cached_client = CachedEnrichClient(MockEnrichClient(colors=["red"]))
+    cached_client.cache = {"before": ColorEnrich(color="red").model_dump_json()}
+    old_cache = '{"old": "cache"}'
+    with open(cached_client.cache_file, "w") as f:
+        f.write(old_cache)
+
+    dump_started = Event()
+    continue_dump = Event()
+
+    def delayed_dump(cache_snapshot, f):
+        dump_started.set()
+        if not continue_dump.wait(timeout=5):
+            raise TimeoutError("Timed out waiting to continue cache dump")
+        real_json_dump(cache_snapshot, f)
+
+    mock_dump.side_effect = delayed_dump
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        save_future = executor.submit(cached_client.save_cache)
+        assert dump_started.wait(timeout=5)
+        try:
+            with open(cached_client.cache_file) as f:
+                assert f.read() == old_cache
+            cached_client.cache["during-save"] = ColorEnrich(color="blue").model_dump_json()
+        finally:
+            continue_dump.set()
+        assert save_future.result(timeout=5) is True
+
+    with open(cached_client.cache_file) as f:
+        saved_cache = json.load(f)
+    assert saved_cache == {"before": ColorEnrich(color="red").model_dump_json()}
+    assert not list(cached_client.cache_path.glob(".*.tmp"))
+
+
+@patch("cheat_at_search.enrich.cached_enrich_client.json.dump", side_effect=OSError("disk full"))
+def test_cache_save_failure_preserves_existing_file_and_enrichment(mock_dump, mounted_data_dir):
+    cached_client = CachedEnrichClient(MockEnrichClient(colors=["red"]))
+    old_cache = '{"old": "cache"}'
+    with open(cached_client.cache_file, "w") as f:
+        f.write(old_cache)
+    cached_client.last_cache_save_time = 0
+
+    result = cached_client.enrich("What color?")
+
+    assert result.color == "red"
+    with open(cached_client.cache_file) as f:
+        assert f.read() == old_cache
+    assert not list(cached_client.cache_path.glob(".*.tmp"))
