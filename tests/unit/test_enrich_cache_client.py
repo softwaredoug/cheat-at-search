@@ -1,4 +1,4 @@
-from cheat_at_search.enrich import CachedEnrichClient, EnrichClient, DebugMetaData
+from cheat_at_search.enrich import CachedEnrichClient, LLMEnrichClient, DebugMetaData
 from pydantic import BaseModel
 from pydantic import Field
 import pytest
@@ -34,7 +34,7 @@ def mounted_data_dir():
     return True
 
 
-class MockEnrichClient(EnrichClient):
+class MockEnrichClient(LLMEnrichClient):
 
     def __init__(self, colors):
         self.colors = colors

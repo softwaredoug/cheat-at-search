@@ -1,16 +1,29 @@
-from .enrich import AutoEnricher, DataframeEnricher, DataframeEnricher as ProductEnricher
+from .enrich import (
+    AutoDecisionEnricher,
+    AutoEnricher,
+    AutoLLMEnricher,
+    DataframeEnricher,
+    DataframeEnricher as ProductEnricher,
+)
 from .cached_enrich_client import CachedEnrichClient
-from .enrich_client import EnrichClient, DebugMetaData
+from .cached_decision_enrich_client import CachedDecisionEnrichClient
+from .enrich_client import DecisionEnrichClient, LLMEnrichClient, DebugMetaData
+from .jev_enrich_client import JevEnrichClient
 from .entities import Entities, EmbeddingModel
 from .vocabulary import VocabularyEnricher, VocabularyResponse
 
 
 __all__ = [
     'AutoEnricher',
+    'AutoLLMEnricher',
+    'AutoDecisionEnricher',
     'DataframeEnricher',
     'ProductEnricher',
     'CachedEnrichClient',
-    'EnrichClient',
+    'CachedDecisionEnrichClient',
+    'LLMEnrichClient',
+    'DecisionEnrichClient',
+    'JevEnrichClient',
     'DebugMetaData',
     'Entities',
     'EmbeddingModel',

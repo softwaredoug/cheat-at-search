@@ -1,4 +1,4 @@
-from .enrich_client import EnrichClient, DebugMetaData
+from .enrich_client import LLMEnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import ensure_data_subdir
 import os
@@ -13,8 +13,8 @@ import tempfile
 logger = log_to_stdout(logger_name="cached_enrich_client")
 
 
-class CachedEnrichClient(EnrichClient):
-    def __init__(self, enricher: EnrichClient):
+class CachedEnrichClient(LLMEnrichClient):
+    def __init__(self, enricher: LLMEnrichClient):
         enricher_class = enricher.__class__.__name__
         # Get hash of system prompt
         self.cache_path = ensure_data_subdir("enrich_cache")

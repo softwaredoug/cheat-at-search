@@ -1,8 +1,11 @@
 from cheat_at_search.logger import log_to_stdout
 from .cached_enrich_client import CachedEnrichClient
-from .enrich_client import DebugMetaData
+from .cached_decision_enrich_client import CachedDecisionEnrichClient
+from .enrich_client import DebugMetaData, _validate_decision_threshold
+from .jev_enrich_client import JevEnrichClient
 from .openai_enrich_client import OpenAIEnricher
-from typing import Optional
+from collections.abc import Sequence
+from typing import Any, Mapping, Optional
 from pydantic import BaseModel
 from typing import Tuple
 import pandas as pd
@@ -14,16 +17,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 logger = log_to_stdout(logger_name="query_parser")
 
 
-class AutoEnricher:
+class AutoLLMEnricher:
     """Either serial cached or batch enriched, depending on the context."""
 
-    def __init__(self, model: str, system_prompt: str, response_model: BaseModel,
+    def __init__(self, model: str, system_prompt: str, response_model: type[BaseModel],
                  temperature: Optional[float] = None,
                  reasoning_effort: Optional[str] = None,
                  verbosity: Optional[str] = None):
         self.provider = model.split('/')[0]
         self.system_prompt = system_prompt
-
         if self.provider == 'openai':
             self.enricher = OpenAIEnricher(response_model=response_model,
                                            model=model,
@@ -31,9 +33,9 @@ class AutoEnricher:
                                            temperature=temperature,
                                            reasoning_effort=reasoning_effort,
                                            verbosity=verbosity)
+            self.cached_enricher = CachedEnrichClient(self.enricher)
         else:
             raise ValueError(f"Provider {self.provider} is not supported. Supported provider: 'openai'")
-        self.cached_enricher = CachedEnrichClient(self.enricher)
 
     def enrich(self, prompt: str, force_refresh: bool = False) -> BaseModel:
         """Enrich a single prompt, now, and cache the result."""
@@ -114,10 +116,101 @@ class AutoEnricher:
         return self.enricher.response_model
 
 
+AutoEnricher = AutoLLMEnricher
+
+
+class AutoDecisionEnricher:
+    """Run one or many Jev decisions using a fixed set of choices."""
+
+    def __init__(self, choices: Optional[Mapping[str, Optional[str]]] = None,
+                 model: str = "jev/jev-latest",
+                 probability_threshold: float = 0.0,
+                 confidence_threshold: float = 0.0):
+        provider, separator, provider_model = model.partition('/')
+        if not separator or not provider_model or provider != "jev":
+            raise ValueError("AutoDecisionEnricher requires a Jev model such as 'jev/jev-latest'.")
+        if not choices:
+            raise ValueError("choices must contain at least one decision option.")
+
+        self.choices = dict(choices)
+        self.model = provider_model
+        self.probability_threshold = _validate_decision_threshold(
+            "probability_threshold", probability_threshold
+        )
+        self.confidence_threshold = _validate_decision_threshold(
+            "confidence_threshold", confidence_threshold
+        )
+        self.enricher = JevEnrichClient(
+            model=provider_model,
+            probability_threshold=self.probability_threshold,
+            confidence_threshold=self.confidence_threshold,
+        )
+        self.cached_enricher = CachedDecisionEnrichClient(self.enricher)
+
+    def decide(self, state: Any, question: str, force_refresh: bool = False) -> Optional[str]:
+        """Return the selected choice for one state and question."""
+        return self.cached_enricher.decide(
+            state=state,
+            question=question,
+            choices=self.choices,
+            force_refresh=force_refresh,
+        )
+
+    def score(self, state: Any, question: str, force_refresh: bool = False) -> tuple[dict[str, float], float]:
+        """Return choice probabilities and confidence for one state and question."""
+        return self.cached_enricher.score(
+            state=state,
+            question=question,
+            choices=self.choices,
+            force_refresh=force_refresh,
+        )
+
+    def decide_all(self, states: Sequence[Any], questions: str | Sequence[str], workers: int = 5,
+                   force_refresh: bool = False) -> list[Optional[str]]:
+        """Decide for multiple states, preserving input order.
+
+        A single question is applied to every state. A sequence of questions
+        must have one entry per state.
+        """
+        if isinstance(states, (str, bytes)) or not isinstance(states, Sequence):
+            raise ValueError("states must be a sequence of state values.")
+        states = list(states)
+        if isinstance(questions, str):
+            questions = [questions] * len(states)
+        else:
+            if not isinstance(questions, Sequence):
+                raise ValueError("questions must be a string or a sequence of question strings.")
+            questions = list(questions)
+            if len(questions) != len(states):
+                raise ValueError("questions must have the same length as states.")
+
+        if any(not isinstance(question, str) for question in questions):
+            raise ValueError("All questions must be strings.")
+
+        try:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                return list(
+                    executor.map(
+                        lambda state_and_question: self.decide(
+                            state=state_and_question[0],
+                            question=state_and_question[1],
+                            force_refresh=force_refresh,
+                        ),
+                        zip(states, questions),
+                    )
+                )
+        finally:
+            self.cached_enricher.save_cache()
+
+    def delete_cache(self):
+        """Delete cached decisions."""
+        self.cached_enricher.delete_cache()
+
+
 class DataframeEnricher:
     """Enrich a dataframe of rows."""
 
-    def __init__(self, enricher: AutoEnricher, prompt_fn, attrs=None,
+    def __init__(self, enricher: AutoLLMEnricher, prompt_fn, attrs=None,
                  separator: str = " sep "):
         self.enricher = enricher
         self.prompt_fn = prompt_fn

@@ -7,47 +7,89 @@ We use "enrich" to take queries, documents etc and ask an LLM (typically OpenAI)
 - Document enrichment: taking a document and asking the LLM to extract key information, summarize it, or generate metadata.
 
 
-## Enrich client
+## Enrichment clients
 
-Enrichment works via the "EnrichClient" interface.
+LLM enrichment works via the `LLMEnrichClient` interface. It accepts a prompt
+and returns a structured Pydantic response:
 
-Its assumed that an implementation calls some LLM and returns some structured response in a pydantic BaseModel, you see this with:
-
-```python
-class EnrichClient(ABC):
-
-    def __init__(self, response_model: BaseModel):
-        self.response_model = response_model
-
-    @abstractmethod
-    def enrich(self, prompt: str) -> Optional[BaseModel]:
-        pass
-```
+`DecisionEnrichClient` is a parallel interface for constrained decisions. It
+accepts a state, a question, and a mapping of choice keys to optional
+descriptions. `score` returns a tuple containing the choice probability mapping
+and confidence score. `decide` returns the highest-probability choice only when
+its probability and confidence meet `probability_threshold` and
+`confidence_threshold`; otherwise it returns `None`. Both thresholds are in
+the range 0–1 and default to `0.0`. Unlike LLM enrichment, decision enrichment
+does not use a Pydantic response model.
 
 
 ## Core Implementations
 
-We implement OpenAI enrichment.
+We implement OpenAI enrichment through `OpenAIEnricher`, which implements
+`LLMEnrichClient`.
 
-They take a prompt and return a structured response (the pydantic BaseModel instance)
+It takes a prompt and returns a structured response (the Pydantic BaseModel
+instance).
 
 It's noted that unlike other libraries, we're not trying to normalize acceptable schemas between these providers. We take their structured outputs as-is.
+
+We implement Jev decisions through `JevEnrichClient`, which implements
+`DecisionEnrichClient` using `TypeSafeClient.system_one`. It passes the supplied
+state to Jev and turns the question and choices into a Typesafe `Choice`.
 
 
 ## Cached implementation
 
-A wrapper implementation `CachedEnrichClient` stores the responses in a cache for later reuse.
+A wrapper implementation `CachedEnrichClient` stores LLM responses in a cache
+for later reuse. `CachedDecisionEnrichClient` caches Jev choice probabilities
+and confidence, allowing both `score` and thresholded `decide` to reuse the same
+result. Its request key includes the client/model signature, thresholds, state,
+question, and choices. State and choices are serialized as canonical JSON so
+mapping insertion order does not change a key. Use `force_refresh=True` on
+`score`, `decide`, or `decide_all` to bypass an existing entry.
+Entries do not expire automatically; pin a Jev model version or refresh/delete
+the cache when a moving model alias such as `jev-latest` changes.
 
 
-## AutoEnricher
+## Auto enrichment helpers
 
-Much of the work to enrich is actually done via the AutoEnricher class. It wraps OpenAI in a cached enricher.
+`AutoLLMEnricher` wraps the OpenAI LLM client with caching and batch enrichment.
+`AutoEnricher` remains an alias for `AutoLLMEnricher` for compatibility.
 
+```python
+enricher = AutoLLMEnricher(
+      model="openai/gpt-4.1-nano",
+      system_prompt="Your task is to create novel, never seen before, furniture, home goods, or hardware classification that best fit a search query. ",
+      response_model=QueryClassification
+)
 ```
-enricher = AutoEnricher(
-     model="openai/gpt-4.1-nano",
-     system_prompt="Your task is to create novel, never seen before, furniture, home goods, or hardware classification that best fit a search query. ",
-     response_model=QueryClassification
+
+`AutoDecisionEnricher` performs Jev decisions using a fixed set of choices. Its
+model defaults to `jev/jev-latest`; a `jev/` model can be specified explicitly.
+It accepts the same probability and confidence thresholds at construction.
+`decide_all` accepts either one question to apply to every state or a parallel
+sequence of questions, and preserves input state order:
+
+```python
+decision_enricher = AutoDecisionEnricher(
+    choices={
+        "furniture": "A furniture product",
+        "lighting": "A lighting product",
+    },
+    probability_threshold=0.7,
+    confidence_threshold=0.5,
+)
+
+category = decision_enricher.decide(
+    state={"query": "red chair", "title": "Armchair"},
+    question="Which product category best matches the query?",
+)
+probabilities, confidence = decision_enricher.score(
+    state={"query": "red chair", "title": "Armchair"},
+    question="Which product category best matches the query?",
+)
+categories = decision_enricher.decide_all(
+    states=[{"query": "red chair"}, {"query": "desk lamp"}],
+    questions="Which product category best matches the query?",
 )
 ```
 
@@ -81,7 +123,7 @@ queries['classification'] = queries['query'].apply(fully_classified)
 One common enrichment use case is to map a query into a controlled vocabulary. We might do that by sending a large Literal to OpenAI. But we might also
 do that by the following 2 step process
 
-1. Instantiate an AutoEnricher. Have it just return a str.
+1. Instantiate an AutoLLMEnricher. Have it just return a str.
 2. Compare cosine similarity of generated item to embeddings of the vocabulary
 
 For example,
@@ -104,11 +146,11 @@ LLM returns [] or None or ""
 
 So we don't try to resolve, and just return None
 
-The VocabualryEnricher class wraps AutoEnricher to provide this functionality.
+The VocabualryEnricher class wraps AutoLLMEnricher to provide this functionality.
 
 It takes at construction
 
-- Same params as AutoEnricher
+- Same params as AutoLLMEnricher
 - A list of vocabulary items
 
 Then it exposes a method

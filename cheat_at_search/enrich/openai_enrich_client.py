@@ -1,4 +1,4 @@
-from .enrich_client import EnrichClient, DebugMetaData
+from .enrich_client import LLMEnrichClient, DebugMetaData
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.data_dir import key_for_provider
 from typing import Optional, Tuple
@@ -32,7 +32,7 @@ def _default_reasoning_effort(model: str) -> Optional[str]:
     return None
 
 
-class OpenAIEnricher(EnrichClient):
+class OpenAIEnricher(LLMEnrichClient):
     def __init__(self, response_model: BaseModel, model: str, system_prompt: str = None,
                  temperature: Optional[float] = None, verbosity: Optional[str] = 'low',
                  reasoning_effort: Optional[str] = None):

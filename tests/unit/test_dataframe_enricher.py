@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from cheat_at_search.data_dir import mount
 from cheat_at_search.enrich import AutoEnricher, DataframeEnricher
-from cheat_at_search.enrich.enrich_client import DebugMetaData, EnrichClient
+from cheat_at_search.enrich.enrich_client import DebugMetaData, LLMEnrichClient
 
 
 @pytest.fixture()
@@ -21,7 +21,7 @@ class RowClassification(BaseModel):
     label: str
 
 
-class FakeOpenAIEnricher(EnrichClient):
+class FakeOpenAIEnricher(LLMEnrichClient):
     backend_call_count = 0
 
     def __init__(self, response_model: BaseModel, model: str, system_prompt: str = None,
