@@ -3,6 +3,8 @@ from typing import Any, Mapping, Optional
 
 from typesafe_sdk import Choice, TypeSafeClient
 
+from cheat_at_search.data_dir import key_for_provider
+
 from .enrich_client import DecisionEnrichClient
 
 
@@ -16,7 +18,10 @@ class JevEnrichClient(DecisionEnrichClient):
             confidence_threshold=confidence_threshold,
         )
         self.model = model
-        self.client = client if client is not None else TypeSafeClient(model=model)
+        self.client = client if client is not None else TypeSafeClient(
+            model=model,
+            api_key=key_for_provider("typesafe"),
+        )
 
     def score(self, state: Any, question: str, choices: Mapping[str, Optional[str]],
               force_refresh: bool = False) -> tuple[dict[str, float], float]:

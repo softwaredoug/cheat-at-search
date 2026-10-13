@@ -13,8 +13,11 @@ def choice_answer(choice="furniture", probabilities=None, confidence=0.8):
     return SimpleNamespace(choice=choice, probabilities=probabilities, confidence=confidence)
 
 
+@patch("cheat_at_search.enrich.jev_enrich_client.key_for_provider", return_value="test-typesafe-key")
 @patch("cheat_at_search.enrich.jev_enrich_client.TypeSafeClient")
-def test_jev_enrich_client_submits_state_question_and_choices(mock_type_safe_client):
+def test_jev_enrich_client_submits_state_question_and_choices(
+    mock_type_safe_client, mock_key_for_provider
+):
     state = {"query": "red chair", "product": {"title": "Armchair"}}
     question = "Which product category best matches this query?"
     choices = {"furniture": "Furniture items", "lighting": "Lighting items"}
@@ -28,7 +31,11 @@ def test_jev_enrich_client_submits_state_question_and_choices(mock_type_safe_cli
     result = client.decide(state=state, question=question, choices=choices)
 
     assert result == "furniture"
-    mock_type_safe_client.assert_called_once_with(model="jev-latest")
+    mock_key_for_provider.assert_called_once_with("typesafe")
+    mock_type_safe_client.assert_called_once_with(
+        model="jev-latest",
+        api_key="test-typesafe-key",
+    )
     sdk_client.system_one.assert_called_once_with(
         state=state,
         questions={"decision": Choice(instructions=question, criteria=choices)},
