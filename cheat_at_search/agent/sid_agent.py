@@ -3,6 +3,7 @@ from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.agent.sid_tool import tool_schema, call_tool, format_tool_schema
 from cheat_at_search.logger import log_to_stdout
 from openai import OpenAI
+from pydantic import BaseModel
 from hashlib import md5
 import json
 
@@ -10,6 +11,10 @@ import json
 TOOL_HEADER = "## Available Search Tools"
 SID_STOP_FUNCTION = "report_helpful_ids"
 logger = log_to_stdout("sid_search_client")
+
+
+class SIDChatResponse(BaseModel):
+    output_parsed: SearchResults
 
 
 def _ids_to_search_results(ids: list[str]) -> SearchResults:
@@ -176,7 +181,7 @@ class SIDAgent(Agent):
                 if name == SID_STOP_FUNCTION:
                     result = _ids_to_search_results(tool_args["ids"])
                     self.last_usage = usage
-                    return result, inputs, usage
+                    return SIDChatResponse(output_parsed=result), inputs, usage
                 if name not in self.tool_schemas:
                     raise ValueError(f"Tool {name} not found in registered tools.")
                 resp = call_tool(
@@ -194,7 +199,7 @@ class SIDAgent(Agent):
                 inputs[-1]["content"] += self._turn_budget_msg(turn)
 
         self.last_usage = usage
-        return _ids_to_search_results([]), inputs, usage
+        return SIDChatResponse(output_parsed=_ids_to_search_results([])), inputs, usage
 
     def loop(
         self,
@@ -204,12 +209,13 @@ class SIDAgent(Agent):
         logger=None,
     ):
         """Return SID's final SearchResults, optionally with usage."""
-        result, _, usage = self.chat(
+        response, _, usage = self.chat(
             inputs=inputs,
             agent_state=agent_state,
             return_usage=return_usage,
             logger=logger,
         )
+        result = response.output_parsed
         if return_usage:
             return result, usage
         return result
