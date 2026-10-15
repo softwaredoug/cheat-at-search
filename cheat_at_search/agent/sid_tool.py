@@ -1,10 +1,12 @@
 """Describe SID tool for the SID agent."""
 import inspect
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 from pydantic.fields import FieldInfo
-from typing import Any, Callable, get_origin, Literal, get_args, Annotated, get_type_hints
+from typing import Any, Callable, get_origin, get_args, Annotated, get_type_hints
 from xml.sax.saxutils import escape, quoteattr
 import json
+
+from cheat_at_search.agent.pydantize import make_tool_adapter
 
 
 class SIDArgument(BaseModel):
@@ -20,6 +22,7 @@ class SIDTool(BaseModel):
     arguments: list[SIDArgument]
 
     function: Callable[..., Any]
+    _call_from_tool: Callable[..., Any] | None = PrivateAttr(default=None)
 
     @property
     def short_description(self):
@@ -50,27 +53,18 @@ def _format_tool_result(result) -> str:
     return json.dumps(result)
 
 
-def _is_valid_sid_type(annotation: Any) -> bool:
-    """Check if the annotation is a valid SID type."""
-    # For simplicity, we consider basic types and literals as valid SID types.
-    # Or lists of these things
-    valid_types = (int, float, str, bool)
-    if annotation in valid_types or get_origin(annotation) is Literal:
-        return True
-    if hasattr(annotation, "__origin__") and annotation.__origin__ is list:
-        return _is_valid_sid_type(annotation.__args__[0])
-    return False
-
-
 def tool_schema(tool: Callable) -> SIDTool:
     """Generate a SIDTool schema from a callable."""
     name = tool.__name__
     docstring = inspect.getdoc(tool) or ""
     sig = inspect.signature(tool)
+    _, _, call_from_tool = make_tool_adapter(tool)
 
     hints = get_type_hints(tool, include_extras=True)
     arguments: list[SIDArgument] = []
     for param in sig.parameters.values():
+        if param.name == "agent_state":
+            continue
         annotation = hints.get(param.name, param.annotation)
         description = ""
 
@@ -92,7 +86,9 @@ def tool_schema(tool: Callable) -> SIDTool:
                 type=annotation,
             )
         )
-    return SIDTool(name=name, docstring=docstring, arguments=arguments, function=tool)
+    schema = SIDTool(name=name, docstring=docstring, arguments=arguments, function=tool)
+    schema._call_from_tool = call_from_tool
+    return schema
 
 
 def format_tool_schema(tool: SIDTool) -> str:
@@ -106,15 +102,15 @@ def format_tool_schema(tool: SIDTool) -> str:
     )
 
 
-def call_tool(args: dict[str, Any], tool: SIDTool) -> Any:
+def call_tool(
+    args: dict[str, Any],
+    tool: SIDTool,
+    agent_state: dict | None = None,
+) -> Any:
     """Call a SIDTool with the provided arguments."""
-    # Validate arguments
-    for arg in tool.arguments:
-        if arg.name not in args:
-            raise ValueError(f"Missing argument: {arg.name}")
-        if not _is_valid_sid_type(type(args[arg.name])):
-            raise TypeError(f"Invalid type for argument {arg.name}: {type(args[arg.name])}")
-
-    # Call the function
-    resp = tool.function(**args)
-    return _format_tool_result(resp)
+    if tool._call_from_tool is None:
+        raise RuntimeError(f"SID tool {tool.name} has no argument adapter.")
+    result, _ = tool._call_from_tool(args, agent_state=agent_state)
+    if isinstance(result, str) and result.startswith("Tool error:"):
+        return result
+    return _format_tool_result(result)

@@ -1,6 +1,7 @@
 from cheat_at_search.agent.search_client import Agent, SearchResults, SearchResult
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.agent.sid_tool import tool_schema, call_tool, format_tool_schema
+from cheat_at_search.logger import log_to_stdout
 from openai import OpenAI
 from hashlib import md5
 import json
@@ -8,6 +9,7 @@ import json
 
 TOOL_HEADER = "## Available Search Tools"
 SID_STOP_FUNCTION = "report_helpful_ids"
+logger = log_to_stdout("sid_search_client")
 
 
 def _ids_to_search_results(ids: list[str]) -> SearchResults:
@@ -54,6 +56,7 @@ class SIDAgent(Agent):
             api_key=self.api_key,
         )
         self.max_turns = max_turns
+        self.last_usage = None
         self.tool_schemas = {}
         names = set()
         for tool in tools:
@@ -104,8 +107,20 @@ class SIDAgent(Agent):
             return notice
         return ""
 
-    def loop(self, inputs: list[dict]):
-        """Implement agentic loop over calls."""
+    def chat(
+        self,
+        inputs: list[dict] | None = None,
+        agent_state: dict | None = None,
+        return_usage: bool = False,
+        logger=None,
+    ):
+        """Run the SID tool loop and return the result, messages, and usage."""
+        active_logger = logger or globals()["logger"]
+        if agent_state is not None:
+            agent_state["trace_logger"] = active_logger
+        if inputs is None:
+            inputs = []
+
         # Check for system prompt in inputs
         if len(inputs) < 2:
             raise ValueError("At least two inputs are required: a system prompt and a user prompt (search query).")
@@ -124,6 +139,7 @@ class SIDAgent(Agent):
             raise ValueError("Second input must be a user prompt.")
 
         tools = [{"type": "function", "function": {"name": "dummy"}}]
+        usage = {"input_tokens": 0, "output_tokens": 0, "num_tool_calls": 0}
 
         for turn in range(self.max_turns):
 
@@ -131,6 +147,17 @@ class SIDAgent(Agent):
                 model=self.model,
                 messages=inputs,
                 tools=tools,
+            )
+            response_usage = getattr(response, "usage", None)
+            usage["input_tokens"] += (
+                getattr(response_usage, "prompt_tokens", None)
+                or getattr(response_usage, "input_tokens", 0)
+                or 0
+            )
+            usage["output_tokens"] += (
+                getattr(response_usage, "completion_tokens", None)
+                or getattr(response_usage, "output_tokens", 0)
+                or 0
             )
             assistant_message = response.choices[0].message
             tool_calls = assistant_message.tool_calls or []
@@ -142,13 +169,21 @@ class SIDAgent(Agent):
                 raise ValueError(f"No tool calls returned from SID. Assistant message: {assistant_message}")
 
             for tool_call in tool_calls:
+                usage["num_tool_calls"] += 1
                 name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
                 call_id = tool_call.id
                 if name == SID_STOP_FUNCTION:
-                    # Stop function called, return the assistant's message
-                    return _ids_to_search_results(tool_args["ids"])
-                resp = call_tool(tool_args, self.tool_schemas[name])
+                    result = _ids_to_search_results(tool_args["ids"])
+                    self.last_usage = usage
+                    return result, inputs, usage
+                if name not in self.tool_schemas:
+                    raise ValueError(f"Tool {name} not found in registered tools.")
+                resp = call_tool(
+                    tool_args,
+                    self.tool_schemas[name],
+                    agent_state=agent_state,
+                )
                 inputs.append({
                     "role": "tool",
                     "tool_call_id": call_id,
@@ -157,3 +192,24 @@ class SIDAgent(Agent):
 
             if inputs[-1]["role"] == "tool":
                 inputs[-1]["content"] += self._turn_budget_msg(turn)
+
+        self.last_usage = usage
+        return _ids_to_search_results([]), inputs, usage
+
+    def loop(
+        self,
+        inputs: list[dict] | None = None,
+        agent_state: dict | None = None,
+        return_usage: bool = False,
+        logger=None,
+    ):
+        """Return SID's final SearchResults, optionally with usage."""
+        result, _, usage = self.chat(
+            inputs=inputs,
+            agent_state=agent_state,
+            return_usage=return_usage,
+            logger=logger,
+        )
+        if return_usage:
+            return result, usage
+        return result

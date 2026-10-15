@@ -1,6 +1,6 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -26,13 +26,16 @@ def _completion(*tool_calls):
                     tool_calls=list(tool_calls),
                 )
             )
-        ]
+        ],
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=2),
     )
 
 
-def hello_search(query: str) -> list[dict]:
+def hello_search(query: str, agent_state: dict) -> list[dict]:
     """Search the hello-world catalog."""
     assert query == "hello world"
+    assert agent_state["user_id"] == "user-1"
+    assert agent_state["trace_logger"] is not None
     return [
         {
             "id": "hello-1",
@@ -81,11 +84,27 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
         {"role": "user", "content": "Find a hello world greeting."},
     ]
 
-    results = agent.loop(inputs)
+    agent_state = {"user_id": "user-1"}
+    active_logger = Mock()
+    results, _, usage = agent.chat(
+        inputs,
+        agent_state=agent_state,
+        return_usage=True,
+        logger=active_logger,
+    )
 
     assert "report_helpful_ids" not in agent.tool_schemas
+    assert [arg.name for arg in agent.tool_schemas["hello_search"].arguments] == [
+        "query"
+    ]
+    assert agent_state["trace_logger"] is active_logger
     assert isinstance(results, SearchResults)
     assert [(result.id, result.rank) for result in results.results] == [("hello-1", 1)]
+    assert usage == {
+        "input_tokens": 20,
+        "output_tokens": 4,
+        "num_tool_calls": 2,
+    }
     mock_key_for_provider.assert_called_once_with("sid")
     mock_openai.assert_called_once_with(
         base_url="https://api.sid-1.com/v1",
