@@ -1,6 +1,10 @@
 """Test pydantizing any function for an agent to call it."""
+from typing import Annotated
+
+import pytest
+from pydantic import BaseModel, Field, ValidationError
+
 from cheat_at_search.agent.pydantize import make_tool_adapter
-from pydantic import BaseModel
 
 
 def test_pydantize():
@@ -118,3 +122,30 @@ def test_pydantize_tool_errors_are_returned_as_strings():
 
     assert "boom" in py_result
     assert "boom" in json_result
+
+
+def test_pydantize_annotated_parameter_metadata():
+    def search(
+        query: Annotated[str, "Terms describing what to search for"],
+        limit: Annotated[
+            int,
+            Field(description="Maximum number of results", ge=1, le=10),
+        ] = 5,
+    ) -> dict:
+        """Search documents for a query."""
+        return {"query": query, "limit": limit}
+
+    ArgsModel, tool_spec, call_from_tool = make_tool_adapter(search)
+    properties = tool_spec["parameters"]["properties"]
+
+    assert properties["query"]["description"] == "Terms describing what to search for"
+    assert properties["limit"]["description"] == "Maximum number of results"
+    assert properties["limit"]["minimum"] == 1
+    assert properties["limit"]["maximum"] == 10
+    assert properties["limit"]["default"] == 5
+
+    result, _ = call_from_tool(ArgsModel(query="blue lamp", limit=3))
+    assert result == {"query": "blue lamp", "limit": 3}
+
+    with pytest.raises(ValidationError):
+        ArgsModel(query="blue lamp", limit=0)

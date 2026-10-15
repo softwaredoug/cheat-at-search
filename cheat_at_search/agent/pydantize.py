@@ -1,9 +1,32 @@
 """Take any function, and create a pydantic model wrapper for easy agentic use."""
-from pydantic import BaseModel, create_model
-from typing import Any, get_type_hints
+from typing import Annotated, Any, get_args, get_origin, get_type_hints
+
+from pydantic import BaseModel, Field, create_model
+from pydantic.fields import FieldInfo
 from pydantic.type_adapter import TypeAdapter
 import inspect
 import json
+
+
+def _pydantic_parameter_annotation(annotation):
+    """Preserve Annotated metadata and translate string descriptions for Pydantic."""
+    if get_origin(annotation) is not Annotated:
+        return annotation
+
+    base_type, *metadata = get_args(annotation)
+    description = next(
+        (
+            item if isinstance(item, str) else item.description
+            for item in metadata
+            if isinstance(item, str)
+            or (isinstance(item, FieldInfo) and item.description is not None)
+        ),
+        None,
+    )
+    metadata = [item for item in metadata if not isinstance(item, str)]
+    if description is not None:
+        metadata.append(Field(description=description))
+    return Annotated[base_type, *metadata] if metadata else base_type
 
 
 def make_tool_adapter(
@@ -14,7 +37,7 @@ def make_tool_adapter(
     Returns (ArgsModel, tool_spec, call_from_tool)
     """
     sig = inspect.signature(func)
-    hints = get_type_hints(func)
+    hints = get_type_hints(func, include_extras=True)
 
     fields: dict[str, tuple[type, Any]] = {}
     ordered_params: list[tuple[str, inspect.Parameter, bool]] = []
@@ -26,7 +49,7 @@ def make_tool_adapter(
         if is_agent_state:
             ordered_params.append((pname, p, True))
             continue
-        ann = hints.get(pname, Any)
+        ann = _pydantic_parameter_annotation(hints.get(pname, Any))
         default = ... if p.default is inspect._empty else p.default
         fields[pname] = (ann, default)
         ordered_params.append((pname, p, False))

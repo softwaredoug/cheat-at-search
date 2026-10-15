@@ -1,12 +1,14 @@
+from typing import Annotated
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cheat_at_search.agent.openai_agent import (
     OpenAIAgent,
     _maybe_get_image_input,
 )
+from cheat_at_search.agent.sid_agent import SIDAgent
 
 
 class ImageResult(BaseModel):
@@ -102,3 +104,44 @@ def test_process_images_defaults_to_disabled(mock_key_for_provider, mock_openai)
     assert len(inputs) == 2
     assert inputs[-1]["type"] == "function_call_output"
     assert isinstance(inputs[-1]["output"], str)
+
+
+def _annotated_search(
+    query: Annotated[str, "Terms describing what to search for"],
+    limit: Annotated[int, Field(description="Maximum number of results", ge=1, le=10)] = 5,
+) -> list[dict]:
+    """Search documents for a query."""
+    return []
+
+
+def read(id: Annotated[str, "Stable document ID"]) -> dict:
+    """Read a document by its stable ID."""
+    return {"id": id, "title": "", "description": ""}
+
+
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider", return_value="openai-test-key")
+@patch("cheat_at_search.agent.sid_agent.OpenAI")
+@patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
+def test_sid_tools_are_accepted_by_openai_with_annotated_descriptions(
+    mock_sid_key_for_provider,
+    mock_sid_openai,
+    mock_openai_key_for_provider,
+    mock_openai,
+):
+    tools = [_annotated_search, read]
+    sid_agent = SIDAgent(tools=tools, max_turns=2)
+    openai_agent = OpenAIAgent(tools=tools, model="openai/gpt-5")
+
+    assert set(sid_agent.tool_schemas) == set(openai_agent.search_tools)
+
+    sid_arguments = {
+        argument.name: argument.description
+        for argument in sid_agent.tool_schemas["_annotated_search"].arguments
+    }
+    openai_properties = openai_agent.search_tools["_annotated_search"][1]["parameters"]["properties"]
+
+    assert openai_properties["query"]["description"] == sid_arguments["query"]
+    assert openai_properties["limit"]["description"] == sid_arguments["limit"]
+    assert openai_properties["limit"]["minimum"] == 1
+    assert openai_properties["limit"]["maximum"] == 10
