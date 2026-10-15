@@ -55,9 +55,14 @@ class SIDAgent(Agent):
         )
         self.max_turns = max_turns
         self.tool_schemas = {}
+        names = set()
         for tool in tools:
             schema = tool_schema(tool)
             self.tool_schemas[schema.name] = schema
+            names.add(schema.name)
+
+        if 'read' not in names:
+            raise ValueError("A 'read' tool that provides a result by ID must be provided to the SIDAgent.")
 
         if len(tools) == 0:
             raise ValueError("At least one tool must be provided to the SIDAgent.")
@@ -132,8 +137,9 @@ class SIDAgent(Agent):
             inputs.append(_assistant_message_to_dict(assistant_message))
 
             if not tool_calls:
-                # No tool calls, return the assistant's message
-                return assistant_message["content"]
+                # No tool calls seems to indicate some kind of error
+                # per Sid
+                raise ValueError(f"No tool calls returned from SID. Assistant message: {assistant_message}")
 
             for tool_call in tool_calls:
                 name = tool_call.function.name

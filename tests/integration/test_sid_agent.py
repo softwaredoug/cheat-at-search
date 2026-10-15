@@ -37,9 +37,19 @@ def hello_search(query: str) -> list[dict]:
         {
             "id": "hello-1",
             "title": "Hello world",
-            "content": "A friendly greeting.",
+            "description": "A friendly greeting.",
+            "score": 0.95,
         }
     ]
+
+
+def read(id: str) -> dict:
+    """Read a document by its stable ID."""
+    return {
+        "id": id,
+        "title": "Hello world",
+        "description": "A friendly greeting.",
+    }
 
 
 @pytest.mark.integration
@@ -58,7 +68,7 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
         ),
     ]
 
-    agent = SIDAgent(tools=[hello_search], max_turns=3)
+    agent = SIDAgent(tools=[hello_search, read], max_turns=3)
     inputs = [
         {
             "role": "system",
@@ -98,7 +108,7 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
         "role": "tool",
         "tool_call_id": "call-search",
         "content": (
-            '<doc id="hello-1" title="Hello world">\n'
+            '<doc id="hello-1" title="Hello world" score="0.95">\n'
             "A friendly greeting.\n</doc>\n\n"
             "You have 2 out of 3 turns left."
         ),

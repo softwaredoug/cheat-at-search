@@ -29,12 +29,24 @@ class SIDTool(BaseModel):
 def _format_tool_result(result) -> str:
     """Format document lists as SID XML; serialize other tool results as JSON."""
     if isinstance(result, list) and all(isinstance(document, dict) for document in result):
-        return "\n".join(
-            f"<doc id={quoteattr(str(document.get('id', '')))} "
-            f"title={quoteattr(str(document.get('title', '')))}>\n"
-            f"{escape(str(document.get('content', '')))}\n</doc>"
-            for document in result
-        )
+        if not result:
+            return "No documents matched this query. Try different keywords, synonyms, or a broader search."
+
+        formatted_documents = []
+        for document in result:
+            attributes = ["id", "title"] + [
+                key for key in document if key not in {"id", "title", "description"}
+            ]
+            attributes_text = " ".join(
+                f"{name}={quoteattr(str(document[name]))}"
+                for name in attributes
+                if name in document and document[name] is not None
+            )
+            description = escape(str(document["description"]))
+            formatted_documents.append(
+                f"<doc {attributes_text}>\n{description}\n</doc>"
+            )
+        return "\n".join(formatted_documents)
     return json.dumps(result)
 
 

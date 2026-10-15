@@ -83,13 +83,21 @@ def test_format_tool_result_formats_documents_as_xml():
         {
             "id": "hello-1",
             "title": "Hello & world",
-            "content": "A <friendly> greeting.",
+            "description": "A <friendly> greeting.",
+            "score": 0.9,
         }
     ]
 
     assert _format_tool_result(result) == (
-        '<doc id="hello-1" title="Hello &amp; world">\n'
+        '<doc id="hello-1" title="Hello &amp; world" score="0.9">\n'
         "A &lt;friendly&gt; greeting.\n</doc>"
+    )
+
+
+def test_format_tool_result_explains_empty_search_results():
+    assert _format_tool_result([]) == (
+        "No documents matched this query. Try different keywords, synonyms, "
+        "or a broader search."
     )
 
 
