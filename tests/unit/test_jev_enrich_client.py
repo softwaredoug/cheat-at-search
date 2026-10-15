@@ -1,10 +1,15 @@
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
-from typesafe_sdk import Choice
+from typesafe_sdk import Choice, RetryPolicy
 
 from cheat_at_search.enrich.jev_enrich_client import JevEnrichClient
+
+
+class HttpStatusError(Exception):
+    def __init__(self, status):
+        self.status = status
 
 
 def choice_answer(choice="furniture", probabilities=None, confidence=0.8):
@@ -39,6 +44,7 @@ def test_jev_enrich_client_submits_state_question_and_choices(
     sdk_client.system_one.assert_called_once_with(
         state=state,
         questions={"decision": Choice(instructions=question, criteria=choices)},
+        retry=RetryPolicy(max_retries=0),
     )
 
 
@@ -65,6 +71,90 @@ def test_jev_enrich_client_score_returns_probabilities_and_confidence():
     )
 
     assert result == ({"furniture": 0.75, "lighting": 0.25}, 0.4)
+
+
+@patch("cheat_at_search.enrich.jev_enrich_client.random.uniform", return_value=0.25)
+@patch("cheat_at_search.enrich.jev_enrich_client.time.sleep")
+def test_jev_enrich_client_retries_499_then_returns_result(mock_sleep, mock_uniform):
+    sdk_client = Mock()
+    sdk_client.system_one.side_effect = [
+        HttpStatusError(499),
+        SimpleNamespace(choices={"decision": choice_answer()}),
+    ]
+    client = JevEnrichClient(client=sdk_client)
+
+    result = client.score("state", "question", {"furniture": None})
+
+    assert result == ({"furniture": 0.8, "lighting": 0.2}, 0.8)
+    assert sdk_client.system_one.call_count == 2
+    mock_uniform.assert_called_once_with(0, 0.5)
+    mock_sleep.assert_called_once_with(0.25)
+
+
+@patch("cheat_at_search.enrich.jev_enrich_client.random.uniform", side_effect=[0.25, 0.5])
+@patch("cheat_at_search.enrich.jev_enrich_client.time.sleep")
+def test_jev_enrich_client_stops_after_two_499_retries(mock_sleep, mock_uniform):
+    sdk_client = Mock()
+    error = HttpStatusError(499)
+    sdk_client.system_one.side_effect = error
+    client = JevEnrichClient(client=sdk_client)
+
+    with pytest.raises(HttpStatusError) as raised:
+        client.score("state", "question", {"furniture": None})
+
+    assert raised.value is error
+    assert sdk_client.system_one.call_count == 3
+    assert mock_uniform.call_args_list == [call(0, 0.5), call(0, 1.0)]
+    assert mock_sleep.call_args_list == [call(0.25), call(0.5)]
+
+
+@patch("cheat_at_search.enrich.jev_enrich_client.time.sleep")
+def test_jev_enrich_client_does_not_retry_other_http_errors(mock_sleep):
+    sdk_client = Mock()
+    sdk_client.system_one.side_effect = HttpStatusError(400)
+    client = JevEnrichClient(client=sdk_client)
+
+    with pytest.raises(HttpStatusError):
+        client.score("state", "question", {"furniture": None})
+
+    sdk_client.system_one.assert_called_once()
+    mock_sleep.assert_not_called()
+
+
+@patch("cheat_at_search.enrich.jev_enrich_client.random.uniform", return_value=0.25)
+@patch("cheat_at_search.enrich.jev_enrich_client.time.sleep")
+def test_jev_enrich_client_retries_other_transient_http_errors(mock_sleep, mock_uniform):
+    sdk_client = Mock()
+    sdk_client.system_one.side_effect = [
+        HttpStatusError(503),
+        SimpleNamespace(choices={"decision": choice_answer()}),
+    ]
+    client = JevEnrichClient(client=sdk_client)
+
+    result = client.score("state", "question", {"furniture": None})
+
+    assert result == ({"furniture": 0.8, "lighting": 0.2}, 0.8)
+    assert sdk_client.system_one.call_count == 2
+    mock_uniform.assert_called_once_with(0, 0.5)
+    mock_sleep.assert_called_once_with(0.25)
+
+
+@patch("cheat_at_search.enrich.jev_enrich_client.random.uniform", return_value=0.25)
+@patch("cheat_at_search.enrich.jev_enrich_client.time.sleep")
+def test_jev_enrich_client_retries_connection_errors(mock_sleep, mock_uniform):
+    sdk_client = Mock()
+    sdk_client.system_one.side_effect = [
+        ConnectionError("connection dropped"),
+        SimpleNamespace(choices={"decision": choice_answer()}),
+    ]
+    client = JevEnrichClient(client=sdk_client)
+
+    result = client.score("state", "question", {"furniture": None})
+
+    assert result == ({"furniture": 0.8, "lighting": 0.2}, 0.8)
+    assert sdk_client.system_one.call_count == 2
+    mock_uniform.assert_called_once_with(0, 0.5)
+    mock_sleep.assert_called_once_with(0.25)
 
 
 def test_jev_enrich_client_accepts_an_injected_sdk_client():
