@@ -3,6 +3,8 @@ import inspect
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 from typing import Any, Callable, get_origin, Literal, get_args, Annotated, get_type_hints
+from xml.sax.saxutils import escape, quoteattr
+import json
 
 
 class SIDArgument(BaseModel):
@@ -18,6 +20,22 @@ class SIDTool(BaseModel):
     arguments: list[SIDArgument]
 
     function: Callable[..., Any]
+
+    @property
+    def short_description(self):
+        return {"type": "function", "function": {"name": self.name}}
+
+
+def _format_tool_result(result) -> str:
+    """Format document lists as SID XML; serialize other tool results as JSON."""
+    if isinstance(result, list) and all(isinstance(document, dict) for document in result):
+        return "\n".join(
+            f"<doc id={quoteattr(str(document.get('id', '')))} "
+            f"title={quoteattr(str(document.get('title', '')))}>\n"
+            f"{escape(str(document.get('content', '')))}\n</doc>"
+            for document in result
+        )
+    return json.dumps(result)
 
 
 def _is_valid_sid_type(annotation: Any) -> bool:
@@ -86,4 +104,5 @@ def call_tool(args: dict[str, Any], tool: SIDTool) -> Any:
             raise TypeError(f"Invalid type for argument {arg.name}: {type(args[arg.name])}")
 
     # Call the function
-    return tool.function(**args)
+    resp = tool.function(**args)
+    return _format_tool_result(resp)

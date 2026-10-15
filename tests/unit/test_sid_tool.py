@@ -4,7 +4,12 @@ import inspect
 import pytest
 from pydantic import Field
 
-from cheat_at_search.agent.sid_tool import tool_schema, call_tool, format_tool_schema
+from cheat_at_search.agent.sid_tool import (
+    _format_tool_result,
+    call_tool,
+    format_tool_schema,
+    tool_schema,
+)
 
 
 def w_scenarios(scenarios: Dict[str, Dict[str, Any]]):
@@ -32,7 +37,8 @@ SCENARIOS = {
     "hello-world tool": {
         "tool": search_tool,
         "expected_params": {"query": [str, ""]},
-        "tool_call": {"query": "test"}
+        "tool_call": {"query": "test"},
+        "expected_tool_result": '{"query": "test"}',
     },
     "complex tool": {
         "tool": complex_tool,
@@ -42,13 +48,14 @@ SCENARIOS = {
             "flag": [bool, ""]
         },
         "tool_call": {"query": "test", "count": 5, "flag": True},
+        "expected_tool_result": '{"query": "test", "count": 5, "flag": true}',
     }
 }
 
 
 @w_scenarios(SCENARIOS)
 def test_tool_schema_hello_world(
-    tool, expected_params, tool_call
+    tool, expected_params, tool_call, expected_tool_result
 ):
     expected_docstring = inspect.getdoc(tool) or ""
     expected_argument_names = [param.name for param in inspect.signature(tool).parameters.values()]
@@ -65,7 +72,26 @@ def test_tool_schema_hello_world(
     assert schema.function is tool
 
     call_result = call_tool(tool_call, schema)
-    assert call_result == tool_call
+    assert call_result == expected_tool_result
     formatted = format_tool_schema(schema)
     assert expected_docstring in formatted
     assert expected_name in formatted.splitlines()[0]
+
+
+def test_format_tool_result_formats_documents_as_xml():
+    result = [
+        {
+            "id": "hello-1",
+            "title": "Hello & world",
+            "content": "A <friendly> greeting.",
+        }
+    ]
+
+    assert _format_tool_result(result) == (
+        '<doc id="hello-1" title="Hello &amp; world">\n'
+        "A &lt;friendly&gt; greeting.\n</doc>"
+    )
+
+
+def test_format_tool_result_serializes_non_document_results_as_json():
+    assert _format_tool_result({"ok": True}) == '{"ok": true}'
