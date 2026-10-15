@@ -53,3 +53,37 @@ def test_search_all_uses_search_batch_for_mocked_queries():
         subset = results[results["query"] == query]
         assert subset["rank"].tolist() == [1, 2, 3, 4, 5]
         assert subset["score"].tolist() == [1.0, 0.5, 0.3333333333333333, 0.25, 0.2]
+
+
+def test_search_all_includes_resources_from_search_batch():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    queries = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha"},
+            {"query_id": 2, "query": "beta"},
+        ]
+    )
+
+    class ResourceBatchStrategy(SearchStrategy):
+        def search(self, query, k=10):
+            raise AssertionError("search should not be called in batch mode")
+
+        def search_batch(self, queries, k=10):
+            return [[0, 1], [1]], [[0.9, 0.8], [0.7]], [
+                {"latency": 0.2, "tokens": 10},
+                {"latency": 0.3, "tokens": 12},
+            ]
+
+    results = ResourceBatchStrategy(corpus).search_all(queries, show_progress=False)
+
+    alpha = results[results["query"] == "alpha"]
+    beta = results[results["query"] == "beta"]
+    assert alpha["latency"].tolist() == [0.2, 0.2]
+    assert alpha["tokens"].tolist() == [10, 10]
+    assert beta["latency"].tolist() == [0.3]
+    assert beta["tokens"].tolist() == [12]

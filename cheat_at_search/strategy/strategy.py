@@ -172,7 +172,9 @@ class SearchStrategy:
                     batch_results = SearchResultBatch()
                     for future in as_completed(futures):
                         query_row = futures[future]
-                        top_k, scores = future.result()
+                        top_k, scores, resources = self._unpack_search_result(
+                            future.result()
+                        )
                         if len(top_k) == 0:
                             top_k = [-1]
                             scores = [0]
@@ -185,6 +187,7 @@ class SearchStrategy:
                             [query] * len(top_k),
                             [query_id] * len(top_k),
                             list(ranks),
+                            resources,
                         )
                         progress.update(1)
                     batch_results = batch_results.to_df(corpus_no_searcharray)
@@ -234,14 +237,12 @@ class SearchStrategy:
                     progress.update(len(batch))
                     continue
                 batch_queries = batch["query"].tolist()
-                batch_top_k, batch_scores = self.search_batch(batch_queries, k)
-                if len(batch_top_k) != len(batch) or len(batch_scores) != len(batch):
-                    raise ValueError(
-                        "search_batch must return top_k and scores for each query"
-                    )
+                batch_top_k, batch_scores, batch_resources = self._unpack_batch_result(
+                    self.search_batch(batch_queries, k), len(batch)
+                )
                 batch_results = SearchResultBatch()
-                for (_, query_row), top_k, scores in zip(
-                    batch.iterrows(), batch_top_k, batch_scores
+                for (_, query_row), top_k, scores, resources in zip(
+                    batch.iterrows(), batch_top_k, batch_scores, batch_resources
                 ):
                     if len(top_k) == 0:
                         top_k = [-1]
@@ -255,6 +256,7 @@ class SearchStrategy:
                         [query] * len(top_k),
                         [query_id] * len(top_k),
                         list(ranks),
+                        resources,
                     )
                     progress.update(1)
                 results = batch_results.to_df(corpus_no_searcharray)
@@ -265,6 +267,39 @@ class SearchStrategy:
         finally:
             progress.close()
         return pd.concat(all_results) if all_results else pd.DataFrame()
+
+    def _unpack_batch_result(self, result, batch_size):
+        if len(result) == 2:
+            result = (*result, [{} for _ in range(batch_size)])
+        if len(result) != 3:
+            raise ValueError("search_batch must return top_k, scores, and optional resources")
+        top_ks, scores, resources = result
+        if len(top_ks) != batch_size or len(scores) != batch_size or not isinstance(
+            resources, (list, tuple)
+        ) or len(resources) != batch_size:
+            raise ValueError(
+                "search_batch must return top_k and scores plus resources per query"
+            )
+        resources = [self._unpack_search_result(([], [], resource))[2] for resource in resources]
+        return top_ks, scores, resources
+
+    def _unpack_search_result(self, result):
+        if len(result) == 2:
+            return result[0], result[1], {}
+        if len(result) != 3 or not isinstance(result[2], dict):
+            raise ValueError(
+                "search must return (top_k, scores) or (top_k, scores, resources)"
+            )
+        if any(
+            not isinstance(key, str)
+            or not isinstance(value, (int, float, np.number))
+            for key, value in result[2].items()
+        ):
+            raise ValueError("search resources must map string keys to numeric values")
+        reserved = set(self.corpus.columns) | {"score", "query", "query_id", "rank"}
+        if result[2].keys() & reserved:
+            raise ValueError("search resource names cannot overwrite result columns")
+        return result
 
     def search(self, query, k):
         # This method should be implemented by subclasses
@@ -285,13 +320,15 @@ class SearchResultBatch:
         self.queries = []
         self.query_ids = []
         self.ranks = []
+        self.resources = []
 
-    def append(self, top_ks, scores, queries, query_ids, ranks):
+    def append(self, top_ks, scores, queries, query_ids, ranks, resources=None):
         self.top_ks.extend(top_ks)
         self.scores.extend(scores)
         self.queries.extend(queries)
         self.query_ids.extend(query_ids)
         self.ranks.extend(ranks)
+        self.resources.extend([resources or {}] * len(top_ks))
 
     def to_df(self, corpus):
         rows = []
@@ -308,4 +345,4 @@ class SearchResultBatch:
         results["query"] = self.queries
         results["query_id"] = self.query_ids
         results["rank"] = self.ranks
-        return results
+        return pd.concat([results, pd.DataFrame(self.resources)], axis=1)

@@ -297,6 +297,38 @@ def test_search_all_fills_empty_results():
     assert results["rank"].tolist() == [1, 1]
 
 
+def test_search_all_includes_optional_resources():
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "alpha"},
+            {"doc_id": 20, "title": "beta"},
+        ]
+    )
+    queries = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha"},
+            {"query_id": 2, "query": "beta"},
+        ]
+    )
+
+    class ResourceStrategy(SearchStrategy):
+        def search(self, query, k=10):
+            if query == "alpha":
+                return [0, 1], [0.9, 0.8], {"latency": 0.2, "tokens": 10}
+            return [1], [0.7]
+
+    results = ResourceStrategy(corpus).search_all(
+        queries, show_progress=False
+    )
+
+    alpha = results[results["query"] == "alpha"]
+    beta = results[results["query"] == "beta"]
+    assert alpha["latency"].tolist() == [0.2, 0.2]
+    assert alpha["tokens"].tolist() == [10, 10]
+    assert beta["latency"].isna().all()
+    assert beta["tokens"].isna().all()
+
+
 def test_search_all_accepts_numpy_results():
     corpus = pd.DataFrame(
         [

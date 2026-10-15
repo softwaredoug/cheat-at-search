@@ -4,6 +4,7 @@ This project houses various retrieval datasets and tools to make experimentation
 
 ## Mandatory reading
 
+Read the README.md
 Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL THIS IS DONE.
 
 ## Local skills
@@ -31,6 +32,14 @@ Note: This Python project uses uv for dependency management and test execution.
 - When patching in tests, prefer `unittest.mock.patch` decorators.
 - Prefer patch decorators over patch context managers.
 - Prefer patch decorators over pytest `monkeypatch` unless there is a specific need.
+
+### Use a TDD flow
+
+When implementing functionality: It's a great practice to add a high quality test, ensure it fails, then fix it.
+
+### Think about quality tests
+
+A quality test is at the sweet spot of reproducing actual usage while also
 
 ## Respect human edits
 
