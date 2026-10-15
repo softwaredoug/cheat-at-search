@@ -97,5 +97,9 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     assert second_messages[3] == {
         "role": "tool",
         "tool_call_id": "call-search",
-        "content": '<doc id="hello-1" title="Hello world">\nA friendly greeting.\n</doc>',
+        "content": (
+            '<doc id="hello-1" title="Hello world">\n'
+            "A friendly greeting.\n</doc>\n\n"
+            "You have 2 out of 3 turns left."
+        ),
     }

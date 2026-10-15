@@ -90,6 +90,15 @@ class SIDAgent(Agent):
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return md5(serialized.encode("utf-8")).hexdigest()
 
+    def _turn_budget_msg(self, turn_no: int) -> str:
+        turns_left = self.max_turns - (turn_no + 1)
+        if turns_left >= 1:
+            notice = f"\n\nYou have {turns_left} out of {self.max_turns} turns left."
+            if turns_left == 1:
+                notice += " You must call `report_helpful_ids` in the next turn."
+            return notice
+        return ""
+
     def loop(self, inputs: list[dict]):
         """Implement agentic loop over calls."""
         # Check for system prompt in inputs
@@ -139,3 +148,6 @@ class SIDAgent(Agent):
                     "tool_call_id": call_id,
                     "content": resp,
                 })
+
+            if inputs[-1]["role"] == "tool":
+                inputs[-1]["content"] += self._turn_budget_msg(turn)
