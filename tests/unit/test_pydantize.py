@@ -1,5 +1,5 @@
 """Test pydantizing any function for an agent to call it."""
-from typing import Annotated
+from typing import Annotated, Literal
 
 import pytest
 from pydantic import BaseModel, Field, ValidationError
@@ -149,3 +149,37 @@ def test_pydantize_annotated_parameter_metadata():
 
     with pytest.raises(ValidationError):
         ArgsModel(query="blue lamp", limit=0)
+
+
+def test_pydantize_annotated_examples_are_ignored_as_schema_metadata():
+    def search(
+        query: Annotated[str, "Search query", "example query"],
+        limit: Annotated[int, "Maximum results", 4],
+        mode: Annotated[Literal["and", "or"], "Term matching mode", "or"],
+        fields: Annotated[list[str], "Search fields", ["title", "description"]],
+    ) -> dict:
+        """Search with annotated values and examples."""
+        return {"query": query, "limit": limit, "mode": mode, "fields": fields}
+
+    ArgsModel, tool_spec, call_from_tool = make_tool_adapter(search)
+    properties = tool_spec["parameters"]["properties"]
+
+    assert properties["query"]["description"] == "Search query"
+    assert properties["limit"]["description"] == "Maximum results"
+    assert properties["mode"]["enum"] == ["and", "or"]
+    assert properties["fields"]["items"]["type"] == "string"
+    assert "example query" not in str(tool_spec["parameters"])
+
+    args = ArgsModel(
+        query="blue lamp",
+        limit=2,
+        mode="and",
+        fields=["title"],
+    )
+    result, _ = call_from_tool(args)
+    assert result == {
+        "query": "blue lamp",
+        "limit": 2,
+        "mode": "and",
+        "fields": ["title"],
+    }
