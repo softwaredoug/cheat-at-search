@@ -1,0 +1,20 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/.search-experiments/**": "allow"
+    },
+    "read": {
+      "~/.search-experiments/**": "allow"
+    },
+    "external_directory": {
+      "~/ws/**": "allow"
+    },
+    "read": {
+      "~/ws/**": "allow"
+    },
+    "edit": {
+      "~/.search-experiments/**": "deny"
+    }
+  }
+}

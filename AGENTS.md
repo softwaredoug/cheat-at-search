@@ -7,6 +7,26 @@ This project houses various retrieval datasets and tools to make experimentation
 Read the README.md
 Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL THIS IS DONE.
 
+### Vocabulary / stuff to google
+
+- jev from typesafe is a new decision model thats being advertised as a replacement for LLMs at classification, we increasingly use
+  it in this repo instead of LLMs
+- SID.ai is an agentic search model, built explicitly to work well with search tools. However its not a clean drop-in
+  replacement for an OpenAI Agent. There are subtleties in using it. Read its documentation here:
+  https://platform.sid.ai/docs/build
+
+### Sibling repos
+
+An important user of this repo is my search-experiments project. Which is at ~/ws/search-experiments or can
+be seen on github at http://github.com/softwaredoug/search-experiments
+
+It's the primary and most important consumer of the code in this repo.
+
+It has a set of yml config files that define different SearchStrategy implementations to benchmark search
+for research usage. Most of the strategy code is in search-experiments itself. The yml configs are in
+search-experiments/configs. I may point you at a bug there to triage that is tricky, and you may need to
+reference this repo to understand the bug.
+
 ## Local skills
 
 This project has local skills in .opencode/ directory, you should treat those as important to follow. Particularly
