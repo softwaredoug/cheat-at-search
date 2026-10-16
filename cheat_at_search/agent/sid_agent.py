@@ -66,6 +66,7 @@ def _call_sid(client, model, inputs, tools, num_attempts=4):
                 num_attempts,
                 e,
             )
+            last_exception = e
             sleep(2 ** attempt)
     raise last_exception or RuntimeError("SIDAI call failed after retries.")
 
