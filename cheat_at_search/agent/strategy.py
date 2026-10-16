@@ -70,11 +70,9 @@ class ReasoningSearchStrategy(SearchStrategy):
         self.total_tokens += usage["input_tokens"] + usage["output_tokens"]
         for key in self.usage:
             self.usage[key] += usage.get(key, 0)
-        top_k = []
-        scores = []
-        for result in search_results.results[:k]:
-            top_k.append(int(result.id))
-            scores.append(result.score)
+        ranked_ids = search_results.ranked_results[:k]
+        top_k = [int(doc_id) for doc_id in ranked_ids]
+        scores = [1.0 / rank for rank in range(1, len(ranked_ids) + 1)]
 
         if self.cache is not None:
             self.cache[query] = (top_k, scores)

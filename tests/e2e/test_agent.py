@@ -54,7 +54,7 @@ def test_responses_retry_on_exception(
         model="openai/gpt-5",
     )
 
-    resp, _, _ = search_client.chat(inputs=[])
+    resp, _, _ = search_client.loop(inputs=[])
 
     assert resp is success_response
     assert mock_agent_openai.client.responses.create.call_count == 2
@@ -81,7 +81,7 @@ def test_responses_no_retry_on_bad_request_400(
     )
 
     with pytest.raises(BadRequestError):
-        search_client.chat(inputs=[])
+        search_client.loop(inputs=[])
 
     assert mock_agent_openai.client.responses.create.call_count == 1
 
@@ -233,12 +233,7 @@ def test_calling_search_tool(mock_key_for_provider, mock_openai):
         ]
     )
     mock_agent_openai.queue_parse_response(
-        payload={
-            "results": [
-                {"id": "0", "rank": 1},
-                {"id": "1", "rank": 2},
-            ]
-        }
+        payload={"ranked_results": ["0", "1"]}
     )
 
     search_client = OpenAIAgent(
@@ -262,13 +257,13 @@ def test_calling_search_tool(mock_key_for_provider, mock_openai):
         {"role": "user", "content": prompt},
     ]
     active_logger = Mock()
-    resp, final_inputs, usage = search_client.chat(
+    resp, final_inputs, usage = search_client.loop(
         inputs=inputs,
         return_usage=True,
         logger=active_logger,
     )
     results = resp.output_parsed
-    assert [result.id for result in results.results] == ["0", "1"]
+    assert results.ranked_results == ["0", "1"]
     assert usage["num_tool_calls"] == 1
     assert all(call.args[0] == "Usage: %s" for call in active_logger.debug.call_args_list)
     assert final_inputs[-1]["type"] == "function_call_output"
@@ -324,7 +319,7 @@ def test_analyze_best_search_backend(mock_key_for_provider, mock_openai):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt},
     ]
-    resp, _, _ = search_client.chat(inputs=inputs, return_usage=True)
+    resp, _, _ = search_client.loop(inputs=inputs, return_usage=True)
     preferred_tool = resp.output_parsed
     assert preferred_tool.tool_name in ["search_products", "alt_search_products"]
     parse_kwargs = mock_agent_openai.client.responses.parse.call_args.kwargs
@@ -359,12 +354,7 @@ def test_reasoning_search_strategy(mock_key_for_provider, mock_openai):
     ]
     for _query in queries:
         mock_agent_openai.queue_parse_response(
-            payload={
-                "results": [
-                    {"id": str(idx), "rank": idx + 1}
-                    for idx in range(5)
-                ]
-            }
+            payload={"ranked_results": [str(idx) for idx in range(5)]}
         )
 
     search_client = OpenAIAgent(
@@ -405,12 +395,7 @@ def test_agent_tool_error_is_returned_as_string(mock_key_for_provider, mock_open
         ]
     )
     mock_agent_openai.queue_parse_response(
-        payload={
-            "results": [
-                {"id": "0", "rank": 1},
-                {"id": "1", "rank": 2},
-            ]
-        }
+        payload={"ranked_results": ["0", "1"]}
     )
 
     search_client = OpenAIAgent(
@@ -427,9 +412,9 @@ def test_agent_tool_error_is_returned_as_string(mock_key_for_provider, mock_open
         {"role": "user", "content": "Find a couch"},
     ]
 
-    resp, final_inputs, usage = search_client.chat(inputs=inputs, return_usage=True)
+    resp, final_inputs, usage = search_client.loop(inputs=inputs, return_usage=True)
 
-    assert [result.id for result in resp.output_parsed.results] == ["0", "1"]
+    assert resp.output_parsed.ranked_results == ["0", "1"]
     assert usage["num_tool_calls"] == 1
     assert final_inputs[-1]["type"] == "function_call_output"
     assert "tool failure" in final_inputs[-1]["output"]

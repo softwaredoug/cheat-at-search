@@ -1,10 +1,10 @@
-from cheat_at_search.agent.search_client import Agent, SearchResults
+from cheat_at_search.agent.search_client import Agent
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.pydantize import make_tool_adapter
 from openai import BadRequestError, OpenAI
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 from hashlib import md5
 from time import sleep
 import json
@@ -86,14 +86,14 @@ class OpenAIAgent(Agent):
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return md5(serialized.encode("utf-8")).hexdigest()
 
-    def chat(
+    def loop(
         self,
         inputs=None,
         agent_state: Optional[dict] = None,
         return_usage=False,
         logger=None,
-    ) -> SearchResults:
-        """Chat, handle any response."""
+    ) -> tuple[Any, list, dict]:
+        """Run the agentic tool loop and return response, inputs, and usage."""
         active_logger = logger or globals()["logger"]
         if agent_state is not None:
             agent_state["trace_logger"] = active_logger
@@ -196,6 +196,7 @@ class OpenAIAgent(Agent):
                                 )
             if return_usage:
                 resp.usage = usage
+            self.last_usage = resp.usage
             return resp, inputs, usage
         except Exception as e:
             active_logger.error("Error calling MCP search tool: %s", e)
@@ -237,24 +238,3 @@ class OpenAIAgent(Agent):
                     exc,
                 )
                 sleep(2 ** attempt)
-
-    def loop(
-        self,
-        inputs=None,
-        agent_state=None,
-        return_usage=False,
-        logger=None,
-    ) -> SearchResults:
-        """Issue a 'search' and expect structured output response."""
-        assert self.response_model is not None, (
-            "response_model must be set for structured search results."
-        )
-        resp, _, usage = self.chat(
-            inputs=inputs,
-            agent_state=agent_state,
-            logger=logger,
-        )
-        self.last_usage = resp.usage
-        if return_usage:
-            return resp.output_parsed, usage
-        return resp.output_parsed

@@ -1,4 +1,4 @@
-from cheat_at_search.agent.search_client import Agent, SearchResults, SearchResult
+from cheat_at_search.agent.search_client import Agent, SearchResults
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.agent.sid_tool import tool_schema, call_tool, format_tool_schema
 from cheat_at_search.logger import log_to_stdout
@@ -19,12 +19,7 @@ class SIDChatResponse(BaseModel):
 
 def _ids_to_search_results(ids: list[str]) -> SearchResults:
     """Convert a list of IDs to SearchResults."""
-    results = []
-    for rank_no, _id in enumerate(ids):
-        search_result = SearchResult(id=_id, rank=rank_no + 1)
-        results.append(search_result)
-
-    return SearchResults(results=results)
+    return SearchResults(ranked_results=ids)
 
 
 def _assistant_message_to_dict(message) -> dict:
@@ -112,14 +107,14 @@ class SIDAgent(Agent):
             return notice
         return ""
 
-    def chat(
+    def loop(
         self,
         inputs: list[dict] | None = None,
         agent_state: dict | None = None,
         return_usage: bool = False,
         logger=None,
     ):
-        """Run the SID tool loop and return the result, messages, and usage."""
+        """Run the SID tool loop and return the response, messages, and usage."""
         active_logger = logger or globals()["logger"]
         if agent_state is not None:
             agent_state["trace_logger"] = active_logger
@@ -200,22 +195,3 @@ class SIDAgent(Agent):
 
         self.last_usage = usage
         return SIDChatResponse(output_parsed=_ids_to_search_results([])), inputs, usage
-
-    def loop(
-        self,
-        inputs: list[dict] | None = None,
-        agent_state: dict | None = None,
-        return_usage: bool = False,
-        logger=None,
-    ):
-        """Return SID's final SearchResults, optionally with usage."""
-        response, _, usage = self.chat(
-            inputs=inputs,
-            agent_state=agent_state,
-            return_usage=return_usage,
-            logger=logger,
-        )
-        result = response.output_parsed
-        if return_usage:
-            return result, usage
-        return result

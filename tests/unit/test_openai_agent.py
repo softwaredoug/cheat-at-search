@@ -72,7 +72,7 @@ def test_process_images_adds_image_context_without_changing_tool_output(
         process_images=True,
     )
 
-    _, inputs, _ = agent.chat(inputs=[])
+    _, inputs, _ = agent.loop(inputs=[])
 
     assert inputs[-2] == {
         "type": "function_call_output",
@@ -99,7 +99,7 @@ def test_process_images_defaults_to_disabled(mock_key_for_provider, mock_openai)
     ]
     agent = OpenAIAgent(tools=[_get_image], model="openai/gpt-5")
 
-    _, inputs, _ = agent.chat(inputs=[])
+    _, inputs, _ = agent.loop(inputs=[])
 
     assert len(inputs) == 2
     assert inputs[-1]["type"] == "function_call_output"

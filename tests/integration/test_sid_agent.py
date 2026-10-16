@@ -86,7 +86,7 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
 
     agent_state = {"user_id": "user-1"}
     active_logger = Mock()
-    response, _, usage = agent.chat(
+    response, _, usage = agent.loop(
         inputs,
         agent_state=agent_state,
         return_usage=True,
@@ -100,7 +100,7 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     ]
     assert agent_state["trace_logger"] is active_logger
     assert isinstance(response.output_parsed, SearchResults)
-    assert [(result.id, result.rank) for result in results.results] == [("hello-1", 1)]
+    assert results.ranked_results == ["hello-1"]
     assert usage == {
         "input_tokens": 20,
         "output_tokens": 4,

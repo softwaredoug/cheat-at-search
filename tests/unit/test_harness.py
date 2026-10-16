@@ -6,7 +6,7 @@ def test_harness_passes_agent_state_to_chat():
         def __init__(self):
             self.agent_state = None
 
-        def chat(self, inputs=None, agent_state=None, return_usage=False):
+        def loop(self, inputs=None, agent_state=None, return_usage=False):
             self.agent_state = agent_state
             return "result", inputs, {
                 "input_tokens": 1,

@@ -1,5 +1,6 @@
 from cheat_at_search.codegen.code import make_guardrail_checker, Reranker, Edit
 from cheat_at_search.codegen.models import GuardrailResponse
+from types import SimpleNamespace
 from unittest.mock import patch
 import os
 from pathlib import Path
@@ -28,9 +29,15 @@ failing_code_snippets = [
 @pytest.mark.parametrize("failing_code", failing_code_snippets)
 @patch("cheat_at_search.codegen.validators.OpenAIAgent")
 def test_make_guardrail_checker(mock_openai_agent, failing_code):
-    mock_openai_agent.return_value.loop.return_value = GuardrailResponse(
-        compliant=False,
-        issues=["Code overfits to specific typo replacements."],
+    mock_openai_agent.return_value.loop.return_value = (
+        SimpleNamespace(
+            output_parsed=GuardrailResponse(
+                compliant=False,
+                issues=["Code overfits to specific typo replacements."],
+            )
+        ),
+        [],
+        {},
     )
     prompt = """
         You're going to look at code that reranks search queries.

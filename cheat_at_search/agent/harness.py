@@ -31,7 +31,7 @@ class Harness:
         call_count = 0
         while not stop:
             call_count += 1
-            resp, inputs, usage = self.agent.chat(
+            resp, inputs, usage = self.agent.loop(
                 inputs=inputs, agent_state=self.agent_state, return_usage=True
             )
             # Call validators, append any

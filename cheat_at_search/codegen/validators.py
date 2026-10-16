@@ -58,7 +58,8 @@ def make_guardrail_checker(
                 ),
             },
         ]
-        resp = agent.loop(inputs=inputs)
+        response, _, _ = agent.loop(inputs=inputs)
+        resp = response.output_parsed
         if resp is None:
             return "Guardrail check failed: no response from model."
         if not resp.compliant:
