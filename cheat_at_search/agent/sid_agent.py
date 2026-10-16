@@ -1,6 +1,11 @@
 from cheat_at_search.agent.search_client import Agent, SearchResults
 from cheat_at_search.data_dir import key_for_provider
-from cheat_at_search.agent.sid_tool import tool_schema, call_tool, format_tool_schema
+from cheat_at_search.agent.sid_tool import (
+    call_tool,
+    format_sid_tool_instructions,
+    format_tool_schema,
+    tool_schema,
+)
 from cheat_at_search.logger import log_to_stdout
 from openai import OpenAI
 from pydantic import BaseModel
@@ -81,6 +86,8 @@ class SIDAgent(Agent):
                         "name": argument.name,
                         "description": argument.description,
                         "type": str(argument.type),
+                        "has_example": argument.has_example,
+                        "example": argument.example,
                     }
                     for argument in schema.arguments
                 ],
@@ -132,7 +139,14 @@ class SIDAgent(Agent):
 
         if TOOL_HEADER not in system_prompt:
             tools_formatted = [format_tool_schema(tool) for tool in self.tool_schemas.values()]
-            system_prompt += "\n\n" + TOOL_HEADER + ":\n" + "\n".join(tools_formatted)
+            system_prompt += (
+                "\n\n"
+                + TOOL_HEADER
+                + ":\n"
+                + "\n".join(tools_formatted)
+                + "\n\n"
+                + format_sid_tool_instructions()
+            )
             inputs[0]["content"] = system_prompt
 
         if inputs[1]["role"] != "user":

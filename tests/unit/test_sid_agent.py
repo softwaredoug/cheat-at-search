@@ -117,6 +117,12 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
         {"type": "function", "function": {"name": "dummy"}}
     ]
     assert "hello_search" in first_request["messages"][0]["content"]
+    assert "<tool_call>" in first_request["messages"][0]["content"]
+    assert (
+        "Every assistant turn must contain one or more tool calls"
+        in first_request["messages"][0]["content"]
+    )
+    assert '"name": "report_helpful_ids"' in first_request["messages"][0]["content"]
 
     second_messages = create.call_args_list[1].kwargs["messages"]
     assert second_messages[2]["role"] == "assistant"

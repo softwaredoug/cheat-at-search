@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, Sequence, cast, Annotated
+from typing import Any, Dict, Literal, Sequence, cast, Annotated
 import inspect
 
 import pytest
@@ -8,6 +8,7 @@ from pydantic import Field
 from cheat_at_search.agent.sid_tool import (
     _format_tool_result,
     call_tool,
+    format_sid_tool_instructions,
     format_tool_schema,
     tool_schema,
 )
@@ -37,6 +38,25 @@ def complex_tool(query: Annotated[str, "The search query"],
 def stateful_tool(query: str, agent_state: dict) -> dict:
     """Return the query with host-provided tenant state."""
     return {"query": query, "tenant": agent_state["tenant"]}
+
+
+def fielded_search_tool(
+    keywords: Annotated[str, "Search query keywords."],
+    fields: Annotated[list[str], "Fields to search."],
+    operator: Literal["and", "or", "phrase"] = "or",
+    top_k: int = 5,
+) -> list[dict]:
+    """Search weighted fields using BM25."""
+    return []
+
+
+def explicit_example_tool(
+    keywords: Annotated[str, "Search query keywords.", "portable red chair"],
+    top_k: Annotated[int, "Maximum results.", 17],
+    fields: Annotated[list[str], "Fields to search.", ["title^4.0"]],
+) -> list[dict]:
+    """Search with explicitly documented argument examples."""
+    return []
 
 
 SCENARIOS = {
@@ -142,3 +162,70 @@ def test_agent_state_is_hidden_from_sid_and_injected_when_calling_tool():
 
     assert observed_state["value"] == 42
     assert json.loads(result) == {"query": "blue lamp", "state": 42}
+
+
+@pytest.mark.parametrize(
+    "argument_name",
+    ["keywords", "query", "question", "product_description"],
+)
+def test_format_tool_schema_uses_example_query_for_query_arguments(argument_name):
+    def search(**kwargs):
+        """Search for matching documents."""
+        return []
+
+    search.__signature__ = inspect.Signature(
+        [
+            inspect.Parameter(
+                argument_name,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                annotation=str,
+            )
+        ]
+    )
+    search.__annotations__ = {argument_name: str, "return": list}
+
+    formatted = format_tool_schema(tool_schema(search))
+
+    assert '"%s": "example query"' % argument_name in formatted
+    assert "<tool_call>" in formatted
+
+
+def test_format_tool_schema_generates_typed_examples_and_literal_choice():
+    formatted = format_tool_schema(tool_schema(fielded_search_tool))
+    example_call = formatted.split("<tool_call>\n", 1)[1].split("\n</tool_call>", 1)[0]
+    arguments = json.loads(example_call)["arguments"]
+
+    assert arguments["keywords"] == "example query"
+    assert arguments["fields"] == ["title^9.3", "description^4.1"]
+    assert arguments["top_k"] == 5
+    assert arguments["operator"] in {
+        "and",
+        "or",
+        "phrase",
+    }
+
+
+def test_format_tool_schema_prefers_explicit_annotated_examples():
+    schema = tool_schema(explicit_example_tool)
+    formatted = format_tool_schema(schema)
+    example_call = formatted.split("<tool_call>\n", 1)[1].split("\n</tool_call>", 1)[0]
+    arguments = json.loads(example_call)["arguments"]
+
+    assert schema.arguments[0].description == "Search query keywords."
+    assert schema.arguments[0].example == "portable red chair"
+    assert arguments == {
+        "keywords": "portable red chair",
+        "top_k": 17,
+        "fields": ["title^4.0"],
+    }
+
+
+def test_format_sid_tool_instructions_explains_call_protocol_and_final_ids():
+    formatted = format_sid_tool_instructions()
+    report_call = formatted.rsplit("<tool_call>\n", 1)[1].split("\n</tool_call>", 1)[0]
+
+    assert "Every assistant turn must contain one or more tool calls" in formatted
+    assert json.loads(report_call) == {
+        "name": "report_helpful_ids",
+        "arguments": {"ids": ["document_id_from_search"]},
+    }

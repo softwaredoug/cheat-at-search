@@ -41,20 +41,6 @@ Call search with a query that finds the document. After reviewing the tool
 results, call report_helpful_ids with only the stable IDs returned by search,
 most helpful first. Do not invent IDs.
 
-The read tool accepts one document id and returns its full contents:
-<tool_call>
-{"name": "read", "arguments": {"id": "document_id_from_search"}}
-</tool_call>
-
-To search, provide a query:
-<tool_call>
-{"name": "search", "arguments": {"query": "SID backend integration-test document"}}
-</tool_call>
-
-To finish, report the IDs returned by search:
-<tool_call>
-{"name": "report_helpful_ids", "arguments": {"ids": ["document_id_from_search"]}}
-</tool_call>
 """
     agent = SIDAgent(tools=[search, read], max_turns=4)
 
