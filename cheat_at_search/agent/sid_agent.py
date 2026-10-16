@@ -11,6 +11,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 from hashlib import md5
 import json
+from time import sleep
 
 
 TOOL_HEADER = "## Available Search Tools"
@@ -45,6 +46,28 @@ def _assistant_message_to_dict(message) -> dict:
         "content": message.content or "",
         "tool_calls": tool_calls,
     }
+
+
+def _call_sid(client, model, inputs, tools, num_attempts=4):
+
+    last_exception = None
+    for attempt in range(num_attempts):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=inputs,
+                tools=tools,
+            )
+            return response
+        except Exception as e:
+            logger.warning(
+                "SIDAI call failed on attempt %d/%d: %s",
+                attempt + 1,
+                num_attempts,
+                e,
+            )
+            sleep(2 ** attempt)
+    raise last_exception or RuntimeError("SIDAI call failed after retries.")
 
 
 class SIDAgent(Agent):
@@ -156,12 +179,7 @@ class SIDAgent(Agent):
         usage = {"input_tokens": 0, "output_tokens": 0, "num_tool_calls": 0}
 
         for turn in range(self.max_turns):
-
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=inputs,
-                tools=tools,
-            )
+            response = _call_sid(self.client, self.model, inputs, tools)
             response_usage = getattr(response, "usage", None)
             usage["input_tokens"] += (
                 getattr(response_usage, "prompt_tokens", None)
