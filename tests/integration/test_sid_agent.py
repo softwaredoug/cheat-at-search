@@ -27,6 +27,7 @@ def read(id: str) -> dict:
 
 
 @pytest.mark.e2e
+@pytest.mark.integration
 @pytest.mark.skipif(
     not os.getenv("SID_API_KEY"),
     reason="Set SID_API_KEY to run the live SID backend test.",
