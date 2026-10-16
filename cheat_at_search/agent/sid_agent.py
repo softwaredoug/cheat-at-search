@@ -160,6 +160,8 @@ class SIDAgent(Agent):
                 or 0
             )
             assistant_message = response.choices[0].message
+            if assistant_message.content:
+                active_logger.info("SID reasoning: %s", assistant_message.content)
             tool_calls = assistant_message.tool_calls or []
             inputs.append(_assistant_message_to_dict(assistant_message))
 
@@ -173,8 +175,16 @@ class SIDAgent(Agent):
                 name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
                 call_id = tool_call.id
+                active_logger.info(
+                    "Tool called: %s args=%s",
+                    name,
+                    json.dumps(tool_args, sort_keys=True),
+                )
                 if name == SID_STOP_FUNCTION:
                     result = _ids_to_search_results(tool_args["ids"])
+                    active_logger.info(
+                        "Tool response: %s", json.dumps(tool_args["ids"])
+                    )
                     self.last_usage = usage
                     return SIDChatResponse(output_parsed=result), inputs, usage
                 if name not in self.tool_schemas:
@@ -184,6 +194,7 @@ class SIDAgent(Agent):
                     self.tool_schemas[name],
                     agent_state=agent_state,
                 )
+                active_logger.info("Tool response: %s", resp)
                 inputs.append({
                     "role": "tool",
                     "tool_call_id": call_id,
