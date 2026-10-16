@@ -2,8 +2,6 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-import pytest
-
 from cheat_at_search.agent.search_client import SearchResults
 from cheat_at_search.agent.sid_agent import SIDAgent
 
@@ -55,7 +53,6 @@ def read(id: str) -> dict:
     }
 
 
-@pytest.mark.integration
 @patch("cheat_at_search.agent.sid_agent.OpenAI")
 @patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
 def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
@@ -135,7 +132,6 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     }
 
 
-@pytest.mark.integration
 @patch("cheat_at_search.agent.sid_agent.OpenAI")
 @patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
 def test_sid_agent_logs_reasoning_tool_calls_and_outputs_in_order(
