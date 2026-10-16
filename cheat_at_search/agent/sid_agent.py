@@ -48,7 +48,7 @@ def _assistant_message_to_dict(message) -> dict:
     }
 
 
-def _call_sid(client, model, inputs, tools, num_attempts=4):
+def _call_sid(client, model, inputs, tools, num_attempts=6):
 
     last_exception = None
     for attempt in range(num_attempts):
@@ -67,7 +67,7 @@ def _call_sid(client, model, inputs, tools, num_attempts=4):
                 e,
             )
             last_exception = e
-            sleep(2 ** attempt)
+            sleep(3 ** attempt)
     raise last_exception or RuntimeError("SIDAI call failed after retries.")
 
 
