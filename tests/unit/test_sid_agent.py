@@ -116,6 +116,12 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     assert first_request["tools"] == [
         {"type": "function", "function": {"name": "dummy"}}
     ]
+    active_logger.info.assert_any_call(
+        "System prompt: %s", first_request["messages"][0]["content"]
+    )
+    active_logger.info.assert_any_call(
+        "User prompt: %s", "Find a hello world greeting."
+    )
     assert "hello_search" in first_request["messages"][0]["content"]
     assert "<tool_call>" in first_request["messages"][0]["content"]
     assert (
@@ -176,7 +182,14 @@ def test_sid_agent_logs_reasoning_tool_calls_and_outputs_in_order(
         logger=active_logger,
     )
 
-    assert events == [
+    assert events[0][0] == "log"
+    assert events[0][1].startswith(
+        "System prompt: Search and report useful IDs."
+    )
+    assert "logged_search" in events[0][1]
+    assert "<tool_call>" in events[0][1]
+    assert events[1] == ("log", "User prompt: Find a greeting.")
+    assert events[2:] == [
         ("log", "SID reasoning: <think>Search for the greeting.</think>"),
         ("log", 'Tool called: logged_search args={"query": "hello"}'),
         ("tool", "search", "hello"),

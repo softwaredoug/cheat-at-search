@@ -48,7 +48,7 @@ def _assistant_message_to_dict(message) -> dict:
     }
 
 
-def _call_sid(client, model, inputs, tools, num_attempts=6):
+def _call_sid(client, model, inputs, tools, logger, num_attempts=6):
 
     last_exception = None
     for attempt in range(num_attempts):
@@ -176,11 +176,15 @@ class SIDAgent(Agent):
         if inputs[1]["role"] != "user":
             raise ValueError("Second input must be a user prompt.")
 
+        active_logger.info("System prompt: %s", system_prompt)
+        active_logger.info("User prompt: %s", inputs[1]["content"])
+
         tools = [{"type": "function", "function": {"name": "dummy"}}]
         usage = {"input_tokens": 0, "output_tokens": 0, "num_tool_calls": 0}
 
         for turn in range(self.max_turns):
-            response = _call_sid(self.client, self.model, inputs, tools)
+            response = _call_sid(self.client, self.model, inputs, tools,
+                                 logger=active_logger)
             response_usage = getattr(response, "usage", None)
             usage["input_tokens"] += (
                 getattr(response_usage, "prompt_tokens", None)
