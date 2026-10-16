@@ -41,6 +41,13 @@ When implementing functionality: It's a great practice to add a high quality tes
 
 A quality test is at the sweet spot of reproducing actual usage while also
 
+### Types of tests
+
+* unit tests - these mock out dependencies of a module, class, or function and test the functionality
+* e2e tests - these mock at API boundaries, though often leave many dependencies within the test surface
+  that don't call an external API (IE SearchArray is OK t ohave in an e2e test, but not call to OpenAI)
+* integration tests - these test the full interaction, including external APIS
+
 ## Respect human edits
 
 The user often makes edits in this repo. DO NOT overwrite their edits. If you need to make a change, please ask the user first.
