@@ -7,6 +7,9 @@ This project houses various retrieval datasets and tools to make experimentation
 Read the README.md
 Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL THIS IS DONE.
 
+Note as you develop, its ok to make updates to the docs to ensure they're consistent
+or reflect additions you've been asked to make.
+
 ### Vocabulary / stuff to google
 
 - jev from typesafe is a new decision model thats being advertised as a replacement for LLMs at classification, we increasingly use
@@ -14,6 +17,8 @@ Before proceeding read docs/*.md to orient to this project. DO NOT PROCEED UNTIL
 - SID.ai is an agentic search model, built explicitly to work well with search tools. However its not a clean drop-in
   replacement for an OpenAI Agent. There are subtleties in using it. Read its documentation here:
   https://platform.sid.ai/docs/build
+
+  (SID-2 is the latest version, in research preview, here https://platform.sid.ai/docs/research-preview/sid-2)
 
 ### Sibling repos
 
@@ -52,6 +57,8 @@ Note: This Python project uses uv for dependency management and test execution.
 - When patching in tests, prefer `unittest.mock.patch` decorators.
 - Prefer patch decorators over patch context managers.
 - Prefer patch decorators over pytest `monkeypatch` unless there is a specific need.
+- Use parameterized tests to test many scenarios, but minimize test code. Notably there is a decorator
+  `w_scenarios` that should be preferred for this as it maps dictionaries of params -> args to the test
 
 ### Use a TDD flow
 

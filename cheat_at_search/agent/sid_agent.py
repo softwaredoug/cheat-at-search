@@ -20,6 +20,7 @@ from cheat_at_search.logger import log_to_stdout
 
 from pydantic import BaseModel
 from openai import OpenAI
+from time import sleep
 
 logger = log_to_stdout("sid2_search_client")
 
@@ -45,6 +46,22 @@ def _log_reasoning_summaries(response: Any, active_logger) -> None:
             )
             if text:
                 active_logger.info("Reasoning summary: %s", _log_preview(text))
+
+
+def _call_sid(client, inputs, request, num_attempts=3):
+    for attempt in range(num_attempts):
+        try:
+            return client.responses.create(input=inputs, **request)
+        except Exception as exc:
+            if attempt + 1 == num_attempts:
+                raise
+            logger.warning(
+                "SID-2 request failed on attempt %d/%d: %s",
+                attempt + 1,
+                num_attempts,
+                exc,
+            )
+            sleep(3 ** attempt)  # Exponential backoff
 
 
 class SIDChatResponse(BaseModel):
@@ -195,7 +212,7 @@ class SIDAgent(Agent):
                 self.max_turns,
                 self.max_turns - turn,
             )
-            response = self.client.responses.create(input=inputs[1:], **request)
+            response = _call_sid(self.client, inputs[1:], request)
             inputs.extend(response.output)
 
             _log_reasoning_summaries(response, active_logger)

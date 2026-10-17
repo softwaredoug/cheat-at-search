@@ -324,6 +324,7 @@ dependencies = [
     { name = "requests" },
     { name = "searcharray" },
     { name = "sentence-transformers" },
+    { name = "sid-sdk" },
     { name = "typesafe-sdk" },
 ]
 
@@ -353,6 +354,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0,<3.0.0" },
     { name = "searcharray", specifier = ">=0.0.73,<0.0.74" },
     { name = "sentence-transformers", specifier = ">=6.0.0,<7.0.0" },
+    { name = "sid-sdk", specifier = ">=0.2.1" },
     { name = "typesafe-sdk", specifier = ">=0.7.4,<1.0.0" },
 ]
 
@@ -2737,6 +2739,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
+]
+
+[[package]]
+name = "sid-sdk"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/13/255cfd4c2eecb7a272ef60e6742cb9d0ff065ba4c76df8bf9d547ab71cf2/sid_sdk-0.2.1.tar.gz", hash = "sha256:c8c0a4c212556cb90c0773832621aa9d3eabd3d7e3f8392e31da19cf1aee00c3", size = 92354, upload-time = "2026-10-08T18:21:53.772Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/59/bcdbe51a7cdeabc458cfbddba5e402fbde737b5f85ff01082c5ef4db61e2/sid_sdk-0.2.1-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:21d4ea3ec81e918019b9e1419b668c088bdba4f47a74b67693505dd0e0a824b8", size = 333907, upload-time = "2026-10-08T18:21:43.811Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/c5/d966082e25f16eff8ed72b45587a5f2034389b27ddca5a14f47b74056c74/sid_sdk-0.2.1-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:bf2c6947f30ba71d869f3889df4c7d52561e3d3980df8c0517941e2f9d5543c4", size = 326612, upload-time = "2026-10-08T18:21:45.315Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/5b/625c46ce433bbebd610a13578474081441e884812d2399258361c683a89a/sid_sdk-0.2.1-cp312-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b8a204800acedb2bdf0d3f409be00a9944f050624e1ef20d7a51be9778168ebd", size = 365583, upload-time = "2026-10-08T18:21:46.798Z" },
+    { url = "https://files.pythonhosted.org/packages/90/a1/7f46ee64459adfaf3eaf4fe347c3d3a8eb624930fc3aa833dc5191f567ef/sid_sdk-0.2.1-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ec09a3dfab5b6414250811049d90672dfe7b61821f346a7cd5492ad91fc928cd", size = 380587, upload-time = "2026-10-08T18:21:48.379Z" },
+    { url = "https://files.pythonhosted.org/packages/47/bd/38cf6ac15fde0d2fba4c9a7bc06f4d6003782bcf9316dceab3dc1e6f7125/sid_sdk-0.2.1-cp312-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:32a6a2650442e1dd3e07a7569c0537c91fdf6194c212f1b35923555db9523b45", size = 543646, upload-time = "2026-10-08T18:21:49.625Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/83/8ba7ad140f290341a3ca9becd209aba247216e34eaf23ac95a7cd2fd2844/sid_sdk-0.2.1-cp312-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:56636624bb4f10f5701888206a7e89e55f8d124571b6bec08d00478a752a92af", size = 591418, upload-time = "2026-10-08T18:21:51.015Z" },
+    { url = "https://files.pythonhosted.org/packages/41/12/c19f5a95c600b27d80cc399fb504a5495875b09f0e2b0bf2c7a5701e52cb/sid_sdk-0.2.1-cp312-abi3-win_amd64.whl", hash = "sha256:e5a00cc38ae5021add0c359047256ea919e77c2655ef7724146b668daf074d16", size = 260244, upload-time = "2026-10-08T18:21:52.343Z" },
 ]
 
 [[package]]
