@@ -43,7 +43,8 @@ def test_openai_agent_accepts_annotated_scalar_literal_and_list_arguments():
         model=f"openai/{os.getenv('OPENAI_AGENT_TEST_MODEL', 'gpt-5-mini')}",
         reasoning_level="low",
     )
-    response, _, usage = agent.loop(
+    agent_state = {}
+    response, _ = agent.loop(
         inputs=[
             {
                 "role": "system",
@@ -55,7 +56,7 @@ def test_openai_agent_accepts_annotated_scalar_literal_and_list_arguments():
             },
             {"role": "user", "content": "Run the annotation integration check."},
         ],
-        return_usage=True,
+        agent_state=agent_state,
     )
 
     assert calls == [
@@ -66,5 +67,5 @@ def test_openai_agent_accepts_annotated_scalar_literal_and_list_arguments():
             "fields": ["title", "description"],
         }
     ]
-    assert usage["num_tool_calls"] == 1
+    assert agent_state["resource.num_tool_calls"] == 1
     assert response is not None

@@ -5,7 +5,7 @@ import inspect
 import pytest
 from pydantic import Field
 
-from cheat_at_search.agent.sid_tool import (
+from cheat_at_search.agent.sid_legacy_tool import (
     _format_tool_result,
     call_tool,
     format_sid_tool_instructions,

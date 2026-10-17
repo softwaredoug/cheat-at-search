@@ -18,7 +18,7 @@ class Harness:
         self.stoppers = stoppers
         self.validators = validators
         self.response_model = response_model
-        self.agent_state = agent_state
+        self.agent_state = agent_state if agent_state is not None else {}
 
     def run(self, inputs):
         stop = False
@@ -31,9 +31,7 @@ class Harness:
         call_count = 0
         while not stop:
             call_count += 1
-            resp, inputs, usage = self.agent.loop(
-                inputs=inputs, agent_state=self.agent_state, return_usage=True
-            )
+            resp, inputs = self.agent.loop(inputs=inputs, agent_state=self.agent_state)
             # Call validators, append any
             invalid = False
             for validator in validators:
@@ -52,7 +50,7 @@ class Harness:
                 stop = stopper(resp, inputs, call_count)
                 if stop:
                     break
-        return resp, inputs, usage
+        return resp, inputs
 
     def config_hash(self) -> str:
         return self.agent.config_hash()

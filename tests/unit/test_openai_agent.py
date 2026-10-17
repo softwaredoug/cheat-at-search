@@ -8,7 +8,7 @@ from cheat_at_search.agent.openai_agent import (
     OpenAIAgent,
     _maybe_get_image_input,
 )
-from cheat_at_search.agent.sid_agent import SIDAgent
+from cheat_at_search.agent.sid_legacy_agent import SIDLegacyAgent
 
 
 class ImageResult(BaseModel):
@@ -72,7 +72,7 @@ def test_process_images_adds_image_context_without_changing_tool_output(
         process_images=True,
     )
 
-    _, inputs, _ = agent.loop(inputs=[])
+    _, inputs = agent.loop(inputs=[])
 
     assert inputs[-2] == {
         "type": "function_call_output",
@@ -99,7 +99,7 @@ def test_process_images_defaults_to_disabled(mock_key_for_provider, mock_openai)
     ]
     agent = OpenAIAgent(tools=[_get_image], model="openai/gpt-5")
 
-    _, inputs, _ = agent.loop(inputs=[])
+    _, inputs = agent.loop(inputs=[])
 
     assert len(inputs) == 2
     assert inputs[-1]["type"] == "function_call_output"
@@ -121,16 +121,16 @@ def read(id: Annotated[str, "Stable document ID"]) -> dict:
 
 @patch("cheat_at_search.agent.openai_agent.OpenAI")
 @patch("cheat_at_search.agent.openai_agent.key_for_provider", return_value="openai-test-key")
-@patch("cheat_at_search.agent.sid_agent.OpenAI")
-@patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
-def test_sid_tools_are_accepted_by_openai_with_annotated_descriptions(
+@patch("cheat_at_search.agent.sid_legacy_agent.OpenAI")
+@patch("cheat_at_search.agent.sid_legacy_agent.key_for_provider", return_value="sid-test-key")
+def test_sid_legacy_tools_are_accepted_by_openai_with_annotated_descriptions(
     mock_sid_key_for_provider,
     mock_sid_openai,
     mock_openai_key_for_provider,
     mock_openai,
 ):
     tools = [_annotated_search, read]
-    sid_agent = SIDAgent(tools=tools, max_turns=2)
+    sid_agent = SIDLegacyAgent(tools=tools, max_turns=2)
     openai_agent = OpenAIAgent(tools=tools, model="openai/gpt-5")
 
     assert set(sid_agent.tool_schemas) == set(openai_agent.search_tools)

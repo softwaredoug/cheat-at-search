@@ -1,169 +1,67 @@
 import os
-from typing import Annotated, Literal
+from typing import Annotated
 
 import pytest
 from openai import PermissionDeniedError
 
-from cheat_at_search.agent.sid_agent import SIDAgent
+from cheat_at_search.agent.sid_agent import SIDAgent, SIDChatResponse
 
 
-SID_DOCUMENT = {
-    "id": "sid-live-integration-document",
-    "title": "SID backend integration test document",
-    "description": (
-        "This document exists only in the in-memory test search tool. "
-        "It verifies that SID can call a backend tool and report its result."
-    ),
-}
+@pytest.mark.e2e
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not os.getenv("SID_API_KEY"),
+    reason="Set SID_API_KEY to run the live SID-2 integration test.",
+)
+def test_sid_agent_requests_hello_world_search():
+    searches = []
 
-
-def search(query: str) -> list[dict]:
-    """Search the in-memory SID integration-test corpus."""
-    return [SID_DOCUMENT]
-
-
-def read(id: str) -> dict:
-    """Read a document by its stable ID from the SID integration-test corpus."""
-    return SID_DOCUMENT
-
-
-def _make_annotated_search(calls):
     def search(
-        keywords: Annotated[
-            str,
-            "Search query keywords.",
-            "SID backend integration-test document",
-        ],
-        top_k: Annotated[int, "Maximum number of results.", 5] = 5,
-        mode: Annotated[
-            Literal["exact", "broad"], "Search mode.", "exact"
-        ] = "exact",
+        query: Annotated[str, "Terms describing the greeting to find.", "hello world"],
     ) -> list[dict]:
-        """Search using annotated scalar and Literal arguments."""
-        calls.append({"keywords": keywords, "top_k": top_k, "mode": mode})
-        return [SID_DOCUMENT]
+        """Search the hello-world greeting catalog."""
+        searches.append(query)
+        return [
+            {
+                "id": "hello-world",
+                "title": "Hello world",
+                "content": "A friendly hello world greeting.",
+            }
+        ]
 
-    return search
+    agent = SIDAgent(tools=[search], reasoning_effort="low")
+    agent_state = {}
+    inputs = [
+        {
+            "role": "system",
+            "content": """You are an expert research assistant searching a small catalog of greeting documents.
 
+Steps:
+1. Reflect on what information is needed to answer the question and use the provided search tools to find documents. Each document has an id.
+2. Repeat step 1 until all documents necessary and sufficient to answer the question have been found. Take as many turns and searches as needed – you can make multiple searches per turn! Most questions will require multiple turns. Many will need more.
+3. Use the report_helpful_ids tool to report the most helpful document ids. List the most helpful document ids first (important!).
 
-def _make_annotated_fields_search(calls):
-    def search(
-        keywords: Annotated[
-            str,
-            "Search query keywords.",
-            "SID backend integration-test document",
-        ],
-        fields: Annotated[
-            list[str],
-            "Fields to search.",
-            ["title", "description"],
-        ] = ["title", "description"],
-    ) -> list[dict]:
-        """Search selected text fields using annotated list arguments."""
-        calls.append({"keywords": keywords, "fields": fields})
-        return [SID_DOCUMENT]
-
-    return search
-
-
-def _run_live_sid(search_tool, system_prompt):
-    agent = SIDAgent(tools=[search_tool, read], max_turns=4)
+The episode ends once report_helpful_ids is called.""",
+        },
+        {"role": "user", "content": "Find the hello world greeting."},
+    ]
     try:
-        return agent.loop(
-            inputs=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": "Find the SID backend integration-test document.",
-                },
-            ],
-            return_usage=True,
-        )
+        response, inputs = agent.loop(inputs=inputs, agent_state=agent_state)
     except PermissionDeniedError as exc:
-        if "You do not have access to model sid-1" in str(exc):
-            pytest.skip("Configured SID_API_KEY is not authorized for sid-1.")
+        if "sid-2" in str(exc).lower():
+            pytest.skip("Configured SID_API_KEY is not authorized for sid-2.")
         raise
 
-
-@pytest.mark.e2e
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not os.getenv("SID_API_KEY"),
-    reason="Set SID_API_KEY to run the live SID backend test.",
-)
-def test_sid_agent_runs_against_live_sid_backend():
-    system_prompt = """
-You are validating a search integration. Find the single document that answers
-the user's request, using the provided search tools.
-
-Call search with a query that finds the document. After reviewing the tool
-results, call report_helpful_ids with only the stable IDs returned by search,
-most helpful first. Do not invent IDs.
-
-"""
-    agent = SIDAgent(tools=[search, read], max_turns=4)
-
-    try:
-        response, _, usage = agent.loop(
-            inputs=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": "Find the SID backend integration-test document.",
-                },
-            ],
-            return_usage=True,
-        )
-    except PermissionDeniedError as exc:
-        if "You do not have access to model sid-1" in str(exc):
-            pytest.skip("Configured SID_API_KEY is not authorized for sid-1.")
-        raise
-
-    assert response.output_parsed.ranked_results == [SID_DOCUMENT["id"]]
-    assert usage["num_tool_calls"] >= 2
-
-
-@pytest.mark.e2e
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not os.getenv("SID_API_KEY"),
-    reason="Set SID_API_KEY to run the live SID backend test.",
-)
-def test_sid_agent_accepts_annotated_scalar_and_literal_arguments():
-    calls = []
-    response, _, usage = _run_live_sid(
-        _make_annotated_search(calls),
-        system_prompt=(
-            "Call the search tool once with keywords describing the requested document, "
-            "top_k set to 5, and mode set to exact. Then report the document IDs it returns."
-        ),
-    )
-
-    assert response.output_parsed.ranked_results == [SID_DOCUMENT["id"]]
-    assert usage["num_tool_calls"] >= 2
-    assert calls
-    assert isinstance(calls[0]["keywords"], str)
-    assert isinstance(calls[0]["top_k"], int)
-    assert calls[0]["mode"] in {"exact", "broad"}
-
-
-@pytest.mark.e2e
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not os.getenv("SID_API_KEY"),
-    reason="Set SID_API_KEY to run the live SID backend test.",
-)
-def test_sid_agent_accepts_annotated_list_argument_examples():
-    calls = []
-    response, _, usage = _run_live_sid(
-        _make_annotated_fields_search(calls),
-        system_prompt=(
-            "Call the search tool with keywords describing the requested document and "
-            "fields set to [\"title\", \"description\"]. Then report the document IDs it returns."
-        ),
-    )
-
-    assert response.output_parsed.ranked_results == [SID_DOCUMENT["id"]]
-    assert usage["num_tool_calls"] >= 2
-    assert calls
-    assert calls[0]["fields"] == ["title", "description"]
+    assert isinstance(response, SIDChatResponse)
+    assert response.output_parsed.ranked_results == ["hello-world"]
+    assert len(response.output_parsed.ranked_results) > 0
+    assert searches
+    assert any("hello" in query.lower() for query in searches)
+    assert agent_state["resource.num_tool_calls"] >= 1
+    tool_outputs = [
+        item
+        for item in inputs
+        if isinstance(item, dict) and item.get("type") == "function_call_output"
+    ]
+    assert tool_outputs
+    assert any('<doc id="' in item["output"] for item in tool_outputs)

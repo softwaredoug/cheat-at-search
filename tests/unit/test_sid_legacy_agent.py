@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from cheat_at_search.agent.search_client import SearchResults
-from cheat_at_search.agent.sid_agent import SIDAgent
+from cheat_at_search.agent.sid_legacy_agent import SIDLegacyAgent
 
 
 def _tool_call(name, arguments, call_id):
@@ -53,9 +53,9 @@ def read(id: str) -> dict:
     }
 
 
-@patch("cheat_at_search.agent.sid_agent.OpenAI")
-@patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
-def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
+@patch("cheat_at_search.agent.sid_legacy_agent.OpenAI")
+@patch("cheat_at_search.agent.sid_legacy_agent.key_for_provider", return_value="sid-test-key")
+def test_sid_legacy_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     mock_client = mock_openai.return_value
     mock_client.chat.completions.create.side_effect = [
         _completion(_tool_call("hello_search", {"query": "hello world"}, "call-search")),
@@ -68,7 +68,7 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
         ),
     ]
 
-    agent = SIDAgent(tools=[hello_search, read], max_turns=3)
+    agent = SIDLegacyAgent(tools=[hello_search, read], max_turns=3)
     inputs = [
         {
             "role": "system",
@@ -83,10 +83,9 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
 
     agent_state = {"user_id": "user-1"}
     active_logger = Mock()
-    response, _, usage = agent.loop(
+    response, _ = agent.loop(
         inputs,
         agent_state=agent_state,
-        return_usage=True,
         logger=active_logger,
     )
     results = response.output_parsed
@@ -98,10 +97,17 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     assert agent_state["trace_logger"] is active_logger
     assert isinstance(response.output_parsed, SearchResults)
     assert results.ranked_results == ["hello-1"]
-    assert usage == {
-        "input_tokens": 20,
-        "output_tokens": 4,
-        "num_tool_calls": 2,
+    assert {
+        key: agent_state[key]
+        for key in (
+            "resource.input_tokens",
+            "resource.output_tokens",
+            "resource.num_tool_calls",
+        )
+    } == {
+        "resource.input_tokens": 20,
+        "resource.output_tokens": 4,
+        "resource.num_tool_calls": 2,
     }
     mock_key_for_provider.assert_called_once_with("sid")
     mock_openai.assert_called_once_with(
@@ -144,9 +150,9 @@ def test_sid_agent_hello_world_tool_loop(mock_key_for_provider, mock_openai):
     }
 
 
-@patch("cheat_at_search.agent.sid_agent.OpenAI")
-@patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
-def test_sid_agent_logs_reasoning_tool_calls_and_outputs_in_order(
+@patch("cheat_at_search.agent.sid_legacy_agent.OpenAI")
+@patch("cheat_at_search.agent.sid_legacy_agent.key_for_provider", return_value="sid-test-key")
+def test_sid_legacy_agent_logs_reasoning_tool_calls_and_outputs_in_order(
     mock_key_for_provider, mock_openai
 ):
     events = []
@@ -172,7 +178,7 @@ def test_sid_agent_logs_reasoning_tool_calls_and_outputs_in_order(
     ]
     active_logger = Mock()
     active_logger.info.side_effect = log_info
-    agent = SIDAgent(tools=[logged_search, read], max_turns=2)
+    agent = SIDLegacyAgent(tools=[logged_search, read], max_turns=2)
 
     agent.loop(
         [

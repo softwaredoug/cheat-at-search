@@ -1,4 +1,8 @@
-from cheat_at_search.agent.search_client import Agent
+from cheat_at_search.agent.search_client import (
+    Agent,
+    initialize_resource_counters,
+    record_resource,
+)
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.agent.pydantize import make_tool_adapter
@@ -49,7 +53,6 @@ class OpenAIAgent(Agent):
             )
         self.response_model = response_model
         self.openai = OpenAI(api_key=self.openai_key)
-        self.last_usage = None
         self.max_tokens = max_tokens
         self.reasoning_level = reasoning_level
         self.summary = summary
@@ -90,18 +93,19 @@ class OpenAIAgent(Agent):
         self,
         inputs=None,
         agent_state: Optional[dict] = None,
-        return_usage=False,
         logger=None,
-    ) -> tuple[Any, list, dict]:
-        """Run the agentic tool loop and return response, inputs, and usage."""
+    ) -> tuple[Any, list]:
+        """Run the agentic tool loop and return response and inputs."""
         active_logger = logger or globals()["logger"]
-        if agent_state is not None:
-            agent_state["trace_logger"] = active_logger
+        if agent_state is None:
+            agent_state = {}
+        initialize_resource_counters(agent_state)
+        agent_state["trace_logger"] = active_logger
         tools = []
         for tool in self.search_tools.values():
             tool_spec = tool[1]
             tools.append(tool_spec)
-        usage = {"input_tokens": 0, "output_tokens": 0, "num_tool_calls": 0}
+        total_tokens = 0
         try:
             tool_calls_found = True
             while tool_calls_found:
@@ -118,10 +122,12 @@ class OpenAIAgent(Agent):
                 # Iterate over tool calls
                 inputs += resp.output
 
-                usage["input_tokens"] += resp.usage.input_tokens
-                usage["output_tokens"] += resp.usage.output_tokens
+                input_tokens = resp.usage.input_tokens or 0
+                output_tokens = resp.usage.output_tokens or 0
+                record_resource(agent_state, "input_tokens", input_tokens)
+                record_resource(agent_state, "output_tokens", output_tokens)
 
-                total_tokens = usage["input_tokens"] + usage["output_tokens"]
+                total_tokens += input_tokens + output_tokens
                 if self.summary:
                     active_logger.info("--")
                     active_logger.info("InpTok: %s", resp.usage.input_tokens)
@@ -148,7 +154,7 @@ class OpenAIAgent(Agent):
                 for item in resp.output:
                     if item.type == "function_call":
                         tool_calls_found = True
-                        usage["num_tool_calls"] += 1
+                        record_resource(agent_state, "num_tool_calls", 1)
                         tool_name = item.name
                         if tool_name not in self.search_tools:
                             raise ValueError(
@@ -194,10 +200,7 @@ class OpenAIAgent(Agent):
                                         "content": [image_input],
                                     }
                                 )
-            if return_usage:
-                resp.usage = usage
-            self.last_usage = resp.usage
-            return resp, inputs, usage
+            return resp, inputs
         except Exception as e:
             active_logger.error("Error calling MCP search tool: %s", e)
             raise e

@@ -19,7 +19,18 @@ class Agent(ABC):
         self,
         inputs=None,
         agent_state: dict | None = None,
-        return_usage: bool = False,
         logger=None,
-    ) -> tuple[Any, list, dict]:
+    ) -> tuple[Any, list]:
         pass
+
+
+def record_resource(agent_state: dict, name: str, amount: int | float) -> None:
+    """Accumulate one usage/resource amount in agent state."""
+    key = f"resource.{name.removeprefix('resource.')}"
+    agent_state[key] = agent_state.get(key, 0) + amount
+
+
+def initialize_resource_counters(agent_state: dict) -> None:
+    """Ensure the standard model-usage counters exist in agent state."""
+    for name in ("input_tokens", "output_tokens", "num_tool_calls"):
+        agent_state.setdefault(f"resource.{name}", 0)

@@ -65,9 +65,22 @@ class ReasoningSearchStrategy(SearchStrategy):
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": prompt},
         ]
-        resp, inputs, usage = self.harness.run(inputs)
+        agent_state = self.harness.agent_state
+        resources_before = {
+            key: value
+            for key, value in agent_state.items()
+            if key.startswith("resource.")
+        }
+        resp, inputs = self.harness.run(inputs)
+        usage = {
+            key.removeprefix("resource."): value - resources_before.get(key, 0)
+            for key, value in agent_state.items()
+            if key.startswith("resource.")
+        }
         search_results = getattr(resp, "output_parsed", resp)
-        self.total_tokens += usage["input_tokens"] + usage["output_tokens"]
+        self.total_tokens += usage.get("input_tokens", 0) + usage.get(
+            "output_tokens", 0
+        )
         for key in self.usage:
             self.usage[key] += usage.get(key, 0)
         ranked_ids = search_results.ranked_results[:k]
@@ -81,4 +94,4 @@ class ReasoningSearchStrategy(SearchStrategy):
             print(f"Cache write for query: {query}")
         else:
             print("Not caching")
-        return top_k, scores
+        return top_k, scores, usage
