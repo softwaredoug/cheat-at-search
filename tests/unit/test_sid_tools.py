@@ -521,7 +521,7 @@ def test_sid_agent_loop_sends_user_history_and_returns_first_response(
     assert request["instructions"] == inputs[0]["content"]
     assert request["tools"] == agent.tools
     assert request["extra_body"]["sid"]["tool_examples"] == agent.tool_examples
-    assert request["extra_body"]["sid"]["reward"] == "f1"
+    assert request["extra_body"]["sid"]["reward"] == "ndcg"
     assert request["extra_headers"]["x-session-affinity"]
     assert isinstance(returned_response, SIDChatResponse)
     assert returned_response.output_parsed.ranked_results == []

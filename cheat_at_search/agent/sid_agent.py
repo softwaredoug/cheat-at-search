@@ -82,7 +82,7 @@ class SIDAgent(Agent):
         *,
         model: str = "sid-2",
         max_turns: int = 10,
-        reward: str = "f1",
+        reward: str = "ndcg",
         reasoning_effort: Literal["low", "medium", "high"] = "low",
     ) -> None:
         """Configure the SID-2 model, search tools, and episode limits."""
