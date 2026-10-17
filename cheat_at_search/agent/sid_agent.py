@@ -1,8 +1,13 @@
 """Agent scaffold for SID-2's Responses API and episode protocol."""
 
 import json
+from time import sleep
 from typing import Any, Literal
 from uuid import uuid4
+
+from openai import OpenAI
+from pydantic import BaseModel
+from sid import DocumentCache
 
 from cheat_at_search.agent.search_client import (
     Agent,
@@ -17,10 +22,6 @@ from cheat_at_search.agent.sid_tools import (
 )
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
-
-from pydantic import BaseModel
-from openai import OpenAI
-from time import sleep
 
 logger = log_to_stdout("sid2_search_client")
 
@@ -121,6 +122,7 @@ class SIDAgent(Agent):
         self,
         function_calls: list[Any],
         has_searched: bool,
+        document_cache: DocumentCache,
     ) -> SIDChatResponse | str | None:
         """Validate a terminal report call and map its IDs to backend IDs."""
         report_calls = [
@@ -160,7 +162,7 @@ class SIDAgent(Agent):
 
         return SIDChatResponse(
             output_parsed=SearchResults(
-                ranked_results=resolve_reported_ids(report_ids)
+                ranked_results=resolve_reported_ids(report_ids, document_cache)
             )
         )
 
@@ -202,6 +204,7 @@ class SIDAgent(Agent):
                 active_logger.info("User prompt: %s", message.get("content", ""))
 
         request = self._request_config(instructions, uuid4().hex)
+        document_cache = DocumentCache(range_mode="lenient")
         has_searched = False
         search_tool_names = {tool.__name__ for tool in self.search_tools}
 
@@ -265,7 +268,7 @@ class SIDAgent(Agent):
                 )
 
             report_result = self._process_report_helpful_ids(
-                function_calls, has_searched
+                function_calls, has_searched, document_cache
             )
             if isinstance(report_result, SIDChatResponse):
                 active_logger.info(
@@ -284,6 +287,7 @@ class SIDAgent(Agent):
                     observation = call_sid2_tool(
                         item,
                         self.search_tools,
+                        document_cache=document_cache,
                         agent_state=agent_state,
                     )
                 active_logger.info(

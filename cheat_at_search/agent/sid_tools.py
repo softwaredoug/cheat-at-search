@@ -18,17 +18,19 @@ from cheat_at_search.agent.sid_legacy_tool import (
 SNIPPET_FIELD = "content"
 
 
-cache = DocumentCache(range_mode="lenient")
-
-
 def read(
     id: Annotated[
         str,
         "A model-facing document ID or ranged reference, such as 123456#800:1600.",
         "document_id_from_search",
     ],
+    agent_state: dict,
 ) -> str:
     """Read up to 10,000 characters from a document returned by search."""
+
+    cache = agent_state.get("_sid_document_cache")
+    if cache is None:
+        return "Error executing read: episode document cache is unavailable."
 
     try:
         model_id, char_range = parse_rendered_model_facing_id(id)
@@ -91,7 +93,9 @@ REPORT_TOOL_EXAMPLE = {
 }
 
 
-def resolve_reported_ids(references: list[str]) -> list[str]:
+def resolve_reported_ids(
+    references: list[str], cache: DocumentCache
+) -> list[str]:
     """Map valid, unique model-facing report IDs back to backend IDs."""
     resolved = []
     seen_model_ids = set()
@@ -195,7 +199,9 @@ def build_sid2_tool_config(
     return tools, examples
 
 
-def _render_search_results(results: list[dict], arguments: dict[str, Any]) -> str:
+def _render_search_results(
+    results: list[dict], arguments: dict[str, Any], cache: DocumentCache
+) -> str:
     """Cache full backend documents and render query-focused XML snippets."""
     if not results:
         return "No results found. Try a different query."
@@ -262,6 +268,7 @@ def _render_search_results(results: list[dict], arguments: dict[str, Any]) -> st
 def call_sid2_tool(
     tool_call: Any,
     tools: Iterable[Callable[..., Any]],
+    document_cache: DocumentCache,
     agent_state: dict | None = None,
 ) -> str:
     """Parse a Responses function call, validate its parameters, and execute it.
@@ -315,8 +322,13 @@ def call_sid2_tool(
     if agent_state is None:
         agent_state = {}
     _, _, call_from_tool = make_tool_adapter(tool)
+    tool_agent_state = agent_state
+    if name == "read":
+        tool_agent_state = {"_sid_document_cache": document_cache}
     try:
-        result, json_result = call_from_tool(arguments, agent_state=agent_state)
+        result, json_result = call_from_tool(
+            arguments, agent_state=tool_agent_state
+        )
     except ValidationError as error:
         return f"Error executing {name}: invalid arguments: {error}"
 
@@ -325,5 +337,5 @@ def call_sid2_tool(
     if name == "read":
         return json_result
     if isinstance(result, list) and all(isinstance(document, dict) for document in result):
-        return _render_search_results(result, arguments)
+        return _render_search_results(result, arguments, document_cache)
     return json_result

@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 from typing import Annotated, Any, Dict, Literal, Sequence, cast
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from sid import DocumentCache
 
 from cheat_at_search.agent.sid_agent import SIDAgent, SIDChatResponse
 from cheat_at_search.agent.sid_tools import (
@@ -246,7 +247,9 @@ def echo_tool(query: str, agent_state: dict) -> dict:
 def test_call_sid2_tool_handles_bad_or_unknown_calls(tool_name, arguments, expected):
     call = SimpleNamespace(name=tool_name, arguments=arguments)
 
-    output = call_sid2_tool(call, [echo_tool], agent_state={"tenant": "test"})
+    output = call_sid2_tool(
+        call, [echo_tool], DocumentCache(), agent_state={"tenant": "test"}
+    )
 
     assert expected in output
 
@@ -257,7 +260,12 @@ def test_call_sid2_tool_parses_arguments_and_injects_agent_state():
         arguments='{"query": "hello"}',
     )
 
-    output = call_sid2_tool(call, [echo_tool], agent_state={"tenant": "tenant-1"})
+    output = call_sid2_tool(
+        call,
+        [echo_tool],
+        DocumentCache(),
+        agent_state={"tenant": "tenant-1"},
+    )
 
     assert output == '{"query":"hello","tenant":"tenant-1"}'
 
@@ -268,7 +276,7 @@ def test_call_sid2_tool_dispatches_alias_to_original_callable():
         arguments='{"query": "hello"}',
     )
 
-    output = call_sid2_tool(call, [search_bm25])
+    output = call_sid2_tool(call, [search_bm25], DocumentCache())
 
     assert output == '{"backend_tool":"search_bm25","query":"hello"}'
 
@@ -289,12 +297,12 @@ def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():
         arguments='{"query": "hello world", "snippet_size": 12}',
     )
 
-    with patch("cheat_at_search.agent.sid_tools.cache") as mock_cache:
-        mock_cache.__contains__.return_value = False
-        view = mock_cache.apply_snippet.return_value
-        view.render_xml.return_value = '<doc id="123456">hello world</doc>'
+    mock_cache = MagicMock()
+    mock_cache.__contains__.return_value = False
+    view = mock_cache.apply_snippet.return_value
+    view.render_xml.return_value = '<doc id="123456">hello world</doc>'
 
-        output = call_sid2_tool(call, [search])
+    output = call_sid2_tool(call, [search], mock_cache)
 
     assert output == '<doc id="123456">hello world</doc>'
     mock_cache.add_document.assert_called_once_with(
@@ -313,8 +321,8 @@ def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():
     mock_cache.update_seen.assert_called_once_with(view)
 
 
-@patch("cheat_at_search.agent.sid_tools.cache")
-def test_call_sid2_tool_reads_cached_document_by_ranged_id(mock_cache):
+def test_call_sid2_tool_reads_cached_document_by_ranged_id():
+    mock_cache = Mock()
     mock_cache.contains_model_facing_id.return_value = True
     mock_cache.to_data_id.return_value = "backend-1"
     mock_cache.resolve_char_range.return_value = (5, 15)
@@ -325,7 +333,7 @@ def test_call_sid2_tool_reads_cached_document_by_ranged_id(mock_cache):
         arguments='{"id": "123456#5:15"}',
     )
 
-    output = call_sid2_tool(call, [filtered_search])
+    output = call_sid2_tool(call, [filtered_search], mock_cache)
 
     assert output == '<doc id="123456#5:15">hello world</doc>'
     mock_cache.resolve_char_range.assert_called_once_with(
@@ -346,14 +354,14 @@ def test_call_sid2_tool_treats_report_as_a_terminal_call():
     )
 
     with pytest.raises(ValueError, match="terminal"):
-        call_sid2_tool(call, [echo_tool])
+        call_sid2_tool(call, [echo_tool], DocumentCache())
 
 
 @patch("cheat_at_search.agent.sid_agent.OpenAI")
 @patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
-@patch("cheat_at_search.agent.sid_tools.cache")
+@patch("cheat_at_search.agent.sid_agent.DocumentCache")
 def test_sid_agent_report_returns_legacy_search_results_shape(
-    mock_cache, mock_key_for_provider, mock_openai
+    mock_document_cache, mock_key_for_provider, mock_openai
 ):
     def search(query: str) -> list[dict]:
         """Search a hello-world test corpus."""
@@ -365,12 +373,13 @@ def test_sid_agent_report_returns_legacy_search_results_shape(
             }
         ]
 
-    mock_cache.__contains__.return_value = False
-    mock_cache.apply_snippet.return_value.render_xml.return_value = (
+    episode_cache = mock_document_cache.return_value
+    episode_cache.__contains__.return_value = False
+    episode_cache.apply_snippet.return_value.render_xml.return_value = (
         '<doc id="123456">A friendly hello world greeting.</doc>'
     )
-    mock_cache.contains_model_facing_id.return_value = True
-    mock_cache.to_data_id.return_value = "backend-doc-1"
+    episode_cache.contains_model_facing_id.return_value = True
+    episode_cache.to_data_id.return_value = "backend-doc-1"
     search_response = SimpleNamespace(
         output=[
             SimpleNamespace(
@@ -409,6 +418,11 @@ def test_sid_agent_report_returns_legacy_search_results_shape(
         inputs, agent_state=state, logger=active_logger
     )
 
+    mock_document_cache.assert_called_once_with(range_mode="lenient")
+    episode_cache.add_document.assert_called_once_with(
+        "backend-doc-1",
+        {"title": "Hello world", "content": "A friendly hello world greeting."},
+    )
     assert isinstance(final_response, SIDChatResponse)
     assert final_response.output_parsed.ranked_results == ["backend-doc-1"]
     assert inputs[-1] is report_response.output[0]
@@ -551,6 +565,35 @@ def test_sid_agent_loop_sends_user_history_and_returns_first_response(
         4,
         0,
     )
+
+
+@patch("cheat_at_search.agent.sid_agent.OpenAI")
+@patch("cheat_at_search.agent.sid_agent.key_for_provider", return_value="sid-test-key")
+@patch("cheat_at_search.agent.sid_agent.DocumentCache")
+def test_sid_agent_creates_a_document_cache_for_each_episode(
+    mock_document_cache, mock_key_for_provider, mock_openai
+):
+    episode_caches = [Mock(), Mock()]
+    mock_document_cache.side_effect = episode_caches
+    mock_openai.return_value.responses.create.return_value = SimpleNamespace(
+        output=[],
+        usage=SimpleNamespace(input_tokens=0, output_tokens=0),
+    )
+    agent = SIDAgent(tools=[filtered_search], max_turns=1)
+    inputs = [
+        {"role": "system", "content": "Find relevant product documents."},
+        {"role": "user", "content": "Find a red hiking jacket."},
+    ]
+
+    agent.loop(inputs)
+    agent.loop(inputs)
+
+    assert mock_document_cache.call_count == 2
+    assert all(
+        call.kwargs == {"range_mode": "lenient"}
+        for call in mock_document_cache.call_args_list
+    )
+    assert episode_caches[0] is not episode_caches[1]
 
 
 INVALID_LOOP_INPUT_SCENARIOS = {
