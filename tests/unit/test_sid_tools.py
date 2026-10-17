@@ -26,6 +26,30 @@ def basic_search(query: str, limit: int = 5) -> list[dict]:
     return []
 
 
+def search_bm25(query: str) -> dict:
+    """Run the backend BM25 search."""
+    return {"backend_tool": "search_bm25", "query": query}
+
+
+search_bm25.aliases = ["text_search", "bm25_search"]
+
+
+def another_text_search(query: str) -> list[dict]:
+    """Run another backend text search."""
+    return []
+
+
+another_text_search.aliases = ["text_search"]
+
+
+def reserved_read_alias(query: str) -> list[dict]:
+    """A search tool that conflicts with SID-2's built-in read tool."""
+    return []
+
+
+reserved_read_alias.aliases = ["read"]
+
+
 def w_scenarios(scenarios: Dict[str, Dict[str, Any]]):
     """Decorate scenarios with readable pytest IDs, matching legacy tool tests."""
     return pytest.mark.parametrize(
@@ -101,6 +125,53 @@ def test_build_sid2_tool_config_uses_callable_metadata(
         "name": expected_name,
         "arguments": expected_example_arguments,
     }
+
+
+ALIASES_SCENARIOS = {
+    "backend name replaced by aliases": {
+        "tool": search_bm25,
+        "expected_names": [
+            "text_search",
+            "bm25_search",
+            "read",
+            "report_helpful_ids",
+        ],
+    },
+    "no aliases uses function name": {
+        "tool": basic_search,
+        "expected_names": ["basic_search", "read", "report_helpful_ids"],
+    },
+}
+
+
+@w_scenarios(ALIASES_SCENARIOS)
+def test_build_sid2_tool_config_uses_function_aliases(tool, expected_names):
+    tools, examples = build_sid2_tool_config([tool])
+
+    assert [tool_spec["name"] for tool_spec in tools] == expected_names
+    assert [example["name"] for example in examples] == expected_names
+    if tool is search_bm25:
+        assert all(
+            tool_spec["description"] == "Run the backend BM25 search."
+            for tool_spec in tools[:2]
+        )
+
+
+@w_scenarios(
+    {
+        "two tools share an alias": {
+            "tools": [search_bm25, another_text_search],
+            "error": "unique",
+        },
+        "alias collides with read": {
+            "tools": [reserved_read_alias],
+            "error": "reserves",
+        },
+    }
+)
+def test_build_sid2_tool_config_rejects_alias_collisions(tools, error):
+    with pytest.raises(ValueError, match=error):
+        build_sid2_tool_config(tools)
 
 
 def test_build_sid2_tool_config_adds_read_and_fixed_report_tools():
@@ -189,6 +260,17 @@ def test_call_sid2_tool_parses_arguments_and_injects_agent_state():
     output = call_sid2_tool(call, [echo_tool], agent_state={"tenant": "tenant-1"})
 
     assert output == '{"query":"hello","tenant":"tenant-1"}'
+
+
+def test_call_sid2_tool_dispatches_alias_to_original_callable():
+    call = SimpleNamespace(
+        name="text_search",
+        arguments='{"query": "hello"}',
+    )
+
+    output = call_sid2_tool(call, [search_bm25])
+
+    assert output == '{"backend_tool":"search_bm25","query":"hello"}'
 
 
 def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():

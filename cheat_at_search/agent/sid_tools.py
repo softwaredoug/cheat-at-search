@@ -107,7 +107,21 @@ def resolve_reported_ids(references: list[str]) -> list[str]:
     return resolved
 
 
-def _tool_example(tool: Callable[..., Any]) -> dict[str, Any]:
+def _tool_names(tool: Callable[..., Any]) -> list[str]:
+    """Return the provider-facing names declared on a callable."""
+    aliases = getattr(tool, "aliases", None)
+    if aliases is None or aliases == [] or aliases == ():
+        return [tool.__name__]
+    if isinstance(aliases, str) or not isinstance(aliases, (list, tuple)):
+        raise TypeError(f"{tool.__name__}.aliases must be a list or tuple of names.")
+    if not all(isinstance(name, str) and name for name in aliases):
+        raise ValueError(f"{tool.__name__}.aliases must contain non-empty strings.")
+    if len(aliases) != len(set(aliases)):
+        raise ValueError(f"{tool.__name__}.aliases must not contain duplicates.")
+    return list(aliases)
+
+
+def _tool_example(tool: Callable[..., Any], name: str) -> dict[str, Any]:
     """Build one SID-2 few-shot tool-call example from a callable's annotations."""
     schema = legacy_tool_schema(tool)
     arguments = {
@@ -119,20 +133,20 @@ def _tool_example(tool: Callable[..., Any]) -> dict[str, Any]:
         for argument in schema.arguments
     }
     return {
-        "caption": f"Example call for {schema.name}: {schema.docstring}",
-        "name": schema.name,
+        "caption": f"Example call for {name}: {schema.docstring}",
+        "name": name,
         "arguments": arguments,
     }
 
 
-def _response_tool_schema(tool: Callable[..., Any]) -> dict[str, Any]:
+def _response_tool_schema(tool: Callable[..., Any], name: str) -> dict[str, Any]:
     """Build a Responses function schema, retaining SID legacy metadata."""
     schema = legacy_tool_schema(tool)
     _, response_schema, _ = make_tool_adapter(tool)
 
     # The legacy parser understands both string descriptions and example values
     # in Annotated metadata. Use its parsed descriptions for consistent output.
-    response_schema["name"] = schema.name
+    response_schema["name"] = name
     response_schema["description"] = schema.docstring
     properties = response_schema["parameters"].get("properties", {})
     for argument in schema.arguments:
@@ -146,17 +160,25 @@ def build_sid2_tool_config(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Build SID-2's API ``tools`` and ``tool_examples`` from search callables.
 
-    Tool names, descriptions, parameter descriptions, types, and annotated
-    examples are derived from each callable. SID-2's cache-backed ``read`` and
-    fixed ``report_helpful_ids`` tools are appended automatically.
+    Tool descriptions, parameter descriptions, types, and annotated examples
+    are derived from each callable. A callable's non-empty ``aliases`` list
+    supplies its SID-facing tool names; otherwise its ``__name__`` is used.
+    SID-2's cache-backed ``read`` and fixed ``report_helpful_ids`` tools are
+    appended automatically.
     """
     search_tools = list(search_tools)
     if not search_tools:
         raise ValueError("At least one SID-2 search tool is required.")
 
-    names = [getattr(tool, "__name__", None) for tool in search_tools]
     if any(not callable(tool) for tool in search_tools):
         raise TypeError("SID-2 tools must be callable.")
+
+    exposed_tools = [
+        (name, tool)
+        for tool in search_tools
+        for name in _tool_names(tool)
+    ]
+    names = [name for name, _ in exposed_tools]
     reserved_names = {"read", "report_helpful_ids"}
     collisions = sorted(reserved_names.intersection(names))
     if collisions:
@@ -164,11 +186,11 @@ def build_sid2_tool_config(
     if len(names) != len(set(names)):
         raise ValueError("SID-2 tool names must be unique.")
 
-    functions = [*search_tools, read]
-    tools = [_response_tool_schema(tool) for tool in functions]
+    exposed_tools.append(("read", read))
+    tools = [_response_tool_schema(tool, name) for name, tool in exposed_tools]
     tools.append(REPORT_TOOL)
 
-    examples = [_tool_example(tool) for tool in functions]
+    examples = [_tool_example(tool, name) for name, tool in exposed_tools]
     examples.append(REPORT_TOOL_EXAMPLE)
     return tools, examples
 
@@ -261,15 +283,20 @@ def call_sid2_tool(
         raise ValueError("report_helpful_ids is a terminal tool call and is not executed.")
 
     functions = list(tools)
-    names = [getattr(tool, "__name__", None) for tool in functions]
     if any(not callable(tool) for tool in functions):
         raise TypeError("SID-2 tools must be callable.")
+    exposed_tools = [
+        (name, tool)
+        for tool in functions
+        for name in _tool_names(tool)
+    ]
+    names = [name for name, _ in exposed_tools]
     if len(names) != len(set(names)):
         raise ValueError("SID-2 tool names must be unique.")
     if "read" in names:
         raise ValueError("SID-2 reserves the 'read' tool name.")
-    functions.append(read)
-    function_by_name = {tool.__name__: tool for tool in functions}
+    exposed_tools.append(("read", read))
+    function_by_name = {name: tool for name, tool in exposed_tools}
     tool = function_by_name.get(name)
     if tool is None:
         return f"Error executing {name}: tool is not registered."
