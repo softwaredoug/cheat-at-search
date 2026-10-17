@@ -49,7 +49,7 @@ def _log_reasoning_summaries(response: Any, active_logger) -> None:
                 active_logger.info("Reasoning summary: %s", _log_preview(text))
 
 
-def _call_sid(client, inputs, request, num_attempts=5):
+def _call_sid(client, inputs, request, num_attempts=6):
     for attempt in range(num_attempts):
         try:
             return client.responses.create(input=inputs, **request)
