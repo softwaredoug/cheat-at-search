@@ -5,9 +5,10 @@ from time import sleep
 from typing import Any, Literal
 from uuid import uuid4
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from pydantic import BaseModel
 from sid import DocumentCache
+from copy import deepcopy
 
 from cheat_at_search.agent.search_client import (
     Agent,
@@ -34,7 +35,7 @@ def _log_preview(value: Any, max_chars: int = 1200) -> str:
     return f"{text[:max_chars - 3]}... (total {len(text)} chars)"
 
 
-def _log_reasoning_summaries(response: Any, active_logger) -> None:
+def _log_reasoning_summaries(response: Any, logger) -> None:
     """Log available reasoning summaries without exposing encrypted content."""
     for item in getattr(response, "output", []):
         if getattr(item, "type", None) != "reasoning":
@@ -46,7 +47,7 @@ def _log_reasoning_summaries(response: Any, active_logger) -> None:
                 else getattr(summary, "text", None)
             )
             if text:
-                active_logger.info("Reasoning summary: %s", _log_preview(text))
+                logger.info("Reasoning summary: %s", _log_preview(text))
 
 
 def _call_sid(client, inputs, request, num_attempts=6):
@@ -63,6 +64,18 @@ def _call_sid(client, inputs, request, num_attempts=6):
                 exc,
             )
             sleep(3 ** attempt)  # Exponential backoff
+
+
+def _is_token_exhaustion_error(error: BadRequestError) -> bool:
+    details = " ".join(
+        str(value)
+        for value in (error, error.body, error.code, error.param)
+        if value is not None
+    ).lower()
+    return "token" in details and any(
+        marker in details
+        for marker in ("exhaust", "exceed", "limit", "maximum", "max_output_tokens")
+    )
 
 
 class SIDChatResponse(BaseModel):
@@ -166,18 +179,13 @@ class SIDAgent(Agent):
             )
         )
 
-    def loop(
+    def _loop(
         self,
         inputs=None,
         agent_state: dict | None = None,
         logger=None,
     ) -> tuple[Any, list]:
         """Run an episode until SID-2 reports IDs or the turn limit is reached."""
-        active_logger = logger or globals()["logger"]
-        if agent_state is None:
-            agent_state = {}
-        initialize_resource_counters(agent_state)
-        agent_state["trace_logger"] = active_logger
         if inputs is None:
             raise ValueError("SIDAgent requires a system prompt in the inputs list.")
 
@@ -198,10 +206,10 @@ class SIDAgent(Agent):
         if not isinstance(inputs[1], dict) or inputs[1].get("role") != "user":
             raise ValueError("The second input must be a user prompt with role 'user'.")
 
-        active_logger.info("System prompt: %s", instructions)
+        logger.info("System prompt: %s", instructions)
         for message in inputs[1:]:
             if isinstance(message, dict) and message.get("role") == "user":
-                active_logger.info("User prompt: %s", message.get("content", ""))
+                logger.info("User prompt: %s", message.get("content", ""))
 
         request = self._request_config(instructions, uuid4().hex)
         document_cache = DocumentCache(range_mode="lenient")
@@ -209,7 +217,7 @@ class SIDAgent(Agent):
         search_tool_names = {tool.__name__ for tool in self.search_tools}
 
         for turn in range(1, self.max_turns + 1):
-            active_logger.info(
+            logger.info(
                 "SID-2 turn %d/%d (%d remaining)",
                 turn,
                 self.max_turns,
@@ -218,12 +226,12 @@ class SIDAgent(Agent):
             response = _call_sid(self.client, inputs[1:], request)
             inputs.extend(response.output)
 
-            _log_reasoning_summaries(response, active_logger)
+            _log_reasoning_summaries(response, logger)
             for item in response.output:
                 if getattr(item, "type", None) == "message":
                     text = getattr(response, "output_text", None)
                     if text:
-                        active_logger.info("Assistant message: %s", _log_preview(text))
+                        logger.info("Assistant message: %s", _log_preview(text))
 
             response_usage = getattr(response, "usage", None)
             input_details = getattr(response_usage, "input_tokens_details", None)
@@ -238,7 +246,7 @@ class SIDAgent(Agent):
                 "output_tokens",
                 getattr(response_usage, "output_tokens", 0) or 0,
             )
-            active_logger.info(
+            logger.info(
                 "Token usage: input=%s cached_input=%s output=%s reasoning=%s",
                 getattr(response_usage, "input_tokens", 0) or 0,
                 getattr(input_details, "cached_tokens", 0) or 0,
@@ -250,18 +258,18 @@ class SIDAgent(Agent):
                 item for item in response.output if item.type == "function_call"
             ]
             record_resource(agent_state, "num_tool_calls", len(function_calls))
-            active_logger.debug("SID-2 usage: %s", response_usage)
+            logger.debug("SID-2 usage: %s", response_usage)
 
             # An incomplete response may end in the middle of a tool call. Do
             # not execute a truncated call or continue the episode.
             if getattr(response, "status", None) == "incomplete":
-                active_logger.warning(
+                logger.warning(
                     "SID-2 response was incomplete; ending episode without a report."
                 )
                 break
 
             for item in function_calls:
-                active_logger.info(
+                logger.info(
                     "Tool called: %s args=%s",
                     item.name,
                     _log_preview(item.arguments or ""),
@@ -271,7 +279,7 @@ class SIDAgent(Agent):
                 function_calls, has_searched, document_cache
             )
             if isinstance(report_result, SIDChatResponse):
-                active_logger.info(
+                logger.info(
                     "Tool response: %s",
                     _log_preview(report_result.output_parsed.ranked_results),
                 )
@@ -290,7 +298,7 @@ class SIDAgent(Agent):
                         document_cache=document_cache,
                         agent_state=agent_state,
                     )
-                active_logger.info(
+                logger.info(
                     "Tool response: %s",
                     _log_preview(observation),
                 )
@@ -309,7 +317,7 @@ class SIDAgent(Agent):
                     f"{self.max_turns} total."
                 )
                 inputs.append({"role": "user", "content": budget_message})
-                active_logger.info("User prompt: %s", budget_message)
+                logger.info("User prompt: %s", budget_message)
                 if remaining == 1:
                     final_turn_message = (
                         "This is your last turn: you must call "
@@ -317,10 +325,44 @@ class SIDAgent(Agent):
                         "but not reported is lost when this turn ends."
                     )
                     inputs.append({"role": "user", "content": final_turn_message})
-                    active_logger.info("User prompt: %s", final_turn_message)
+                    logger.info("User prompt: %s", final_turn_message)
 
-        active_logger.warning(
+        logger.warning(
             "SID-2 reached max_turns=%d without reporting helpful IDs.",
             self.max_turns,
         )
         return SIDChatResponse(output_parsed=SearchResults(ranked_results=[])), inputs
+
+    def loop(
+        self,
+        inputs=None,
+        agent_state: dict | None = None,
+        logger=None,
+    ) -> tuple[Any, list]:
+        active_logger = logger or globals()["logger"]
+        if agent_state is None:
+            agent_state = {}
+        initialize_resource_counters(agent_state)
+        agent_state["trace_logger"] = active_logger
+
+        backup_inputs = deepcopy(inputs) if inputs is not None else None
+        num_attempts = 3
+
+        for attempt in range(num_attempts):
+            try:
+                return self._loop(inputs=inputs, agent_state=agent_state,
+                                  logger=active_logger)
+            except BadRequestError as exc:
+                if (
+                    not _is_token_exhaustion_error(exc)
+                    or attempt + 1 == num_attempts
+                ):
+                    raise
+                inputs = backup_inputs
+                active_logger.warning(
+                    "SIDAgent loop failed on attempt %d/%d: %s",
+                    attempt + 1,
+                    num_attempts,
+                    exc,
+                )
+                sleep(3 ** attempt)

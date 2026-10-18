@@ -3,6 +3,8 @@ from typing import Annotated, Any, Dict, Literal, Sequence, cast
 from unittest.mock import Mock, patch
 
 import pytest
+import httpx
+from openai import BadRequestError
 
 from cheat_at_search.agent.sid_agent import SIDAgent, SIDChatResponse
 
@@ -23,6 +25,58 @@ def w_scenarios(scenarios: Dict[str, Dict[str, Any]]):
         [tuple(scenario.values()) for scenario in scenarios.values()],
         ids=list(scenarios.keys()),
     )
+
+
+def _bad_request_error(message: str) -> BadRequestError:
+    request = httpx.Request("POST", "https://api.sid-1.com/v1/responses")
+    return BadRequestError(
+        message,
+        response=httpx.Response(400, request=request),
+        body=None,
+    )
+
+
+@patch("cheat_at_search.agent.sid_agent.sleep")
+def test_sid_agent_retries_token_exhaustion_bad_request(mock_sleep):
+    inputs = [
+        {"role": "system", "content": "Find documents."},
+        {"role": "user", "content": "Find something."},
+    ]
+    agent = object.__new__(SIDAgent)
+    response = object()
+    agent._loop = Mock(
+        side_effect=[
+            _bad_request_error("The maximum output token limit was exhausted."),
+            (response, inputs),
+        ]
+    )
+
+    result = agent.loop(inputs, logger=Mock())
+
+    assert result == (response, inputs)
+    assert agent._loop.call_count == 2
+    mock_sleep.assert_called_once_with(1)
+
+
+@patch("cheat_at_search.agent.sid_agent.sleep")
+def test_sid_agent_does_not_retry_other_errors(mock_sleep):
+    inputs = [
+        {"role": "system", "content": "Find documents."},
+        {"role": "user", "content": "Find something."},
+    ]
+    errors = [
+        RuntimeError("token limit exhausted"),
+        _bad_request_error("Invalid API token."),
+    ]
+    for error in errors:
+        agent = object.__new__(SIDAgent)
+        agent._loop = Mock(side_effect=error)
+
+        with pytest.raises(type(error)):
+            agent.loop(inputs, logger=Mock())
+
+        agent._loop.assert_called_once()
+    mock_sleep.assert_not_called()
 
 
 @patch("cheat_at_search.agent.sid_agent.OpenAI")
