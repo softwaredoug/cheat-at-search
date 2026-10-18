@@ -2,7 +2,7 @@
 
 import json
 from time import sleep
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from openai import BadRequestError, OpenAI
@@ -23,6 +23,7 @@ from cheat_at_search.agent.sid_tools import (
 )
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
+from cheat_at_search.passage_fn import default_passage_fn
 
 logger = log_to_stdout("sid2_search_client")
 
@@ -96,13 +97,18 @@ class SIDAgent(Agent):
         model: str = "sid-2",
         max_turns: int = 10,
         reward: str = "ndcg",
+        passage_fn: Callable[[Any], str] = default_passage_fn,
         reasoning_effort: Literal["low", "medium", "high"] = "low",
     ) -> None:
         """Configure the SID-2 model, search tools, and episode limits."""
 
+        if not callable(passage_fn):
+            raise TypeError("passage_fn must be callable.")
+
         self.reward = reward
         self.model = model
         self.max_turns = max_turns
+        self.passage_fn = passage_fn
         self.reasoning_effort = reasoning_effort
         self.search_tools = list(tools)
         self.tools, self.tool_examples = build_sid2_tool_config(self.search_tools)
@@ -296,6 +302,7 @@ class SIDAgent(Agent):
                         item,
                         self.search_tools,
                         document_cache=document_cache,
+                        passage_fn=self.passage_fn,
                         agent_state=agent_state,
                     )
                 logger.info(
@@ -346,6 +353,13 @@ class SIDAgent(Agent):
         agent_state["trace_logger"] = active_logger
 
         backup_inputs = deepcopy(inputs) if inputs is not None else None
+        backup_agent_state = deepcopy(
+            {
+                key: value
+                for key, value in agent_state.items()
+                if key != "trace_logger"
+            }
+        )
         num_attempts = 3
 
         for attempt in range(num_attempts):
@@ -359,6 +373,14 @@ class SIDAgent(Agent):
                 ):
                     raise
                 inputs = backup_inputs
+                token_usage = {
+                    key: agent_state[key]
+                    for key in ("resource.input_tokens", "resource.output_tokens")
+                }
+                agent_state.clear()
+                agent_state.update(deepcopy(backup_agent_state))
+                agent_state["trace_logger"] = active_logger
+                agent_state.update(token_usage)
                 active_logger.warning(
                     "SIDAgent loop failed on attempt %d/%d: %s",
                     attempt + 1,

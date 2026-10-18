@@ -247,7 +247,10 @@ def test_call_sid2_tool_handles_bad_or_unknown_calls(tool_name, arguments, expec
     call = SimpleNamespace(name=tool_name, arguments=arguments)
 
     output = call_sid2_tool(
-        call, [echo_tool], DocumentCache(), agent_state={"tenant": "test"}
+        call,
+        [echo_tool],
+        DocumentCache(),
+        agent_state={"tenant": "test"},
     )
 
     assert expected in output
@@ -287,7 +290,7 @@ def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():
             {
                 "id": "hello-1",
                 "title": "Hello world",
-                "content": "A friendly hello world greeting.",
+                "description": "A friendly hello world greeting.",
             }
         ]
 
@@ -308,7 +311,7 @@ def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():
         "hello-1",
         {
             "title": "Hello world",
-            "content": "A friendly hello world greeting.",
+            "content": "Hello world\n\nA friendly hello world greeting.",
         },
     )
     mock_cache.apply_snippet.assert_called_once_with(
@@ -318,6 +321,17 @@ def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():
         snippet_size=12,
     )
     mock_cache.update_seen.assert_called_once_with(view)
+
+
+def test_call_sid2_tool_requires_nonempty_passage_text():
+    def search(query: str) -> list[dict]:
+        """Return content without either default passage source field."""
+        return [{"id": "hello-1", "content": "A friendly greeting."}]
+
+    call = SimpleNamespace(name="search", arguments='{"query": "hello"}')
+
+    with pytest.raises(ValueError, match="passage_fn must return non-empty text"):
+        call_sid2_tool(call, [search], Mock())
 
 
 def test_call_sid2_tool_reads_cached_document_by_ranged_id():

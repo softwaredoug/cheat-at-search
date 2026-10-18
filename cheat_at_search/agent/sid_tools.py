@@ -13,6 +13,7 @@ from cheat_at_search.agent.sid_legacy_tool import (
     _example_argument_value,
     tool_schema as legacy_tool_schema,
 )
+from cheat_at_search.passage_fn import default_passage_fn
 
 
 SNIPPET_FIELD = "content"
@@ -200,7 +201,10 @@ def build_sid2_tool_config(
 
 
 def _render_search_results(
-    results: list[dict], arguments: dict[str, Any], cache: DocumentCache
+    results: list[dict],
+    arguments: dict[str, Any],
+    cache: DocumentCache,
+    passage_fn: Callable[[Any], str],
 ) -> str:
     """Cache full backend documents and render query-focused XML snippets."""
     if not results:
@@ -241,15 +245,18 @@ def _render_search_results(
             )
         fields = dict(result)
         data_id = fields.pop("id", None)
-        content = fields.get(SNIPPET_FIELD)
         if not isinstance(data_id, str) or not data_id:
             raise ValueError(
                 f"Search result must have a non-empty string 'id': {result!r}."
             )
+        content = passage_fn(fields)
         if not isinstance(content, str) or not content:
             raise ValueError(
-                f"Search result {data_id!r} must have non-empty {SNIPPET_FIELD!r} text."
+                f"passage_fn must return non-empty text for search result {data_id!r}."
             )
+        fields.pop("description", None)
+        fields.pop(SNIPPET_FIELD, None)
+        fields[SNIPPET_FIELD] = content
 
         if data_id not in cache:
             cache.add_document(data_id, fields)
@@ -269,6 +276,7 @@ def call_sid2_tool(
     tool_call: Any,
     tools: Iterable[Callable[..., Any]],
     document_cache: DocumentCache,
+    passage_fn: Callable[[Any], str] = default_passage_fn,
     agent_state: dict | None = None,
 ) -> str:
     """Parse a Responses function call, validate its parameters, and execute it.
@@ -337,5 +345,7 @@ def call_sid2_tool(
     if name == "read":
         return json_result
     if isinstance(result, list) and all(isinstance(document, dict) for document in result):
-        return _render_search_results(result, arguments, document_cache)
+        return _render_search_results(
+            result, arguments, document_cache, passage_fn
+        )
     return json_result

@@ -1,3 +1,4 @@
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Annotated, Any, Dict, Literal, Sequence, cast
 from unittest.mock import Mock, patch
@@ -44,18 +45,64 @@ def test_sid_agent_retries_token_exhaustion_bad_request(mock_sleep):
     ]
     agent = object.__new__(SIDAgent)
     response = object()
-    agent._loop = Mock(
-        side_effect=[
-            _bad_request_error("The maximum output token limit was exhausted."),
-            (response, inputs),
-        ]
-    )
+    original_state = {
+        "scratch": {"calls": ["before"]},
+        "resource.input_tokens": 10,
+        "resource.output_tokens": 4,
+        "resource.num_tool_calls": 2,
+    }
+    agent_state = deepcopy(original_state)
+    attempt_states = []
 
-    result = agent.loop(inputs, logger=Mock())
+    def run_attempt(inputs, agent_state, logger):
+        state_without_logger = {
+            key: value
+            for key, value in agent_state.items()
+            if key != "trace_logger"
+        }
+        attempt_states.append(deepcopy(state_without_logger))
+        if len(attempt_states) == 1:
+            agent_state["scratch"]["calls"].append("failed attempt")
+            agent_state["resource.input_tokens"] += 11
+            agent_state["resource.output_tokens"] += 7
+            agent_state["resource.num_tool_calls"] += 5
+            raise _bad_request_error(
+                "The maximum output token limit was exhausted."
+            )
+
+        assert agent_state["scratch"] == original_state["scratch"]
+        assert agent_state["resource.input_tokens"] == 21
+        assert agent_state["resource.output_tokens"] == 11
+        assert agent_state["resource.num_tool_calls"] == 2
+        agent_state["scratch"]["calls"].append("successful attempt")
+        agent_state["resource.input_tokens"] += 3
+        agent_state["resource.output_tokens"] += 2
+        agent_state["resource.num_tool_calls"] += 1
+        return response, inputs
+
+    agent._loop = Mock(side_effect=run_attempt)
+    active_logger = Mock()
+
+    result = agent.loop(inputs, agent_state=agent_state, logger=active_logger)
 
     assert result == (response, inputs)
     assert agent._loop.call_count == 2
     mock_sleep.assert_called_once_with(1)
+    assert attempt_states == [
+        original_state,
+        {
+            **original_state,
+            "resource.input_tokens": 21,
+            "resource.output_tokens": 11,
+        },
+    ]
+    assert agent_state == {
+        "scratch": {"calls": ["before", "successful attempt"]},
+        "resource.input_tokens": 24,
+        "resource.output_tokens": 13,
+        "resource.num_tool_calls": 3,
+        "trace_logger": active_logger,
+    }
 
 
 @patch("cheat_at_search.agent.sid_agent.sleep")
@@ -91,9 +138,12 @@ def test_sid_agent_report_returns_legacy_search_results_shape(
             {
                 "id": "backend-doc-1",
                 "title": "Hello world",
-                "content": "A friendly hello world greeting.",
+                "description": "A friendly hello world greeting.",
             }
         ]
+
+    def test_passage_fn(document: dict) -> str:
+        return f"{document['title']} — {document['description']}"
 
     episode_cache = mock_document_cache.return_value
     episode_cache.__contains__.return_value = False
@@ -128,7 +178,7 @@ def test_sid_agent_report_returns_legacy_search_results_shape(
         search_response,
         report_response,
     ]
-    agent = SIDAgent(tools=[search], max_turns=2)
+    agent = SIDAgent(tools=[search], max_turns=2, passage_fn=test_passage_fn)
     state = {}
     active_logger = Mock()
     inputs = [
@@ -143,7 +193,7 @@ def test_sid_agent_report_returns_legacy_search_results_shape(
     mock_document_cache.assert_called_once_with(range_mode="lenient")
     episode_cache.add_document.assert_called_once_with(
         "backend-doc-1",
-        {"title": "Hello world", "content": "A friendly hello world greeting."},
+        {"title": "Hello world", "content": "Hello world — A friendly hello world greeting."},
     )
     assert isinstance(final_response, SIDChatResponse)
     assert final_response.output_parsed.ranked_results == ["backend-doc-1"]

@@ -25,7 +25,7 @@ def test_sid_agent_requests_hello_world_search():
             {
                 "id": "hello-world",
                 "title": "Hello world",
-                "content": "A friendly hello world greeting.",
+                "description": "A friendly hello world greeting.",
             }
         ]
 
