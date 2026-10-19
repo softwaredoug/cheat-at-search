@@ -288,6 +288,7 @@ def test_call_sid2_tool_renders_search_documents_from_the_episode_cache():
                 "id": "hello-1",
                 "title": "Hello world",
                 "description": "A friendly hello world greeting.",
+                "score": 0.92,
             }
         ]
 

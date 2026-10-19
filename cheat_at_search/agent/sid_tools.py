@@ -200,6 +200,7 @@ def _render_search_results(
             raise ValueError(
                 f"Search result must have a non-empty string 'id': {result!r}."
             )
+        fields.pop("score", None)
         content = passage_fn(fields)
         if not isinstance(content, str) or not content:
             raise ValueError(
