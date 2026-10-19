@@ -5,11 +5,8 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from sid import DocumentCache
 
-from cheat_at_search.agent.sid_tools import (
-    REPORT_TOOL,
-    build_sid2_tool_config,
-    call_sid2_tool,
-)
+from cheat_at_search.agent.sid_builtins import REPORT_TOOL
+from cheat_at_search.agent.sid_tools import build_sid2_tool_config, call_sid2_tool
 
 
 def filtered_search(

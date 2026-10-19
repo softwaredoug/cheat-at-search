@@ -19,8 +19,8 @@ from cheat_at_search.agent.search_client import (
 from cheat_at_search.agent.sid_tools import (
     build_sid2_tool_config,
     call_sid2_tool,
-    resolve_reported_ids,
 )
+from cheat_at_search.agent.sid_builtins import resolve_reported_ids
 from cheat_at_search.data_dir import key_for_provider
 from cheat_at_search.logger import log_to_stdout
 from cheat_at_search.passage_fn import default_passage_fn
