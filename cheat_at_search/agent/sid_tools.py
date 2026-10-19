@@ -23,7 +23,12 @@ from cheat_at_search.passage_fn import default_passage_fn
 
 
 def _tool_names(tool: Callable[..., Any]) -> list[str]:
-    """Return the provider-facing names declared on a callable."""
+    """Return the provider-facing names declared on a callable.
+
+    First see if the function has `aliases` (ie SID likes text_search / search)
+    Second, if no SID alias is found (ie this isn't called `text_search` or something)
+     then go ahead and just use the function name as the tool.
+    """
     aliases = getattr(tool, "aliases", None)
     if aliases is None or aliases == [] or aliases == ():
         return [tool.__name__]
@@ -80,6 +85,11 @@ def build_sid2_tool_config(
     supplies its SID-facing tool names; otherwise its ``__name__`` is used.
     SID-2's cache-backed ``read`` and fixed ``report_helpful_ids`` tools are
     appended automatically.
+
+    Python's typing.Annotated metadata provides parameter descriptions and
+    example values when provided, ie
+
+    def search(query: Annotated[str, "Terms describing the greeting to find.", "delicious taco"]) -> list[dict]:
     """
     search_tools = list(search_tools)
     if not search_tools:
@@ -110,16 +120,8 @@ def build_sid2_tool_config(
     return tools, examples
 
 
-def _render_search_results(
-    results: list[dict],
-    arguments: dict[str, Any],
-    cache: DocumentCache,
-    passage_fn: Callable[[Any], str],
-) -> str:
-    """Cache full backend documents and render query-focused XML snippets."""
-    if not results:
-        return "No results found. Try a different query."
-
+def _query_from_arguments(arguments: dict[str, Any]) -> str:
+    """Map between common query argument names to get the query."""
     query_names = {
         "query",
         "keywords",
@@ -139,6 +141,45 @@ def _render_search_results(
         ),
         "",
     )
+    return query
+
+
+def _render_search_results(
+    results: list[dict],
+    arguments: dict[str, Any],
+    cache: DocumentCache,
+    passage_fn: Callable[[Any], str],
+) -> str:
+    """Cache full backend documents and render query-focused XML snippets.
+
+    Its expected that search tools for agents return a list of dicts of flat
+    attributes like title and description. (IE thats usually what would be sent
+    back to OpenAI)
+
+    SID expects a specific XML response format, ie
+
+    <doc id="hello-world" title="France capital">
+        France is a nation in Europe. Paris is the capital of France.
+    </doc>
+
+    It also expects a cachable snippet inside that XML, based on the
+    relevance to the query, ie for the query "What is the capital of France?"
+    the DocumentCache would represent this as:
+
+    <doc id="hello-world" title="France capital">
+        Paris is the capital of France.
+    </doc>
+
+    This requires us intercepting the query from the tool arguments
+    and then using that to generate a snippet using SID's document
+    cache.
+
+    """
+    if not results:
+        return "No results found. Try a different query."
+
+    query = _query_from_arguments(arguments)
+
     snippet_size = arguments.get("snippet_size", SNIPPET_SIZE_DEFAULT)
     if (
         not isinstance(snippet_size, int)
