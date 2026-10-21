@@ -1,10 +1,12 @@
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 from cheat_at_search.eval import (
     grade_answers,
     grade_results,
+    idcg_max,
     pairwise_agreement,
     pointwise_agreement,
     reciprocal_rank,
@@ -115,6 +117,7 @@ def _run_search_path(
         max_grade=max_grade,
         k=10,
     )
+    max_ndcgs = _max_ndcg_by_query(judgments, max_grade=max_grade, k=10)
 
     if (include_agreement or include_pairwise_agreement) and "score" not in results.columns:
         raise ValueError(
@@ -151,7 +154,27 @@ def _run_search_path(
         if include_pairwise_agreement:
             graded["pairwise_agreement"] = pd.Series(dtype=float)
 
+    graded = graded.merge(max_ndcgs, on=["query", "query_id"], how="left")
     return graded
+
+
+def _max_ndcg_by_query(judgments, max_grade, k):
+    """Return each query's best NDCG from its available judged documents."""
+    idcg = idcg_max(max_grade=max_grade, k=k)
+    ideal = judgments.sort_values("grade", ascending=False, kind="stable").copy()
+    ideal["rank"] = ideal.groupby(["query", "query_id"], sort=False).cumcount() + 1
+    ideal = ideal[ideal["rank"] <= k]
+    rank_discounts = 1 / np.log2(2 ** ideal["rank"])
+    ideal["discounted_gain"] = ((2 ** ideal["grade"]) - 1) * rank_discounts
+
+    max_ndcgs = (
+        ideal.groupby(["query", "query_id"])["discounted_gain"]
+        .sum()
+        .div(idcg)
+        .rename("max_ndcg")
+        .reset_index()
+    )
+    return max_ndcgs
 
 
 def _run_answer_path(

@@ -3,6 +3,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
+
 from cheat_at_search.data_dir import mount
 
 
@@ -60,6 +62,39 @@ def test_vs_ideal_wands_fixture(mock_fetch_wands):
     assert len(comparison) > 0
     assert comparison["rank_actual"].max() <= 10
     assert comparison["rank_ideal"].max() <= 10
+
+
+@patch("cheat_at_search.doug_blog_data.resources.files")
+def test_best_possible_results_match_max_ndcg_doug_blog(mock_resources_files):
+    _mount_temp_cache()
+
+    class BlogResource:
+        def joinpath(self, *_parts):
+            return FIXTURE_ROOT / "doug_blog" / "posts.json.gz"
+
+    mock_resources_files.return_value = BlogResource()
+    module = importlib.import_module("cheat_at_search.doug_blog_data")
+    _clear_module_cache(module)
+
+    from cheat_at_search.search import run_strategy
+    from cheat_at_search.strategy import BestPossibleResults
+
+    corpus = module.corpus
+    judgments = module.judgments
+    strategy = BestPossibleResults(corpus, judgments)
+    graded_results = run_strategy(
+        strategy,
+        judgments,
+        seed=123,
+        show_progress=False,
+        cache=False,
+    )
+
+    per_query = graded_results.groupby(["query_id", "query"])[
+        ["ndcg", "max_ndcg"]
+    ].first()
+    assert len(per_query) > 0
+    np.testing.assert_allclose(per_query["ndcg"], per_query["max_ndcg"])
 
 
 @patch("cheat_at_search.wands_data.fetch_wands")

@@ -113,6 +113,41 @@ def test_run_strategy_passes_batch_size_to_search_all():
     assert strategy.batch_size == 2
 
 
+def test_run_strategy_includes_per_query_max_ndcg():
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
+            {"query_id": 1, "query": "alpha", "doc_id": 11, "grade": 1},
+            {"query_id": 2, "query": "bravo", "doc_id": 20, "grade": 3},
+        ]
+    )
+
+    class DummySearchStrategy:
+        def search_all(self, queries, **_kwargs):
+            doc_ids = {"alpha": [10, 11], "bravo": [20]}
+            rows = []
+            for _, query in queries.iterrows():
+                for rank, doc_id in enumerate(doc_ids[query["query"]], start=1):
+                    rows.append(
+                        {
+                            "query_id": query["query_id"],
+                            "query": query["query"],
+                            "doc_id": doc_id,
+                            "rank": rank,
+                        }
+                    )
+            return pd.DataFrame(rows)
+
+    results = run_strategy(DummySearchStrategy(), judgments, seed=None, cache=False)
+    per_query = results.groupby(["query_id", "query"])["max_ndcg"].first()
+    idcg = 7 * sum(1 / rank for rank in range(1, 11))
+
+    assert np.isclose(per_query.loc[(1, "alpha")], 3.5 / idcg)
+    assert np.isclose(per_query.loc[(2, "bravo")], 7 / idcg)
+    assert np.isclose(per_query.mean(), (3.5 + 7) / (2 * idcg))
+    assert results.loc[results["query"] == "alpha", "max_ndcg"].nunique() == 1
+
+
 def test_run_strategy_passes_batch_size_to_answer_all():
     judgments = pd.DataFrame(
         [
