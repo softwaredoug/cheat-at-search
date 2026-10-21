@@ -106,6 +106,17 @@ def test_process_images_defaults_to_disabled(mock_key_for_provider, mock_openai)
     assert isinstance(inputs[-1]["output"], str)
 
 
+@patch("cheat_at_search.agent.openai_agent.OpenAI")
+@patch("cheat_at_search.agent.openai_agent.key_for_provider")
+def test_explicit_key_is_used_without_looking_up_provider_key(
+    mock_key_for_provider, mock_openai
+):
+    OpenAIAgent(tools=[], model="openai/gpt-5", key="explicit-key")
+
+    mock_key_for_provider.assert_not_called()
+    mock_openai.assert_called_once_with(api_key="explicit-key")
+
+
 def _annotated_search(
     query: Annotated[str, "Terms describing what to search for"],
     limit: Annotated[int, Field(description="Maximum number of results", ge=1, le=10)] = 5,

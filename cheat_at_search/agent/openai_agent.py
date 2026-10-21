@@ -41,12 +41,13 @@ class OpenAIAgent(Agent):
         reasoning_level: str = "medium",
         summary: bool = True,
         process_images: bool = False,
+        key: Optional[str] = None,
     ):
         self.search_tools = {tool.__name__: make_tool_adapter(tool) for tool in tools}
 
         self.provider = model.split("/")[0]
         self.model = model.split("/")[-1]
-        self.openai_key = key_for_provider("openai")
+        self.openai_key = key if key is not None else key_for_provider("openai")
         if self.provider != "openai":
             raise ValueError(
                 f"Provider {self.provider} is not supported. This client only supports OpenAI."
