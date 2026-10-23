@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pandas as pd
 
 from cheat_at_search.strategy.strategy import SearchStrategy
@@ -43,11 +45,12 @@ def test_search_all_uses_search_batch_for_mocked_queries():
             return all_top_k, all_scores
 
     strategy = DummyBatchStrategy(corpus)
-    results = strategy.search_all(queries, k=5, batch_size=7)
+    results = strategy.search_all(queries, k=5, batch_size=7, round=7)
 
     assert strategy.search_calls == 0
     assert strategy.search_batch_calls == 3
     assert len(results) == len(queries) * 5
+    assert results["round"].unique().tolist() == [7]
 
     for query in queries["query"].tolist():
         subset = results[results["query"] == query]
@@ -87,3 +90,39 @@ def test_search_all_includes_resources_from_search_batch():
     assert alpha["tokens"].tolist() == [10, 10]
     assert beta["latency"].tolist() == [0.3]
     assert beta["tokens"].tolist() == [12]
+
+
+@patch("cheat_at_search.strategy.strategy.ensure_data_subdir")
+def test_search_all_cache_is_separated_by_round(mock_ensure_data_subdir, tmp_path):
+    mock_ensure_data_subdir.return_value = tmp_path
+    corpus = pd.DataFrame(
+        [
+            {"doc_id": 10, "title": "first"},
+            {"doc_id": 20, "title": "second"},
+        ]
+    )
+    queries = pd.DataFrame([{"query_id": 1, "query": "alpha"}])
+
+    class CachedStrategy(SearchStrategy):
+        cache_key = "round-aware-test"
+
+        def __init__(self, corpus):
+            super().__init__(corpus)
+            self.search_calls = 0
+
+        def search(self, query, k=10):
+            self.search_calls += 1
+            return [self.search_calls - 1], [1.0]
+
+    strategy = CachedStrategy(corpus)
+
+    round_zero = strategy.search_all(queries, k=1)
+    cached_round_zero = strategy.search_all(queries, k=1)
+    round_one = strategy.search_all(queries, k=1, round=1)
+
+    assert strategy.search_calls == 2
+    assert round_zero["doc_id"].tolist() == [10]
+    assert cached_round_zero["doc_id"].tolist() == [10]
+    assert round_one["doc_id"].tolist() == [20]
+    assert round_zero["round"].tolist() == [0]
+    assert round_one["round"].tolist() == [1]

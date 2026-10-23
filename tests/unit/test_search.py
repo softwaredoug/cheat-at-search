@@ -113,6 +113,63 @@ def test_run_strategy_passes_batch_size_to_search_all():
     assert strategy.batch_size == 2
 
 
+def test_run_strategy_repeats_the_selected_queries_for_each_round():
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 1},
+            {"query_id": 2, "query": "bravo", "doc_id": 20, "grade": 1},
+        ]
+    )
+
+    class RoundsStrategy:
+        def __init__(self):
+            self.calls = []
+
+        def search_all(self, queries, round=0, **_kwargs):
+            self.calls.append((round, queries[["query_id", "query"]].copy()))
+            return pd.DataFrame(
+                {
+                    "query_id": queries["query_id"].tolist(),
+                    "query": queries["query"].tolist(),
+                    "doc_id": [
+                        (10 if query == "alpha" else 20) if round == 0 else 999
+                        for query in queries["query"]
+                    ],
+                    "rank": [1] * len(queries),
+                }
+            )
+
+    strategy = RoundsStrategy()
+    graded = run_strategy(
+        strategy,
+        judgments,
+        num_queries=1,
+        seed=123,
+        rounds=3,
+        cache=False,
+    )
+
+    assert [round_index for round_index, _ in strategy.calls] == [0, 1, 2]
+    for _, queries in strategy.calls[1:]:
+        pd.testing.assert_frame_equal(queries, strategy.calls[0][1])
+    assert graded["round"].unique().tolist() == [0, 1, 2]
+    assert graded.groupby("round")["query_id"].nunique().tolist() == [1, 1, 1]
+    ndcg_by_round = graded.groupby("round")["ndcg"].first()
+    assert ndcg_by_round.loc[0] > 0
+    assert ndcg_by_round.loc[1] == 0
+    assert ndcg_by_round.loc[2] == 0
+
+
+@pytest.mark.parametrize("rounds", [0, -1])
+def test_run_strategy_requires_at_least_one_round(rounds):
+    judgments = pd.DataFrame(
+        [{"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 1}]
+    )
+
+    with pytest.raises(ValueError, match="rounds must be at least 1"):
+        run_strategy(object(), judgments, rounds=rounds)
+
+
 def test_run_strategy_includes_per_query_max_ndcg():
     judgments = pd.DataFrame(
         [
