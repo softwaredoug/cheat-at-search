@@ -58,13 +58,10 @@ a DataFrame.
 `search_all` may cache results optionally. Which is useful for long running / expensive processes
 when we want to repeat their analysis.
 
-`search_all` accepts a `round` value (default `0`), adds it to each result row,
-and includes it in the cache identity. `k` is also part of the cache identity.
-
-`run_strategy(..., rounds=R)` selects the query population once, then runs that
-same selection for each round numbered `0` through `R - 1`. Each round is
-searched and graded separately before the resulting dataframes are concatenated;
-the returned rows therefore retain a `round` column and per-round metrics.
+`search_all` accepts an optional `cache_seed`, included in the batch cache
+identity. `k` is also part of the cache identity. `run_strategy` passes its
+`seed` as `cache_seed`, so calls with different seeds do not reuse the same
+cached search batch even when their query rows happen to match.
 
 ### `_search_all_single` serializes queries
 

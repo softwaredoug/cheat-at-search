@@ -33,11 +33,7 @@ def run_strategy(
     eval_answer=None,
     include_agreement=False,
     include_pairwise_agreement=False,
-    rounds: int = 1,
 ):
-    if not isinstance(rounds, int) or rounds < 1:
-        raise ValueError("rounds must be at least 1")
-
     available_queries = judgments[["query", "query_id"]].drop_duplicates()
 
     if queries:
@@ -58,8 +54,6 @@ def run_strategy(
         judgments = judgments[judgments["query_id"].isin(available_queries["query_id"])]
 
     if eval_answer is not None:
-        if rounds != 1:
-            raise ValueError("rounds is only supported for search evaluation.")
         if "answer" not in judgments.columns:
             raise ValueError(
                 "eval_answer was provided but judgments has no 'answer' column."
@@ -74,23 +68,17 @@ def run_strategy(
             eval_answer,
         )
 
-    graded_rounds = [
-        _run_search_path(
-            strategy,
-            judgments,
-            available_queries,
-            batch_size,
-            show_progress,
-            cache,
-            include_agreement,
-            include_pairwise_agreement,
-            round=round_index,
-        )
-        for round_index in range(rounds)
-    ]
-    if rounds == 1:
-        return graded_rounds[0]
-    return pd.concat(graded_rounds, ignore_index=True)
+    return _run_search_path(
+        strategy,
+        judgments,
+        available_queries,
+        batch_size,
+        show_progress,
+        cache,
+        include_agreement,
+        include_pairwise_agreement,
+        cache_seed=seed,
+    )
 
 
 def _run_search_path(
@@ -102,7 +90,7 @@ def _run_search_path(
     cache,
     include_agreement,
     include_pairwise_agreement,
-    round: int = 0,
+    cache_seed: int | None = None,
 ):
     max_grade = judgments["grade"].max()
     results = strategy.search_all(
@@ -110,7 +98,7 @@ def _run_search_path(
         batch_size=batch_size,
         show_progress=show_progress,
         cache=cache,
-        round=round,
+        cache_seed=cache_seed,
     )
     graded = grade_results(
         judgments,
@@ -118,7 +106,6 @@ def _run_search_path(
         max_grade=max_grade,
         k=10,
     )
-    graded["round"] = round
     max_ndcgs = _max_ndcg_by_query(judgments, max_grade=max_grade, k=10)
 
     if (include_agreement or include_pairwise_agreement) and "score" not in results.columns:

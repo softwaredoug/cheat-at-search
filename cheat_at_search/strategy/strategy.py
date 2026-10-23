@@ -28,7 +28,7 @@ class SearchStrategy:
         batch_size=100,
         show_progress=True,
         cache=True,
-        round: int = 0,
+        cache_seed: int | None = None,
     ):
         if callable(getattr(self, "search_batch", None)):
             results = self._search_all_batched(
@@ -37,7 +37,7 @@ class SearchStrategy:
                 batch_size=batch_size,
                 show_progress=show_progress,
                 cache=cache,
-                round=round,
+                cache_seed=cache_seed,
             )
         else:
             results = self._search_all_single(
@@ -46,9 +46,8 @@ class SearchStrategy:
                 batch_size=batch_size,
                 show_progress=show_progress,
                 cache=cache,
-                round=round,
+                cache_seed=cache_seed,
             )
-        results["round"] = round
         return results
 
     def answer_all(
@@ -124,7 +123,7 @@ class SearchStrategy:
         cache_dir: Path | None,
         batch_index: int,
         batch: pd.DataFrame,
-        round: int | None = None,
+        cache_seed: int | None = None,
         k: int | None = None,
     ):
         if cache_dir is None:
@@ -136,8 +135,8 @@ class SearchStrategy:
                 + batch["query"].astype(str)
             ).tolist()
         )
-        if round is not None:
-            batch_signature += f"|round={round}"
+        if cache_seed is not None:
+            batch_signature += f"|cache_seed={cache_seed}"
         if k is not None:
             batch_signature += f"|k={k}"
         batch_hash = md5(batch_signature.encode("utf-8")).hexdigest()
@@ -150,7 +149,7 @@ class SearchStrategy:
         batch_size=100,
         show_progress=True,
         cache=True,
-        round: int = 0,
+        cache_seed: int | None = None,
     ):
         all_results = []
         total_queries = len(queries)
@@ -179,7 +178,11 @@ class SearchStrategy:
                 ):
                     batch = queries.iloc[start : start + batch_size]
                     cache_path = self._batch_cache_path(
-                        cache_dir, batch_index, batch, round=round, k=k
+                        cache_dir,
+                        batch_index,
+                        batch,
+                        cache_seed=cache_seed,
+                        k=k,
                     )
                     if cache_path is not None and cache and cache_path.exists():
                         all_results.append(pd.read_pickle(cache_path))
@@ -226,7 +229,7 @@ class SearchStrategy:
         batch_size=100,
         show_progress=True,
         cache=True,
-        round: int = 0,
+        cache_seed: int | None = None,
     ):
         all_results = []
         total_queries = len(queries)
@@ -253,7 +256,11 @@ class SearchStrategy:
             ):
                 batch = queries.iloc[start : start + batch_size]
                 cache_path = self._batch_cache_path(
-                    cache_dir, batch_index, batch, round=round, k=k
+                    cache_dir,
+                    batch_index,
+                    batch,
+                    cache_seed=cache_seed,
+                    k=k,
                 )
                 if cache_path is not None and cache and cache_path.exists():
                     all_results.append(pd.read_pickle(cache_path))

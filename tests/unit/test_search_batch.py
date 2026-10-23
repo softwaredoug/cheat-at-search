@@ -45,13 +45,11 @@ def test_search_all_uses_search_batch_for_mocked_queries():
             return all_top_k, all_scores
 
     strategy = DummyBatchStrategy(corpus)
-    results = strategy.search_all(queries, k=5, batch_size=7, round=7)
+    results = strategy.search_all(queries, k=5, batch_size=7)
 
     assert strategy.search_calls == 0
     assert strategy.search_batch_calls == 3
     assert len(results) == len(queries) * 5
-    assert results["round"].unique().tolist() == [7]
-
     for query in queries["query"].tolist():
         subset = results[results["query"] == query]
         assert subset["rank"].tolist() == [1, 2, 3, 4, 5]
@@ -93,7 +91,9 @@ def test_search_all_includes_resources_from_search_batch():
 
 
 @patch("cheat_at_search.strategy.strategy.ensure_data_subdir")
-def test_search_all_cache_is_separated_by_round(mock_ensure_data_subdir, tmp_path):
+def test_search_all_cache_is_separated_by_cache_seed(
+    mock_ensure_data_subdir, tmp_path
+):
     mock_ensure_data_subdir.return_value = tmp_path
     corpus = pd.DataFrame(
         [
@@ -104,7 +104,7 @@ def test_search_all_cache_is_separated_by_round(mock_ensure_data_subdir, tmp_pat
     queries = pd.DataFrame([{"query_id": 1, "query": "alpha"}])
 
     class CachedStrategy(SearchStrategy):
-        cache_key = "round-aware-test"
+        cache_key = "cache-seed-test"
 
         def __init__(self, corpus):
             super().__init__(corpus)
@@ -116,13 +116,11 @@ def test_search_all_cache_is_separated_by_round(mock_ensure_data_subdir, tmp_pat
 
     strategy = CachedStrategy(corpus)
 
-    round_zero = strategy.search_all(queries, k=1)
-    cached_round_zero = strategy.search_all(queries, k=1)
-    round_one = strategy.search_all(queries, k=1, round=1)
+    seed_42 = strategy.search_all(queries, k=1, cache_seed=42)
+    cached_seed_42 = strategy.search_all(queries, k=1, cache_seed=42)
+    seed_43 = strategy.search_all(queries, k=1, cache_seed=43)
 
     assert strategy.search_calls == 2
-    assert round_zero["doc_id"].tolist() == [10]
-    assert cached_round_zero["doc_id"].tolist() == [10]
-    assert round_one["doc_id"].tolist() == [20]
-    assert round_zero["round"].tolist() == [0]
-    assert round_one["round"].tolist() == [1]
+    assert seed_42["doc_id"].tolist() == [10]
+    assert cached_seed_42["doc_id"].tolist() == [10]
+    assert seed_43["doc_id"].tolist() == [20]
