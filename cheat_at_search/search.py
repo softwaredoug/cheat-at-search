@@ -27,8 +27,6 @@ def run_strategy(
     queries: Optional[list[str]] = None,
     num_queries=None,
     seed=42,
-    sub_sample_n=None,
-    sub_sample_seed=42,
     batch_size=100,
     show_progress=True,
     cache=True,
@@ -54,18 +52,6 @@ def run_strategy(
     if num_queries:
         available_queries = available_queries.head(num_queries)
         judgments = judgments[judgments["query_id"].isin(available_queries["query_id"])]
-
-        if sub_sample_n:
-            if sub_sample_n >= len(available_queries):
-                raise ValueError(
-                    "sub_sample_n must be less than the number of queries after num_queries filtering."
-                )
-            available_queries = available_queries.sample(
-                sub_sample_n, random_state=sub_sample_seed
-            )
-            judgments = judgments[
-                judgments["query_id"].isin(available_queries["query_id"])
-            ]
 
     if eval_answer is not None:
         if "answer" not in judgments.columns:
