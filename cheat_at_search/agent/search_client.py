@@ -4,10 +4,10 @@ from pydantic import BaseModel, Field
 
 
 class SearchResults(BaseModel):
-    """The state of the search agent, which can be used to inform future reasoning and tool use."""
+    """Top K search results ranked from most to least relevant."""
 
-    ranked_results: list[str] = Field(
-        description="Top ranked search results (their doc_ids) when complete"
+    doc_ids_ranked: list[str] = Field(
+        description="Ranked doc IDs from most to least relevant.",
     )
 
 

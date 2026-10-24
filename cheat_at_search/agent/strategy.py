@@ -83,7 +83,7 @@ class ReasoningSearchStrategy(SearchStrategy):
         )
         for key in self.usage:
             self.usage[key] += usage.get(key, 0)
-        ranked_ids = search_results.ranked_results[:k]
+        ranked_ids = search_results.doc_ids_ranked[:k]
         top_k = [int(doc_id) for doc_id in ranked_ids]
         scores = [1.0 / rank for rank in range(1, len(ranked_ids) + 1)]
 

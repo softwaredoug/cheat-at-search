@@ -122,7 +122,7 @@ most helpful first. Do not invent IDs.
             pytest.skip("Configured SID_API_KEY is not authorized for sid-1.")
         raise
 
-    assert response.output_parsed.ranked_results == [SID_DOCUMENT["id"]]
+    assert response.output_parsed.doc_ids_ranked == [SID_DOCUMENT["id"]]
     assert agent_state["resource.num_tool_calls"] >= 2
 
 
@@ -142,7 +142,7 @@ def test_sid_legacy_agent_accepts_annotated_scalar_and_literal_arguments():
         ),
     )
 
-    assert response.output_parsed.ranked_results == [SID_DOCUMENT["id"]]
+    assert response.output_parsed.doc_ids_ranked == [SID_DOCUMENT["id"]]
     assert agent_state["resource.num_tool_calls"] >= 2
     assert calls
     assert isinstance(calls[0]["keywords"], str)
@@ -166,7 +166,7 @@ def test_sid_legacy_agent_accepts_annotated_list_argument_examples():
         ),
     )
 
-    assert response.output_parsed.ranked_results == [SID_DOCUMENT["id"]]
+    assert response.output_parsed.doc_ids_ranked == [SID_DOCUMENT["id"]]
     assert agent_state["resource.num_tool_calls"] >= 2
     assert calls
     assert calls[0]["fields"] == ["title", "description"]

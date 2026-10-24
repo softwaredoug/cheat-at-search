@@ -96,7 +96,7 @@ def test_sid_legacy_agent_hello_world_tool_loop(mock_key_for_provider, mock_open
     ]
     assert agent_state["trace_logger"] is active_logger
     assert isinstance(response.output_parsed, SearchResults)
-    assert results.ranked_results == ["hello-1"]
+    assert results.doc_ids_ranked == ["hello-1"]
     assert {
         key: agent_state[key]
         for key in (

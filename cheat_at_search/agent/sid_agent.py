@@ -181,7 +181,7 @@ class SIDAgent(Agent):
 
         return SIDChatResponse(
             output_parsed=SearchResults(
-                ranked_results=resolve_reported_ids(report_ids, document_cache)
+                doc_ids_ranked=resolve_reported_ids(report_ids, document_cache)
             )
         )
 
@@ -287,7 +287,7 @@ class SIDAgent(Agent):
             if isinstance(report_result, SIDChatResponse):
                 logger.info(
                     "Tool response: %s",
-                    _log_preview(report_result.output_parsed.ranked_results),
+                    _log_preview(report_result.output_parsed.doc_ids_ranked),
                 )
                 return report_result, inputs
 
@@ -338,7 +338,7 @@ class SIDAgent(Agent):
             "SID-2 reached max_turns=%d without reporting helpful IDs.",
             self.max_turns,
         )
-        return SIDChatResponse(output_parsed=SearchResults(ranked_results=[])), inputs
+        return SIDChatResponse(output_parsed=SearchResults(doc_ids_ranked=[])), inputs
 
     def loop(
         self,

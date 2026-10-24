@@ -53,8 +53,8 @@ The episode ends once report_helpful_ids is called.""",
         raise
 
     assert isinstance(response, SIDChatResponse)
-    assert response.output_parsed.ranked_results == ["hello-world"]
-    assert len(response.output_parsed.ranked_results) > 0
+    assert response.output_parsed.doc_ids_ranked == ["hello-world"]
+    assert len(response.output_parsed.doc_ids_ranked) > 0
     assert searches
     assert any("hello" in query.lower() for query in searches)
     assert agent_state["resource.num_tool_calls"] >= 1

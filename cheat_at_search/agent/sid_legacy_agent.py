@@ -32,7 +32,7 @@ class SIDChatResponse(BaseModel):
 
 def _ids_to_search_results(ids: list[str]) -> SearchResults:
     """Convert a list of IDs to SearchResults."""
-    return SearchResults(ranked_results=ids)
+    return SearchResults(doc_ids_ranked=ids)
 
 
 def _assistant_message_to_dict(message) -> dict:

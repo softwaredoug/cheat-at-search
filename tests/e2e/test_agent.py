@@ -233,7 +233,7 @@ def test_calling_search_tool(mock_key_for_provider, mock_openai):
         ]
     )
     mock_agent_openai.queue_parse_response(
-        payload={"ranked_results": ["0", "1"]}
+        payload={"doc_ids_ranked": ["0", "1"]}
     )
 
     search_client = OpenAIAgent(
@@ -264,7 +264,7 @@ def test_calling_search_tool(mock_key_for_provider, mock_openai):
         logger=active_logger,
     )
     results = resp.output_parsed
-    assert results.ranked_results == ["0", "1"]
+    assert results.doc_ids_ranked == ["0", "1"]
     assert agent_state["resource.num_tool_calls"] == 1
     assert all(call.args[0] == "Usage: %s" for call in active_logger.debug.call_args_list)
     assert final_inputs[-1]["type"] == "function_call_output"
@@ -355,7 +355,7 @@ def test_reasoning_search_strategy(mock_key_for_provider, mock_openai):
     ]
     for _query in queries:
         mock_agent_openai.queue_parse_response(
-            payload={"ranked_results": [str(idx) for idx in range(5)]}
+            payload={"doc_ids_ranked": [str(idx) for idx in range(5)]}
         )
 
     search_client = OpenAIAgent(
@@ -399,7 +399,7 @@ def test_agent_tool_error_is_returned_as_string(mock_key_for_provider, mock_open
         ]
     )
     mock_agent_openai.queue_parse_response(
-        payload={"ranked_results": ["0", "1"]}
+        payload={"doc_ids_ranked": ["0", "1"]}
     )
 
     search_client = OpenAIAgent(
@@ -419,7 +419,7 @@ def test_agent_tool_error_is_returned_as_string(mock_key_for_provider, mock_open
     agent_state = {}
     resp, final_inputs = search_client.loop(inputs=inputs, agent_state=agent_state)
 
-    assert resp.output_parsed.ranked_results == ["0", "1"]
+    assert resp.output_parsed.doc_ids_ranked == ["0", "1"]
     assert agent_state["resource.num_tool_calls"] == 1
     assert final_inputs[-1]["type"] == "function_call_output"
     assert "tool failure" in final_inputs[-1]["output"]

@@ -1,5 +1,9 @@
-"""Tool schemas and cache-backed tools for SID-2."""
+"""Tool schemas and cache-backed tools for SID-2.
 
+Attempt to map a search tool with relatively minimal assumptions
+to SID-2s tool schema to simplify testing apples-to-apples with
+other agents (ie the OpenAIAgent) for search tasks.
+"""
 import json
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -231,7 +235,9 @@ def call_sid2_tool(
     passage_fn: Callable[[Any], str] = default_passage_fn,
     agent_state: dict | None = None,
 ) -> str:
-    """Parse a Responses function call, validate its parameters, and execute it.
+    """Call a tool on behalf of SID Agent: validate parameters provided by
+    the agent, execute the tool, format results, and cache to DocumentCache
+    as needed.
 
     Search results are registered in the SID episode cache and returned as
     XML snippets. ``report_helpful_ids`` is terminal and must be handled by the

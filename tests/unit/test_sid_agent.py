@@ -196,7 +196,7 @@ def test_sid_agent_report_returns_legacy_search_results_shape(
         {"title": "Hello world", "content": "Hello world — A friendly hello world greeting."},
     )
     assert isinstance(final_response, SIDChatResponse)
-    assert final_response.output_parsed.ranked_results == ["backend-doc-1"]
+    assert final_response.output_parsed.doc_ids_ranked == ["backend-doc-1"]
     assert inputs[-1] is report_response.output[0]
     request_headers = [
         call.kwargs["extra_headers"]
@@ -296,7 +296,7 @@ def test_sid_agent_loop_sends_user_history_and_returns_first_response(
     assert request["extra_body"]["sid"]["reward"] == "ndcg"
     assert request["extra_headers"]["x-session-affinity"]
     assert isinstance(returned_response, SIDChatResponse)
-    assert returned_response.output_parsed.ranked_results == []
+    assert returned_response.output_parsed.doc_ids_ranked == []
     assert updated_inputs == [
         *inputs,
         *response.output,
