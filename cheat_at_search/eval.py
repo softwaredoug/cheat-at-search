@@ -31,8 +31,30 @@ def grade_results(
     graded_results["discounted_gain"] = (
         (2 ** graded_results["grade"]) - 1
     ) * rank_discounts
-    graded_results["idcg"] = idcg_max(max_grade=max_grade, k=k)
+    idcg_m = idcg_max(max_grade=max_grade, k=k)
+    graded_results["idcg_m"] = idcg_m
+    # Keep the original column for callers that consume grade_results directly.
+    graded_results["idcg"] = idcg_m
     return graded_results
+
+
+def _max_ndcg_m_by_query(judgments, max_grade, k):
+    """Return each query's ideal DCG and its max-normalized NDCG ceiling."""
+    idcg_m = idcg_max(max_grade=max_grade, k=k)
+    ideal = judgments.sort_values("grade", ascending=False, kind="stable").copy()
+    ideal["rank"] = ideal.groupby(["query", "query_id"], sort=False).cumcount() + 1
+    ideal = ideal[ideal["rank"] <= k]
+    rank_discounts = 1 / np.log2(2 ** ideal["rank"])
+    ideal["discounted_gain"] = ((2 ** ideal["grade"]) - 1) * rank_discounts
+
+    idcg_g = (
+        ideal.groupby(["query", "query_id"])["discounted_gain"]
+        .sum()
+        .rename("idcg_g")
+        .reset_index()
+    )
+    idcg_g["max_ndcg_m"] = idcg_g["idcg_g"] / idcg_m
+    return idcg_g
 
 
 def eval_answer(answer_expected, answer_actual) -> bool:

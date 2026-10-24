@@ -97,7 +97,7 @@ def test_make_eval_guardrail_disables_cache(mock_run_strategy):
 
     mock_run_strategy.return_value = pd.DataFrame({
         "query": ["q1"],
-        "ndcg": [0.2],
+        "ndcg_m": [0.2],
     })
 
     eval_guardrail = _make_eval_guardrail(

@@ -1,12 +1,11 @@
-from typing import Optional
+from typing import Literal, Optional
 
-import numpy as np
 import pandas as pd
 
 from cheat_at_search.eval import (
+    _max_ndcg_m_by_query,
     grade_answers,
     grade_results,
-    idcg_max,
     pairwise_agreement,
     pointwise_agreement,
     reciprocal_rank,
@@ -106,7 +105,8 @@ def _run_search_path(
         max_grade=max_grade,
         k=10,
     )
-    max_ndcgs = _max_ndcg_by_query(judgments, max_grade=max_grade, k=10)
+    max_ndcg_m = _max_ndcg_m_by_query(judgments, max_grade=max_grade, k=10)
+    graded = graded.merge(max_ndcg_m, on=["query", "query_id"], how="left")
 
     if (include_agreement or include_pairwise_agreement) and "score" not in results.columns:
         raise ValueError(
@@ -114,19 +114,22 @@ def _run_search_path(
         )
 
     if len(graded):
-        idcg = graded["idcg"].iloc[0]
+        idcg_m = graded["idcg_m"].iloc[0]
         dcgs = (
             graded.groupby(["query", "query_id"])["discounted_gain"]
             .sum()
             .sort_values(ascending=False)
             .rename("dcg")
         )
-        ndcgs = dcgs / idcg
-        ndcgs = ndcgs.rename("ndcg")
+        ndcg_m = (dcgs / idcg_m).rename("ndcg_m")
+        idcg_g = max_ndcg_m.set_index(["query", "query_id"])["idcg_g"]
+        ndcg_g = dcgs.div(idcg_g)
+        ndcg_g = ndcg_g.mask(idcg_g.eq(0), 0.0).rename("ndcg_g")
         mrrs = reciprocal_rank(graded, max_grade=max_grade)
 
         graded = graded.merge(dcgs, on=["query", "query_id"])
-        graded = graded.merge(ndcgs, on=["query", "query_id"])
+        graded = graded.merge(ndcg_g, on=["query", "query_id"])
+        graded = graded.merge(ndcg_m, on=["query", "query_id"])
         graded = graded.merge(mrrs, on=["query", "query_id"])
         if include_agreement:
             agreements = pointwise_agreement(graded)
@@ -136,34 +139,15 @@ def _run_search_path(
             graded = graded.merge(pairwise_agreements, on=["query", "query_id"])
     else:
         graded["dcg"] = 0
-        graded["ndcg"] = 0
+        graded["ndcg_g"] = 0
+        graded["ndcg_m"] = 0
         graded["mrr"] = 0
         if include_agreement:
             graded["agreement"] = pd.Series(dtype=float)
         if include_pairwise_agreement:
             graded["pairwise_agreement"] = pd.Series(dtype=float)
 
-    graded = graded.merge(max_ndcgs, on=["query", "query_id"], how="left")
     return graded
-
-
-def _max_ndcg_by_query(judgments, max_grade, k):
-    """Return each query's best NDCG from its available judged documents."""
-    idcg = idcg_max(max_grade=max_grade, k=k)
-    ideal = judgments.sort_values("grade", ascending=False, kind="stable").copy()
-    ideal["rank"] = ideal.groupby(["query", "query_id"], sort=False).cumcount() + 1
-    ideal = ideal[ideal["rank"] <= k]
-    rank_discounts = 1 / np.log2(2 ** ideal["rank"])
-    ideal["discounted_gain"] = ((2 ** ideal["grade"]) - 1) * rank_discounts
-
-    max_ndcgs = (
-        ideal.groupby(["query", "query_id"])["discounted_gain"]
-        .sum()
-        .div(idcg)
-        .rename("max_ndcg")
-        .reset_index()
-    )
-    return max_ndcgs
 
 
 def _run_answer_path(
@@ -201,17 +185,28 @@ def _run_answer_path(
     ]
 
 
-def ndcgs(graded):
-    return graded.groupby("query")["ndcg"].mean().sort_values(ascending=False)
+def ndcgs(graded, ideal: Literal["max", "global"] = "max"):
+    """Return per-query NDCG using the max-grade or judged-document ideal."""
+    if ideal == "max":
+        values = graded["ndcg_m"]
+    elif ideal == "global":
+        values = graded["ndcg_g"]
+    else:
+        raise ValueError("ideal must be either 'max' or 'global'")
+    return values.groupby(graded["query"]).mean().sort_values(ascending=False)
 
 
 def mrrs(graded):
     return graded.groupby("query")["mrr"].mean().sort_values(ascending=False)
 
 
-def ndcg_delta(variant_graded, baseline_graded):
-    variant_ndcgs = ndcgs(variant_graded)
-    baseline_ndcgs = ndcgs(baseline_graded)
+def ndcg_delta(
+    variant_graded,
+    baseline_graded,
+    ideal: Literal["max", "global"] = "max",
+):
+    variant_ndcgs = ndcgs(variant_graded, ideal=ideal)
+    baseline_ndcgs = ndcgs(baseline_graded, ideal=ideal)
     delta = variant_ndcgs - baseline_ndcgs
     delta = delta[delta != 0]
     return delta.sort_values(ascending=False)
@@ -225,6 +220,14 @@ def run_bm25(corpus, judgments):
             raise ValueError("Cached BM25 results missing doc_id; recomputing.")
         if "mrr" not in graded_bm25.columns:
             raise ValueError("Cached BM25 results missing mrr; recomputing.")
+        required_metrics = {"idcg_g", "idcg_m", "ndcg_g", "ndcg_m", "max_ndcg_m"}
+        missing_metrics = required_metrics.difference(graded_bm25.columns)
+        if missing_metrics:
+            raise ValueError(
+                f"Cached BM25 results missing {sorted(missing_metrics)}; recomputing."
+            )
+        if "ndcg" in graded_bm25.columns:
+            raise ValueError("Cached BM25 results contain legacy ndcg; recomputing.")
         return graded_bm25
     except Exception:
         logger.warning("BM25 results not found, running BM25 search strategy.")
@@ -305,7 +308,7 @@ def vs_ideal(
         "doc_id_actual",
         "grade_actual",
         "dcg",
-        "ndcg",
+        "ndcg_m",
     ]
     merged = merged.rename(columns={"grade": "grade_actual"})
     if "title_ideal" not in merged.columns:

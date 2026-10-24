@@ -65,7 +65,7 @@ def test_vs_ideal_wands_fixture(mock_fetch_wands):
 
 
 @patch("cheat_at_search.doug_blog_data.resources.files")
-def test_best_possible_results_match_max_ndcg_doug_blog(mock_resources_files):
+def test_best_possible_results_match_max_ndcg_m_doug_blog(mock_resources_files):
     _mount_temp_cache()
 
     class BlogResource:
@@ -91,10 +91,10 @@ def test_best_possible_results_match_max_ndcg_doug_blog(mock_resources_files):
     )
 
     per_query = graded_results.groupby(["query_id", "query"])[
-        ["ndcg", "max_ndcg"]
+        ["ndcg_m", "max_ndcg_m"]
     ].first()
     assert len(per_query) > 0
-    np.testing.assert_allclose(per_query["ndcg"], per_query["max_ndcg"])
+    np.testing.assert_allclose(per_query["ndcg_m"], per_query["max_ndcg_m"])
 
 
 @patch("cheat_at_search.wands_data.fetch_wands")

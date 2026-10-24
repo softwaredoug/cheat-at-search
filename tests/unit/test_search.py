@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cheat_at_search.search import run_bm25, run_strategy, vs_ideal
+from cheat_at_search.search import ndcg_delta, ndcgs, run_bm25, run_strategy, vs_ideal
 from cheat_at_search.strategy.strategy import SearchStrategy
 
 
@@ -116,7 +116,7 @@ def test_run_strategy_passes_batch_size_to_search_all():
     assert strategy.cache_seed == 123
 
 
-def test_run_strategy_includes_per_query_max_ndcg():
+def test_run_strategy_includes_per_query_max_ndcg_m():
     judgments = pd.DataFrame(
         [
             {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 2},
@@ -142,13 +142,58 @@ def test_run_strategy_includes_per_query_max_ndcg():
             return pd.DataFrame(rows)
 
     results = run_strategy(DummySearchStrategy(), judgments, seed=None, cache=False)
-    per_query = results.groupby(["query_id", "query"])["max_ndcg"].first()
+    per_query = results.groupby(["query_id", "query"])["max_ndcg_m"].first()
     idcg = 7 * sum(1 / rank for rank in range(1, 11))
 
     assert np.isclose(per_query.loc[(1, "alpha")], 3.5 / idcg)
     assert np.isclose(per_query.loc[(2, "bravo")], 7 / idcg)
     assert np.isclose(per_query.mean(), (3.5 + 7) / (2 * idcg))
-    assert results.loc[results["query"] == "alpha", "max_ndcg"].nunique() == 1
+    assert results.loc[results["query"] == "alpha", "max_ndcg_m"].nunique() == 1
+    assert "max_ndcg" not in results.columns
+    assert "max_ndcg_g" not in results.columns
+
+
+def test_ndcgs_supports_global_judgment_ideal():
+    judgments = pd.DataFrame(
+        [
+            {"query_id": 1, "query": "alpha", "doc_id": 10, "grade": 4},
+            {"query_id": 1, "query": "alpha", "doc_id": 11, "grade": 3},
+            {"query_id": 1, "query": "alpha", "doc_id": 12, "grade": 2},
+            {"query_id": 1, "query": "alpha", "doc_id": 13, "grade": 1},
+            {"query_id": 1, "query": "alpha", "doc_id": 14, "grade": 0},
+        ]
+    )
+
+    class PartialResultsStrategy:
+        def search_all(self, queries, **_kwargs):
+            return pd.DataFrame(
+                [
+                    {"query_id": 1, "query": "alpha", "doc_id": 13, "rank": 1},
+                    {"query_id": 1, "query": "alpha", "doc_id": 14, "rank": 2},
+                ]
+            )
+
+    graded = run_strategy(PartialResultsStrategy(), judgments, seed=None, cache=False)
+    dcg = 1.0
+    idcg_g = 15 + 7 / 2 + 3 / 3 + 1 / 4
+    idcg_m = 15 * sum(1 / rank for rank in range(1, 11))
+
+    assert np.allclose(graded["idcg_g"], idcg_g)
+    assert np.allclose(graded["idcg_m"], idcg_m)
+    assert np.allclose(graded["max_ndcg_m"], idcg_g / idcg_m)
+    assert np.allclose(graded["ndcg_g"], dcg / idcg_g)
+    assert np.allclose(graded["ndcg_m"], dcg / idcg_m)
+    assert "ndcg" not in graded.columns
+    assert np.isclose(ndcgs(graded).loc["alpha"], dcg / idcg_m)
+    assert np.isclose(
+        ndcgs(graded, ideal="global").loc["alpha"], dcg / idcg_g
+    )
+    baseline = graded.copy()
+    baseline["dcg"] = 0
+    baseline["ndcg_g"] = 0
+    assert np.isclose(
+        ndcg_delta(graded, baseline, ideal="global").loc["alpha"], dcg / idcg_g
+    )
 
 
 def test_run_strategy_passes_batch_size_to_answer_all():
@@ -191,7 +236,7 @@ def test_vs_ideal_mocked():
                 "title": "Red Shoes A",
                 "grade": 2,
                 "dcg": 1.0,
-                "ndcg": 0.5,
+                "ndcg_m": 0.5,
             },
             {
                 "query_id": 1,
@@ -201,7 +246,7 @@ def test_vs_ideal_mocked():
                 "title": "Red Shoes B",
                 "grade": 0,
                 "dcg": 1.0,
-                "ndcg": 0.5,
+                "ndcg_m": 0.5,
             },
         ]
     )
@@ -235,7 +280,7 @@ def test_vs_ideal_mocked():
         "doc_id_actual",
         "grade_actual",
         "dcg",
-        "ndcg",
+        "ndcg_m",
     ]
     assert comparison["rank_ideal"].tolist() == [1, 2]
     assert comparison["doc_id_ideal"].tolist() == [102, 101]
@@ -605,7 +650,7 @@ def test_run_strategy_empty_results_zero_metrics():
 
     graded = run_strategy(strategy, judgments, seed=None)
 
-    assert graded["ndcg"].tolist() == [0]
+    assert graded["ndcg_m"].tolist() == [0]
     assert graded["mrr"].tolist() == [0]
 
 

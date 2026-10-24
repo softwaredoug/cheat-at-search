@@ -206,7 +206,7 @@ def test_evaluate_without_edit_skips_guardrails(mock_run_strategy):
     )
     mock_run_strategy.return_value = pd.DataFrame({
         "query": ["q1"],
-        "ndcg": [0.5],
+        "ndcg_m": [0.5],
     })
 
     def guardrail(_text: str):
@@ -255,8 +255,8 @@ def test_evaluate_uses_latest_code(mock_run_strategy):
 
     def _run_strategy_side_effect(strategy, *args, **kwargs):
         if "return [1]" in (strategy.code or ""):
-            return pd.DataFrame({"query": ["q1"], "ndcg": [0.1]})
-        return pd.DataFrame({"query": ["q1"], "ndcg": [0.2]})
+            return pd.DataFrame({"query": ["q1"], "ndcg_m": [0.1]})
+        return pd.DataFrame({"query": ["q1"], "ndcg_m": [0.2]})
 
     mock_run_strategy.side_effect = _run_strategy_side_effect
 
@@ -309,7 +309,7 @@ def test_evaluate_writes_training_logs(mock_run_strategy):
     )
     mock_run_strategy.return_value = pd.DataFrame({
         "query": ["q1"],
-        "ndcg": [0.5],
+        "ndcg_m": [0.5],
         "rank": [1],
         "doc_id": [1],
         "title": ["one"],
@@ -367,8 +367,8 @@ def test_commit_patch_rejects_without_validation_improvement(mock_run_strategy):
         }
     )
     mock_run_strategy.side_effect = [
-        pd.DataFrame({"query": ["q1"], "ndcg": [0.1]}),
-        pd.DataFrame({"query": ["q1"], "ndcg": [0.1]}),
+        pd.DataFrame({"query": ["q1"], "ndcg_m": [0.1]}),
+        pd.DataFrame({"query": ["q1"], "ndcg_m": [0.1]}),
     ]
 
     reranker = Reranker(

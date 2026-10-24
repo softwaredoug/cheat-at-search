@@ -141,7 +141,7 @@ class Reranker:
                 seed=seed,
                 cache=False,
             )
-            ndcgs = results_df.groupby("query")["ndcg"].mean()
+            ndcgs = results_df.groupby("query")["ndcg_m"].mean()
             if results:
                 return ndcgs, results_df
             return ndcgs
@@ -431,7 +431,7 @@ def _make_eval_guardrail(
             seed=seed,
             cache=False,
         )
-        ndcgs = results_df.groupby("query")["ndcg"].mean()
+        ndcgs = results_df.groupby("query")["ndcg_m"].mean()
         if results:
             return ndcgs, results_df
         return ndcgs
