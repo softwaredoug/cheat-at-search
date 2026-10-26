@@ -28,7 +28,7 @@ class SearchStrategy:
         batch_size=100,
         show_progress=True,
         cache=True,
-        cache_seed: int | None = None,
+        cache_salt: str | None = None,
     ):
         if callable(getattr(self, "search_batch", None)):
             results = self._search_all_batched(
@@ -37,7 +37,7 @@ class SearchStrategy:
                 batch_size=batch_size,
                 show_progress=show_progress,
                 cache=cache,
-                cache_seed=cache_seed,
+                cache_salt=cache_salt,
             )
         else:
             results = self._search_all_single(
@@ -46,7 +46,7 @@ class SearchStrategy:
                 batch_size=batch_size,
                 show_progress=show_progress,
                 cache=cache,
-                cache_seed=cache_seed,
+                cache_salt=cache_salt,
             )
         return results
 
@@ -123,7 +123,7 @@ class SearchStrategy:
         cache_dir: Path | None,
         batch_index: int,
         batch: pd.DataFrame,
-        cache_seed: int | None = None,
+        cache_salt: str | None = None,
         k: int | None = None,
     ):
         if cache_dir is None:
@@ -135,8 +135,8 @@ class SearchStrategy:
                 + batch["query"].astype(str)
             ).tolist()
         )
-        if cache_seed is not None:
-            batch_signature += f"|cache_seed={cache_seed}"
+        if cache_salt is not None:
+            batch_signature += f"|cache_salt={cache_salt}"
         if k is not None:
             batch_signature += f"|k={k}"
         batch_hash = md5(batch_signature.encode("utf-8")).hexdigest()
@@ -149,7 +149,7 @@ class SearchStrategy:
         batch_size=100,
         show_progress=True,
         cache=True,
-        cache_seed: int | None = None,
+        cache_salt: str | None = None,
     ):
         all_results = []
         total_queries = len(queries)
@@ -181,7 +181,7 @@ class SearchStrategy:
                         cache_dir,
                         batch_index,
                         batch,
-                        cache_seed=cache_seed,
+                        cache_salt=cache_salt,
                         k=k,
                     )
                     if cache_path is not None and cache and cache_path.exists():
@@ -229,7 +229,7 @@ class SearchStrategy:
         batch_size=100,
         show_progress=True,
         cache=True,
-        cache_seed: int | None = None,
+        cache_salt: str | None = None,
     ):
         all_results = []
         total_queries = len(queries)
@@ -259,7 +259,7 @@ class SearchStrategy:
                     cache_dir,
                     batch_index,
                     batch,
-                    cache_seed=cache_seed,
+                    cache_salt=cache_salt,
                     k=k,
                 )
                 if cache_path is not None and cache and cache_path.exists():

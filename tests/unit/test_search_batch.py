@@ -91,7 +91,7 @@ def test_search_all_includes_resources_from_search_batch():
 
 
 @patch("cheat_at_search.strategy.strategy.ensure_data_subdir")
-def test_search_all_cache_is_separated_by_cache_seed(
+def test_search_all_cache_is_separated_by_cache_salt(
     mock_ensure_data_subdir, tmp_path
 ):
     mock_ensure_data_subdir.return_value = tmp_path
@@ -104,7 +104,7 @@ def test_search_all_cache_is_separated_by_cache_seed(
     queries = pd.DataFrame([{"query_id": 1, "query": "alpha"}])
 
     class CachedStrategy(SearchStrategy):
-        cache_key = "cache-seed-test"
+        cache_key = "cache-salt-test"
 
         def __init__(self, corpus):
             super().__init__(corpus)
@@ -116,11 +116,11 @@ def test_search_all_cache_is_separated_by_cache_seed(
 
     strategy = CachedStrategy(corpus)
 
-    seed_42 = strategy.search_all(queries, k=1, cache_seed=42)
-    cached_seed_42 = strategy.search_all(queries, k=1, cache_seed=42)
-    seed_43 = strategy.search_all(queries, k=1, cache_seed=43)
+    salt_1 = strategy.search_all(queries, k=1, cache_salt="round-1")
+    cached_salt_1 = strategy.search_all(queries, k=1, cache_salt="round-1")
+    salt_2 = strategy.search_all(queries, k=1, cache_salt="round-2")
 
     assert strategy.search_calls == 2
-    assert seed_42["doc_id"].tolist() == [10]
-    assert cached_seed_42["doc_id"].tolist() == [10]
-    assert seed_43["doc_id"].tolist() == [20]
+    assert salt_1["doc_id"].tolist() == [10]
+    assert cached_salt_1["doc_id"].tolist() == [10]
+    assert salt_2["doc_id"].tolist() == [20]

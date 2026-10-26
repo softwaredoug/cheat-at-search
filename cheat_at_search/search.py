@@ -32,6 +32,7 @@ def run_strategy(
     eval_answer=None,
     include_agreement=False,
     include_pairwise_agreement=False,
+    cache_salt: str | None = None,
 ):
     available_queries = judgments[["query", "query_id"]].drop_duplicates()
 
@@ -76,7 +77,7 @@ def run_strategy(
         cache,
         include_agreement,
         include_pairwise_agreement,
-        cache_seed=seed,
+        cache_salt=cache_salt,
     )
 
 
@@ -89,7 +90,7 @@ def _run_search_path(
     cache,
     include_agreement,
     include_pairwise_agreement,
-    cache_seed: int | None = None,
+    cache_salt: str | None = None,
 ):
     max_grade = judgments["grade"].max()
     results = strategy.search_all(
@@ -97,7 +98,7 @@ def _run_search_path(
         batch_size=batch_size,
         show_progress=show_progress,
         cache=cache,
-        cache_seed=cache_seed,
+        cache_salt=cache_salt,
     )
     graded = grade_results(
         judgments,

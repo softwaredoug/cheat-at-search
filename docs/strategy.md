@@ -58,10 +58,11 @@ a DataFrame.
 `search_all` may cache results optionally. Which is useful for long running / expensive processes
 when we want to repeat their analysis.
 
-`search_all` accepts an optional `cache_seed`, included in the batch cache
-identity. `k` is also part of the cache identity. `run_strategy` passes its
-`seed` as `cache_seed`, so calls with different seeds do not reuse the same
-cached search batch even when their query rows happen to match.
+`search_all` accepts an optional string `cache_salt`, included in the batch
+cache identity. `k` is also part of the cache identity. `run_strategy` passes
+its `cache_salt` through to `search_all`; use it to separate repeated runs, for
+example by passing a round number as a string. The query-selection `seed` does
+not affect the cache identity.
 
 ### `_search_all_single` serializes queries
 

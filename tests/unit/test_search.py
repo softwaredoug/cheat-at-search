@@ -95,11 +95,11 @@ def test_run_strategy_passes_batch_size_to_search_all():
     class DummySearchStrategy:
         def __init__(self):
             self.batch_size = None
-            self.cache_seed = None
+            self.cache_salt = None
 
-        def search_all(self, queries, batch_size=100, cache_seed=None, **_kwargs):
+        def search_all(self, queries, batch_size=100, show_progress=True, cache=True, cache_salt=None):
             self.batch_size = batch_size
-            self.cache_seed = cache_seed
+            self.cache_salt = cache_salt
             return pd.DataFrame(
                 {
                     "query_id": queries["query_id"].tolist(),
@@ -110,10 +110,10 @@ def test_run_strategy_passes_batch_size_to_search_all():
             )
 
     strategy = DummySearchStrategy()
-    run_strategy(strategy, judgments, batch_size=2, seed=123)
+    run_strategy(strategy, judgments, batch_size=2, seed=123, cache_salt="trial-2")
 
     assert strategy.batch_size == 2
-    assert strategy.cache_seed == 123
+    assert strategy.cache_salt == "trial-2"
 
 
 def test_run_strategy_includes_per_query_max_ndcg_m():
