@@ -28,6 +28,15 @@ def fetch_esci(data_dir=esci_path, repo_url="https://github.com/softwaredoug/esc
     return sync_git_repo(data_dir, repo_url)
 
 
+def _locale_qualified_doc_ids(dataset):
+    """Build globally unique ESCI document IDs from product ID and locale."""
+    return (
+        dataset["product_id"].astype(str)
+        + "_"
+        + dataset["product_locale"].astype(str)
+    )
+
+
 def _judgments():
     esci_queries_path = fetch_esci() / "shopping_queries_dataset" / "shopping_queries_dataset_examples.parquet"
     judgments = pd.read_parquet(esci_queries_path)
@@ -40,14 +49,14 @@ def _judgments():
                                                       'S': '🙂',
                                                       'C': '😐',
                                                       'I': '😭'})
-    judgments['doc_id'] = judgments['product_id']
+    judgments['doc_id'] = _locale_qualified_doc_ids(judgments)
     return judgments
 
 
 def _docs():
     products_path = fetch_esci() / "shopping_queries_dataset" / "shopping_queries_dataset_products.parquet"
     products = pd.read_parquet(products_path)
-    products['doc_id'] = products['product_id']
+    products['doc_id'] = _locale_qualified_doc_ids(products)
     products['product_name'] = products['product_title']
     products['title'] = products['product_title']
 
